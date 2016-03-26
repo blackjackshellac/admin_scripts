@@ -1,11 +1,19 @@
 {
-  "name": "backup",
-  "mountpoint": "/mnt/backup",
-  "options": "-o ro",
-  "devices": [
-	"/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
-    "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K4372-0:0-part1",
-	"/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2XC97-part1",
-	"/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1"
-  ]
+	"name": "backup",
+	"mountpoint": "/mnt/backup",
+	"options": "",
+	"devices": [
+		"/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
+		"/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K4372-0:0-part1"
+	],
+	"hosts": {
+		  "toast": {
+				  "options": "-o ro",
+				  "scripts": ["~/bin/rsync_audio.sh"],
+				  "devices": [
+						  "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2XC97-part1",
+						  "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1"
+				  ]
+		  }
+  }
 }

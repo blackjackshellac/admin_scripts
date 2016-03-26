@@ -9,9 +9,10 @@ require 'fileutils'
 ME=File.basename($0, ".rb")
 md=File.dirname($0)
 FileUtils.chdir(md) {
-	md=%x/pwd/.strip
+	md=Dir.pwd().strip
 }
 MD=md
+HOSTNAME=%x/hostname -s/.strip
 CFG_PATH=File.join(MD, ME+".json")
 
 class Logger
@@ -84,7 +85,8 @@ end
 
 $opts={
 	:mount=>true,
-	:list=>false
+	:list=>false,
+	:scripts=>["ls -l"]
 }
 
 def parse(gopts)
@@ -113,6 +115,10 @@ def parse(gopts)
 			opts.on('-a', '--add DEV', String, "Add device path") { |dev|
 				addDev(dev, CFG)
 				exit 0
+			}
+
+			opts.on('-x', '--exe SCRIPT', String, "Add script to execute after mount") { |script|
+				gopts[:scripts] << script
 			}
 
 			opts.on('-h', '--help', "Help") {
@@ -160,17 +166,35 @@ def mountDev(dev, mp, options="")
 	raise "Failed to mount #{dev} #{mp}" unless $?.exitstatus == 0
 end
 
+def runScripts(mp)
+	$opts[:scripts].each { |script|
+		run("#{script} #{mp}")
+		raise "Failed to run #{script} #{mp}" unless $?.exitstatus == 0
+	}
+end
+
 mp=CFG[:mountpoint]
 name=CFG[:name]
+hosts=CFG[:hosts]
+
+# CFG keys are symbols
+host_sym=HOSTNAME.to_sym
+hcfg=hosts[host_sym]||CFG
+
+unless hcfg[:scripts].nil?
+		$opts[:scripts].concat(hcfg[:scripts])
+		$log.info "Scripts="+$opts[:scripts].inspect
+end
+
 if $opts[:mount]
 	# cryptsetup open --type luks /dev/sdg1 backup	
-	CFG[:devices].each { |dev|
+	hcfg[:devices].each { |dev|
 		$log.info "Trying device #{dev}"
 		if File.exists?(dev)
 			begin
 				mapper=openLuks(dev, name)
-				mountDev(mapper, mp, CFG[:options])
-				run("ls -l #{mp}")
+				mountDev(mapper, mp, hcfg[:options])
+				runScripts(mp)
 				exit 0
 			rescue => e
 				$log.error e.message
