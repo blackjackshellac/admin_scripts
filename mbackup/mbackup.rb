@@ -13,6 +13,7 @@ FileUtils.chdir(md) {
 }
 MD=md
 HOSTNAME=%x/hostname -s/.strip
+HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
 
 class Logger
@@ -46,23 +47,38 @@ $log=set_logger(STDERR)
 def loadCfg(path)
 	begin
 		json=File.read(path)
-		cfg=JSON.parse(json, :symbolize_names=>true)
+		JSON.parse(json, :symbolize_names=>true)
 	rescue => e
 		e.backtrace.each { |bt| puts bt }
 		$log.die e.message
 	end
-	cfg
 end
 
-def saveCfg(path, cfg)
+def saveCfg(path)
 	begin
 		File.open(path, "w+") { |fd|
-			fd.puts JSON.pretty_generate(cfg)
+			fd.puts JSON.pretty_generate(CFG)
 		}
 	rescue => e
 		e.backtrace.each { |bt| puts bt }
 		$log.die e.message
 	end
+end
+
+def getHostCfg(create=false)
+	hosts=CFG[:hosts]||{}
+	hcfg=hosts[HOSTNAME_S]
+	if hcfg.nil?
+		if create
+			hcfg={}
+			hosts[HOSTNAME_S]=hcfg
+			CFG[:hosts]=hosts
+		else
+			hcfg=CFG
+		end
+	end
+	$log.debug "hcfg="+hcfg.inspect
+	hcfg
 end
 
 def printCfg(cfg)
@@ -71,16 +87,31 @@ end
 
 CFG=loadCfg(CFG_PATH)
 
-def addDev(dev, cfg)
-	devices=cfg[:devices]
+def getHostDevices()
+	hcfg=getHostCfg(true)
+	hcfg[:devices]=[] unless hcfg.key?(:devices)
+	hcfg[:devices]
+end
+
+def addDev(dev)
+	devices=getHostDevices
 	if devices.include?(dev)
 		$log.warn "Device #{dev} already exists"
 	else
 		raise "Device not found: #{dev}" unless File.exists?(dev)
 		devices << dev
-		saveCfg(CFG_PATH, cfg)
+		saveCfg(CFG_PATH)
 	end
-	printCfg(cfg)
+	printCfg(CFG)
+end
+
+def addName(name)
+	hcfg=getHostCfg(true)
+	$log.warn "Overwriting name=#{hcfg[:name]}" if hcfg.key?(:name)
+	hcfg[:name]=name
+	hcfg[:mountpoint]=name unless hcfg.key?(:mountpoint)
+	saveCfg(CFG_PATH)
+	printCfg(CFG)
 end
 
 $opts={
@@ -112,8 +143,13 @@ def parse(gopts)
 				exit 0
 			}
 
+			opts.on('-n', '--name NAME', String, "Set device name and mountpoint for this host") { |name|
+				addName(name)
+				exit 0
+			}
+
 			opts.on('-a', '--add DEV', String, "Add device path") { |dev|
-				addDev(dev, CFG)
+				addDev(dev)
 				exit 0
 			}
 
@@ -173,13 +209,11 @@ def runScripts(mp)
 	}
 end
 
-mp=CFG[:mountpoint]
-name=CFG[:name]
-hosts=CFG[:hosts]
-
 # CFG keys are symbols
-host_sym=HOSTNAME.to_sym
-hcfg=hosts[host_sym]||CFG
+hcfg=getHostCfg(false)
+
+mp=hcfg[:mountpoint]
+name=hcfg[:name]
 
 unless hcfg[:scripts].nil?
 		$opts[:scripts].concat(hcfg[:scripts])
