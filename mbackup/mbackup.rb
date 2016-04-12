@@ -65,20 +65,24 @@ def saveCfg(path)
 	end
 end
 
-def getHostCfg(create=false)
-	hosts=CFG[:hosts]||{}
-	hcfg=hosts[HOSTNAME_S]
+def getHostCfg(name, create=false)
+	hcfg=CFG[HOSTNAME_S]
 	if hcfg.nil?
-		if create
-			hcfg={}
-			hosts[HOSTNAME_S]=hcfg
-			CFG[:hosts]=hosts
-		else
-			hcfg=CFG
-		end
+		raise "Host config not found for hostname=#{HOSTNAME_S}" unless create
+		hcfg={}
+		CFG[HOSTNAME_S]=hcfg
 	end
-	$log.debug "hcfg="+hcfg.inspect
-	hcfg
+	name=hcfg[:default]	if name.nil?
+	name_s=name.to_sym
+	ncfg=hcfg[name_s]
+	if ncfg.nil?
+		raise "Named config not found for hostname=#{HOSTNAME_S} name=#{name}" unless create
+		ncfg={}
+		hcfg[name_s]=ncfg
+	end
+	ncfg[:name]=name_s.to_s
+	$log.debug "name=#{name}: ncfg="+ncfg.inspect
+	ncfg
 end
 
 def printCfg(cfg)
@@ -87,14 +91,14 @@ end
 
 CFG=loadCfg(CFG_PATH)
 
-def getHostDevices()
-	hcfg=getHostCfg(true)
+def getHostDevices(name)
+	hcfg=getHostCfg(name, true)
 	hcfg[:devices]=[] unless hcfg.key?(:devices)
 	hcfg[:devices]
 end
 
-def addDev(dev)
-	devices=getHostDevices
+def addDev(name, dev)
+	devices=getHostDevices(name)
 	if devices.include?(dev)
 		$log.warn "Device #{dev} already exists"
 	else
@@ -106,10 +110,10 @@ def addDev(dev)
 end
 
 def addName(name)
-	hcfg=getHostCfg(true)
+	hcfg=getHostCfg(name, true)
 	$log.warn "Overwriting name=#{hcfg[:name]}" if hcfg.key?(:name)
 	hcfg[:name]=name
-	hcfg[:mountpoint]=name unless hcfg.key?(:mountpoint)
+	hcfg[:mountpoint]="/mnt/#{name}" unless hcfg.key?(:mountpoint)
 	saveCfg(CFG_PATH)
 	printCfg(CFG)
 end
@@ -117,7 +121,9 @@ end
 $opts={
 	:mount=>true,
 	:list=>false,
-	:scripts=>["ls -l"]
+	:scripts=>["ls -l"],
+	:default=>"default",
+	:name=>nil
 }
 
 def parse(gopts)
@@ -143,18 +149,23 @@ def parse(gopts)
 				exit 0
 			}
 
-			opts.on('-n', '--name NAME', String, "Set device name and mountpoint for this host") { |name|
-				addName(name)
-				exit 0
+			opts.on('-n', '--name NAME', String, "Set config name, default=#{$opts[:default]}") { |name|
+				$opts[:name]=name
 			}
 
 			opts.on('-a', '--add DEV', String, "Add device path") { |dev|
-				addDev(dev)
+				addDev($opts[:name], dev)
 				exit 0
 			}
 
 			opts.on('-x', '--exe SCRIPT', String, "Add script to execute after mount") { |script|
 				gopts[:scripts] << script
+			}
+
+			opts.on('-D', '--debug', "Debug logging") {
+				gopts[:debug]=true
+				$log.level = Logger::DEBUG
+				$log.debug "Debugging enabled"
 			}
 
 			opts.on('-h', '--help', "Help") {
@@ -210,10 +221,12 @@ def runScripts(mp)
 end
 
 # CFG keys are symbols
-hcfg=getHostCfg(false)
-
-mp=hcfg[:mountpoint]
+name=$opts[:name]
+hcfg=getHostCfg(name, false)
 name=hcfg[:name]
+mp=hcfg[:mountpoint]||"/mnt/#{name}"
+
+$log.debug "name=#{name} mp=#{mp}"
 
 unless hcfg[:scripts].nil?
 		$opts[:scripts].concat(hcfg[:scripts])

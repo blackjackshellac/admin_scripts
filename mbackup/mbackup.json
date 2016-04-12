@@ -1,13 +1,8 @@
 {
-  "name": "backup",
-  "mountpoint": "/mnt/backup",
-  "options": "",
-  "devices": [
-    "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
-    "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K4372-0:0-part1"
-  ],
-  "hosts": {
-    "toast": {
+  "toast": {
+    "default": "backup",
+    "backup": {
+      "mountpoint": "/mnt/backup",
       "options": "-o ro",
       "scripts": [
         "~/bin/rsync_audio.sh"
@@ -16,14 +11,26 @@
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2XC97-part1",
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1"
       ]
-    },
-    "woot": {
-      "mountpoint": "/mnt/slim",
+    }
+  },
+  "linguini": {
+    "default": "backup",
+    "backup": {
+      "mountpoint": "/mnt/backup",
       "options": "",
       "devices": [
+        "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
+        "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K4372-0:0-part1"
+      ]
+    }
+  },
+  "woot": {
+    "default": "slim",
+    "slim": {
+      "mountpoint": "/mnt/slim",
+      "devices": [
         "/dev/disk/by-id/ata-ST2000LM003_HN-M201RAD_S362J9AGA01410"
-      ],
-      "name": "slim"
+      ]
     }
   }
 }
