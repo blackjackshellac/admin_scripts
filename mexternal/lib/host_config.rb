@@ -50,6 +50,10 @@ class HostConfig < JsonConfig
   def getMapper()
     "/dev/mapper/"+getName()
   end
+
+  def getScripts(scripts)
+    self[:scripts]||scripts
+  end
 end
 
 unless ENV['HOST_CONFIG_TEST'].nil?

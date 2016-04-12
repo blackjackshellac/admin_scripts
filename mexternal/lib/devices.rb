@@ -22,7 +22,7 @@ module Devices
   end
 
   def self.openLuks(dev, name)
-  	raise "Device #{dev} is not a luks device" unless isLuks(dev)
+  	#raise "Device #{dev} is not a luks device" unless isLuks(dev)
   	mapper="/dev/mapper/#{name}"
   	unless File.exists?(mapper)
   		Devices.run("cryptsetup open --type luks #{dev} #{name}")
@@ -38,7 +38,7 @@ module Devices
   	raise "Failed to mount: '#{cmd}'" unless $?.exitstatus == 0
   end
 
-  def self.runScripts(mp)
+  def self.runScripts(mp, scripts)
   	$opts[:scripts].each { |script|
   		run("#{script} #{mp}")
   		raise "Failed to run #{script} #{mp}" unless $?.exitstatus == 0

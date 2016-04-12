@@ -51,8 +51,7 @@ end
 $log=set_logger(STDERR)
 
 $opts={
-	:mount=>true,
-	:list=>false,
+	:action=>:MOUNT,
 	:scripts=>["ls -l"],
 	:default=>"default",
 	:name=>nil
@@ -64,21 +63,19 @@ def parse(gopts)
 			opts.banner = "#{ME}.rb [options]\n"
 
 			opts.on('-m', '--mount', "Mount the first known device found") {
-				gopts[:mount]=true
+				gopts[:action]=:MOUNT
 			}
 
-			opts.on('-u', '--umount', "Unmount the ") {
-				gopts[:mount]=false
+			opts.on('-u', '--umount', "Unmount the currently mounted device") {
+				gopts[:action]=:UMOUNT
 			}
 
 			opts.on('-p', '--print', "Print the configuration") {
-				printCfg(CFG)
-				exit 0
+				gopts[:action]=:PRINT
 			}
 
 			opts.on('-l', '--list', "List devices by-id") {
-				puts %x[ls -l /dev/disk/by-id]
-				exit 0
+				gopts[:action]=:LIST
 			}
 
 			opts.on('-n', '--name NAME', String, "Set config name, default=#{$opts[:default]}") { |name|
@@ -86,12 +83,13 @@ def parse(gopts)
 			}
 
 			opts.on('-a', '--add DEV', String, "Add device path") { |dev|
-				addDev($opts[:name], dev)
+				# TODO addDev($opts[:name], dev)
 				exit 0
 			}
 
 			opts.on('-x', '--exe SCRIPT', String, "Add script to execute after mount") { |script|
 				gopts[:scripts] << script
+				# TODO
 			}
 
 			opts.on('-D', '--debug', "Debug logging") {
@@ -121,19 +119,38 @@ parse($opts)
 
 hcc=hc.getHostConfig()
 nc=hcc.getNameConfig()
-puts nc.getName
-puts nc.getMountPoint
-puts nc.getDevices
-puts nc.getMapper
-puts nc.getOptions
+#puts nc.getName
+#puts nc.getMountPoint
+#puts nc.getDevices
+#puts nc.getMapper
+#puts nc.getOptions
 
-nc.getDevices.each { |dev|
-	next unless Devices.found(dev)
-	$log.info "Found #{dev}"
-	if Devices.isLuks(dev)
-		Devices.openLuks(dev, nc.getName)
-		dev=nc.getMapper
-	end
-	Devices.mountDev(dev, nc.getMountPoint, nc.getOptions)
-	break
-}
+mp = nc.getMountPoint()
+
+case $opts[:action]
+when :MOUNT
+	$log.debug "Action="+$opts[:action].to_s
+	nc.getDevices.each { |dev|
+		next unless Devices.found(dev)
+		$log.info "Found #{dev}"
+		if Devices.isLuks(dev)
+			Devices.openLuks(dev, nc.getName)
+			dev=nc.getMapper
+		end
+		Devices.mountDev(dev, mp, nc.getOptions)
+		Devices.runScripts(mp, nc.getScripts($opts[:scripts]))
+		break
+	}
+when :UMOUNT
+	$log.debug "Action="+$opts[:action].to_s
+	Devices.run("umount #{mp}")
+	Devices.run("cryptsetup close --type luks #{nc.getName}")
+when :LIST
+	$log.debug "Action="+$opts[:action].to_s
+	Devices.run("ls -l /dev/disk/by-id/")
+when :PRINT
+	$log.debug "Action="+$opts[:action].to_s
+	hc.print
+else
+	$log.die "Unknown action: "+$opts[:action].inspect
+end

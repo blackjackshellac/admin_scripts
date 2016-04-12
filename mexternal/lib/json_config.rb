@@ -8,21 +8,22 @@ class JsonConfig < Hash
   def initialize
   end
 
-  def to_json
-    super.to_json
+  def pretty_generate
+    JSON.pretty_generate(self)
   end
 
   def from_json(json, clear=false)
-    puts "json="+json
-    h=JSON.parse(json, :symbolize_names=>true)
     self.clear if clear
-    self.merge!(h)
-    puts "self="+self.inspect
+    self.merge!(JSON.parse(json, :symbolize_names=>true))
   end
 
   def from_file(file, clear=false)
     json=File.read(file)
     from_json(json, clear)
+  end
+
+  def print(out=$stdout)
+    out.puts pretty_generate
   end
 end
 
