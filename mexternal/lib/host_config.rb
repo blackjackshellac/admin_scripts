@@ -42,6 +42,14 @@ class HostConfig < JsonConfig
   def getDevices()
     self[:devices]||[]
   end
+
+  def getOptions()
+    self[:options]||""
+  end
+
+  def getMapper()
+    "/dev/mapper/"+getName()
+  end
 end
 
 unless ENV['HOST_CONFIG_TEST'].nil?

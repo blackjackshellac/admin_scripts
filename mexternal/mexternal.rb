@@ -7,6 +7,7 @@ require 'json'
 require 'fileutils'
 
 require_relative 'lib/host_config'
+require_relative 'lib/devices'
 
 ME=File.basename($0, ".rb")
 md=File.dirname($0)
@@ -123,3 +124,16 @@ nc=hcc.getNameConfig()
 puts nc.getName
 puts nc.getMountPoint
 puts nc.getDevices
+puts nc.getMapper
+puts nc.getOptions
+
+nc.getDevices.each { |dev|
+	next unless Devices.found(dev)
+	$log.info "Found #{dev}"
+	if Devices.isLuks(dev)
+		Devices.openLuks(dev, nc.getName)
+		dev=nc.getMapper
+	end
+	Devices.mountDev(dev, nc.getMountPoint, nc.getOptions)
+	break
+}
