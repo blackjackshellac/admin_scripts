@@ -22,6 +22,12 @@ class JsonConfig < Hash
     from_json(json, clear)
   end
 
+  def to_file(file)
+    File.open(file, "w+") { |fd|
+      fd.puts pretty_generate()
+    }
+  end
+
   def print(out=$stdout)
     out.puts pretty_generate()
   end

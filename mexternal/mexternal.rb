@@ -22,14 +22,15 @@ CFG_PATH=File.join(MD, ME+".json")
 
 $log=set_logger(STDERR)
 
-hc=HostConfig.new()
+hc=HostConfig.new(:logger=>$log)
 hc.from_file(CFG_PATH)
 
 $opts={
 	:action=>:MOUNT,
 	:scripts=>["ls -l"],
 	:default=>"default",
-	:name=>nil
+	:name=>nil,
+	:host=>HOSTNAME
 }
 
 def parse(gopts)
@@ -53,13 +54,23 @@ def parse(gopts)
 				gopts[:action]=:LIST
 			}
 
+			opts.on('-H', '--host HOST', String, "Set host name for copy/add/etc") { |host|
+				gopts[:host]=host
+			}
+
 			opts.on('-n', '--name NAME', String, "Set config name, default=#{$opts[:default]}") { |name|
-				$opts[:name]=name
+				gopts[:name]=name
+			}
+
+			opts.on('-c', '--copy HOST', String, "Copy config from the host, can also limit a single name using -n") { |host|
+				gopts[:action]=:COPY
+				gopts[:copy]=host
 			}
 
 			opts.on('-a', '--add DEV', String, "Add device path") { |dev|
 				# TODO addDev($opts[:name], dev)
-				exit 0
+				gopts[:action]=:ADD
+				gopts[:device]=dev
 			}
 
 			opts.on('-x', '--exe SCRIPT', String, "Add script to execute after mount") { |script|
@@ -104,6 +115,20 @@ when :PRINT
 	$log.debug "Action="+$opts[:action].to_s
 	hc.print
 	exit
+when :ADD
+	$log.debug "Action="+$opts[:action].to_s
+	hc.addDevice($opts[:host], $opts[:name], $opts[:device])
+	hc.print
+	hc.to_file(CFG_PATH)
+	exit
+when :COPY
+	$log.debug "Action="+$opts[:action].to_s
+	hcc=hc.getHostConfig($opts[:copy])
+	hcc.filterName($opts[:name])
+	hc[$opts[:host].to_sym]=hcc
+	hc.print
+	hc.to_file(CFG_PATH)
+	exit
 end
 
 # get config for this host
@@ -139,4 +164,3 @@ when :UMOUNT
 else
 	$log.die "Unknown action: "+$opts[:action].inspect
 end
-

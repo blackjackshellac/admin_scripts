@@ -32,5 +32,14 @@
         "/dev/disk/by-id/ata-ST2000LM003_HN-M201RAD_S362J9AGA01410"
       ]
     }
+  },
+  "gulliver": {
+    "default": "slim",
+    "slim": {
+      "mountpoint": "/mnt/slim",
+      "devices": [
+        "/dev/disk/by-id/ata-ST2000LM003_HN-M201RAD_S362J9AGA01410"
+      ]
+    }
   }
 }

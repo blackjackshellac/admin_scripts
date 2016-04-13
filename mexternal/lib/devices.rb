@@ -2,6 +2,8 @@
 #
 #
 
+require 'fileutils'
+
 module Devices
 
   def self.run(cmd)
@@ -32,6 +34,7 @@ module Devices
   end
 
   def self.mountDev(dev, mp, options=nil)
+    FileUtils.mkdir_p(mp)
   	options="" if options.nil?
     cmd="mount #{options} #{dev} #{mp}"
   	Devices.run(cmd)
