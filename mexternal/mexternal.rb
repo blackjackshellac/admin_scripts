@@ -146,6 +146,7 @@ mp = nc.getMountPoint()
 case $opts[:action]
 when :MOUNT
 	$log.debug "Action="+$opts[:action].to_s
+	found=false
 	nc.getDevices.each { |dev|
 		next unless Devices.found(dev)
 		$log.info "Found #{dev}"
@@ -155,8 +156,10 @@ when :MOUNT
 		end
 		Devices.mountDev(dev, mp, nc.getOptions)
 		Devices.runScripts(mp, nc.getScripts($opts[:scripts]))
+		found=true
 		break
 	}
+	$log.warn "No configured devices found" unless found
 when :UMOUNT
 	$log.debug "Action="+$opts[:action].to_s
 	Devices.run("umount #{mp}")
