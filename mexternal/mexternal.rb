@@ -8,6 +8,7 @@ require 'fileutils'
 
 require_relative 'lib/host_config'
 require_relative 'lib/devices'
+require_relative 'lib/logger'
 
 ME=File.basename($0, ".rb")
 md=File.dirname($0)
@@ -19,36 +20,10 @@ HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
 
+$log=set_logger(STDERR)
+
 hc=HostConfig.new()
 hc.from_file(CFG_PATH)
-
-class Logger
-	def die(msg)
-		$stdout = STDOUT
-		self.error(msg)
-		exit 1
-	end
-
-	def puts(msg)
-		self.info(msg)
-	end
-
-	def write(msg)
-		self.info(msg)
-	end
-end
-
-def set_logger(stream, level=Logger::INFO)
-	log = Logger.new(stream)
-	log.level = level
-	log.datetime_format = "%Y-%m-%d %H:%M:%S"
-	log.formatter = proc do |severity, datetime, progname, msg|
-		"#{severity} #{datetime}: #{msg}\n"
-	end
-	log
-end
-
-$log=set_logger(STDERR)
 
 $opts={
 	:action=>:MOUNT,
@@ -117,7 +92,23 @@ end
 
 parse($opts)
 
+$log.debug "Hostconfig="+hc.inspect
+
+# these actions don't require a host specific config
+case $opts[:action]
+when :LIST
+	$log.debug "Action="+$opts[:action].to_s
+	Devices.run("ls -l /dev/disk/by-id/")
+	exit $?.exitstatus
+when :PRINT
+	$log.debug "Action="+$opts[:action].to_s
+	hc.print
+	exit
+end
+
+# get config for this host
 hcc=hc.getHostConfig()
+
 nc=hcc.getNameConfig()
 #puts nc.getName
 #puts nc.getMountPoint
@@ -145,12 +136,7 @@ when :UMOUNT
 	$log.debug "Action="+$opts[:action].to_s
 	Devices.run("umount #{mp}")
 	Devices.run("cryptsetup close --type luks #{nc.getName}")
-when :LIST
-	$log.debug "Action="+$opts[:action].to_s
-	Devices.run("ls -l /dev/disk/by-id/")
-when :PRINT
-	$log.debug "Action="+$opts[:action].to_s
-	hc.print
 else
 	$log.die "Unknown action: "+$opts[:action].inspect
 end
+

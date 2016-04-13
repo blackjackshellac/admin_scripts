@@ -8,7 +8,7 @@ class JsonConfig < Hash
   def initialize
   end
 
-  def pretty_generate
+  def pretty_generate()
     JSON.pretty_generate(self)
   end
 
@@ -23,7 +23,7 @@ class JsonConfig < Hash
   end
 
   def print(out=$stdout)
-    out.puts pretty_generate
+    out.puts pretty_generate()
   end
 end
 

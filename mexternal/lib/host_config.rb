@@ -16,6 +16,7 @@ class HostConfig < JsonConfig
   def getHostConfig(host=nil)
     host=@hostname if host.nil?
     hc=self[host.to_sym]
+	raise "HostConfig not found for #{host}" if hc.nil?
     HostConfig.new(hc)
   end
 
