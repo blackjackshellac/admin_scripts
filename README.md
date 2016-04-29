@@ -1,10 +1,10 @@
 # admin_scripts
 
-=== mexternal
+### mexternal
 
 * rewrite of mbackup
 
-=== addPath.rb 
+### addPath.rb 
 
 * update bash PATH, possibly moving existing entries
 
@@ -14,7 +14,7 @@ Example,
 $ export PATH=$(addPath.rb -p ~/bin)
 '''
 
-=== mbackup
+### mbackup
 
 * script to mount encrypted backup and run post mount script(s)
 
