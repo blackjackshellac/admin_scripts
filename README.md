@@ -10,9 +10,9 @@
 
 Example,
 
-'''
+```
 $ export PATH=$(addPath.rb -p ~/bin)
-'''
+```
 
 ### mbackup
 
