@@ -1,10 +1,20 @@
 # admin_scripts
 
-mbackup - script to mount encrypted backup and run post mount script(s)
+### mexternal
 
-mexternal - rewrite of mbackup
+* rewrite of mbackup
 
-addPath.rb 
-	* update bash PATH, possibly moving existing entries
-	* $ export PATH=$(addPath.rb -p ~/bin)
+### addPath.rb 
+
+* update bash PATH, possibly moving existing entries
+
+Example,
+
+```
+$ export PATH=$(addPath.rb -p ~/bin)
+```
+
+### mbackup
+
+* script to mount encrypted backup and run post mount script(s)
 
