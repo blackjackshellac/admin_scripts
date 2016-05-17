@@ -35,7 +35,6 @@ $log=set_logger(STDOUT)
 $o={
 	:host => WEMO_ADDRESS,
 	:action => :state,
-	:quiet => false,
 	:delay => 0
 }
 optparser = OptionParser.new do |opts|
@@ -74,7 +73,6 @@ optparser = OptionParser.new do |opts|
 	}
 
 	opts.on('-q', '--quiet', "Quiet") {
-		$o[:quiet]=true
 		$log.level = Logger::ERROR
 	}
 
@@ -90,13 +88,13 @@ if $o[:delay] > 0
 	sleep($o[:delay])
 end
 
-puts "Connecting to #{$o[:host]}" unless $o[:quiet]
+$log.info "Connecting to #{$o[:host]}"
 switch = Wemote::Switch.new($o[:host])
 $log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
 
 def printState(switch)
 	state=switch.on? ? "on" : "off"
-	puts "%s is %s" % [ switch.name, state ]
+	$log.info "%s is %s" % [ switch.name, state ]
 end
 
 name=switch.name
@@ -104,17 +102,17 @@ action=$o[:action]
 case action
 when :state
 when :on
-	puts "Turn on #{name}" unless $o[:quiet]
+	$log.info "Turn on #{name}"
 	switch.on!
 when :off
-	puts "Turn off #{name}" unless $o[:quiet]
+	$log.info "Turn off #{name}"
 	switch.off!
 when :toggle
-	puts "Toggle #{name}" unless $o[:quiet]
+	$log.info "Toggle #{name}"
 	switch.toggle!
 else
 	$log.die "Unknown switch action: #{action}"
 end
 
-printState(switch) if !$o[:quiet] || action.eql?(:state)
+printState(switch) if action.eql?(:toggle)
 
