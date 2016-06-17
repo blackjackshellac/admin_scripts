@@ -159,11 +159,14 @@ when :MOUNT
 		found=true
 		break
 	}
+	nc.getPost().each { |post| Devices.run(post) }
 	$log.warn "No configured devices found" unless found
 when :UMOUNT
 	$log.debug "Action="+$opts[:action].to_s
+	nc.getPre().each { |pre| Devices.run(pre) }
 	Devices.run("umount #{mp}")
 	Devices.run("cryptsetup close --type luks #{nc.getName}")
+	nc.getPost().each { |post| Devices.run(post) }
 else
 	$log.die "Unknown action: "+$opts[:action].inspect
 end

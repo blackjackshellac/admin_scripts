@@ -70,6 +70,14 @@ class HostConfig < JsonConfig
     "/dev/mapper/"+getName()
   end
 
+  def getPre()
+	self[:pre]||[]
+  end
+
+  def getPost()
+	self[:post]||[]
+  end
+
   def getScripts(scripts)
     self[:scripts]||scripts
   end
