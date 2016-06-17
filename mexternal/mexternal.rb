@@ -145,6 +145,7 @@ mp = nc.getMountPoint()
 
 case $opts[:action]
 when :MOUNT
+	nc.getPre().each { |pre| Devices.run(pre) }
 	$log.debug "Action="+$opts[:action].to_s
 	found=false
 	nc.getDevices.each { |dev|
