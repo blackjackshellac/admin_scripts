@@ -4,12 +4,19 @@
     "backup": {
       "mountpoint": "/mnt/backup",
       "options": "-o ro",
-      "scripts": [ "~/bin/rsync_audio.sh" ],
-      "pre": [ "systemctl stop nfs smb nmb" ],
-      "post": [ "systemctl start nfs smb nmb" ],
+      "scripts": [
+        "~/bin/rsync_audio.sh"
+      ],
+      "pre": [
+        "systemctl stop nfs smb nmb"
+      ],
+      "post": [
+        "systemctl start nfs smb nmb"
+      ],
       "devices": [
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2XC97-part1",
-        "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1"
+        "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1",
+        "/dev/disk/by-id/ata-ST3000DM001-1E6166_Z1F63QM1"
       ]
     }
   },
