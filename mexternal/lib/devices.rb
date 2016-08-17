@@ -42,7 +42,7 @@ module Devices
   end
 
   def self.runScripts(mp, scripts)
-  	$opts[:scripts].each { |script|
+  	scripts.each { |script|
   		run("#{script} #{mp}")
   		raise "Failed to run #{script} #{mp}" unless $?.exitstatus == 0
   	}
