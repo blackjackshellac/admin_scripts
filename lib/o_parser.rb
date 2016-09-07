@@ -13,6 +13,11 @@ class OParser
 		@@log.level = Logger::INFO
 	end
 
+	def self.quiet(gopts)
+		gopts[:quiet]=true
+		@@log.level = Logger::WARN
+	end
+
 	def self.debug(gopts)
 		gopts[:debug]=true
 		@@log.level = Logger::DEBUG
@@ -26,8 +31,8 @@ class OParser
 	end
 
 	def self.parse(gopts, help_text, &block)
+		raise "Options :logger not set in OParser" unless gopts.key?(:logger)
 		@@log=gopts[:logger]
-		raise "Logger not set in OParser" if @@log.nil?
 		if help_text.nil?
 			help_text = ""
 		elsif File.exists?(help_text)
@@ -40,6 +45,10 @@ class OParser
 
 			opts.on('-v', '--verbose', "Verbose output") {
 				verbose(gopts)
+			}
+
+			opts.on('-q', '--quiet', "Quiet output") {
+				quiet(gopts)
 			}
 
 			opts.on('-D', '--debug', "Turn on debugging output") {

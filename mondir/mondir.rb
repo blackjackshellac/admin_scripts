@@ -21,7 +21,7 @@ LIB=File.realpath(File.join(MD, "..", "lib"))
 require_relative "#{LIB}/logger"
 require_relative "#{LIB}/o_parser"
 
-$log=Logger.set_logger(STDERR)
+$log=Logger.set_logger(STDOUT, Logger::INFO)
 
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
@@ -75,20 +75,20 @@ def comp_stat(path, dstat, opts)
 	KEYS.each { |key|
 		v=pstat[key]
 		key=key.to_s
-		if dstat.key?(key) == false
+		unless dstat.key?(key)
+			opts[:changed]=true
 			$log.warn "Path data missing for #{key}: #{path}"
 			if opts[:update]
 				dstat[key]=v
-				opts[:changed]=true
 			end
 			continue
 		end
 		u = dstat[key]
 		unless v.eql?(u)
-			$log.warn "Path data has changed for #{key} [#{u}] != [#{v}]: #{path}"
+			opts[:changed]=true
+			$log.warn "#{key} changed [#{u}] != [#{v}] for: #{path}"
 			if opts[:update]
 				dstat[key]=v
-				opts[:changed]=true
 			end
 		end
 	}
@@ -108,6 +108,16 @@ def find_data(dir, data, opts)
 			data[path]=stat_path(path)
 		end
 	}
+
+	data.keys.each { |path|
+		next if File.exist?(path)
+		$log.error "File missing: "+path
+		opts[:changed]=true
+		data.delete(path) if opts[:update]
+	}
+
+	$log.debug "ohash=#{$opts.object_id}"
+
 	data
 #rescue => e
 #	$log.die "Failed to find data in #{dir}: #{e}"
@@ -141,10 +151,17 @@ def monitor(dir, opts={ :dryrun=>false })
 	write_monitor_data(jsonf, data, opts)
 end
 
+$log.debug "ohash=#{$opts.object_id}"
+
 dirs=$opts[:mondirs]
+$log.die "No dirs specified for monitoring" if dirs.empty?
 dirs.each { |dir|
 	monitor(dir, $opts)
 }
 
-exit 1 if $opts[:changed]
+$log.debug "options="+$opts.inspect
+if $opts[:changed]
+	$log.warn "Run #{ME} --update"
+	exit 1
+end
 
