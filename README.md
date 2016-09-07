@@ -18,3 +18,7 @@ $ export PATH=$(addPath.rb -p ~/bin)
 
 * script to mount encrypted backup and run post mount script(s)
 
+### mondir
+
+* script to monitor directory heirarchy for changes
+

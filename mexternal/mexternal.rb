@@ -6,10 +6,6 @@ require 'logger'
 require 'json'
 require 'fileutils'
 
-require_relative 'lib/host_config'
-require_relative 'lib/devices'
-require_relative 'lib/logger'
-
 ME=File.basename($0, ".rb")
 md=File.dirname($0)
 FileUtils.chdir(md) {
@@ -19,6 +15,12 @@ MD=md
 HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
+
+LIB=File.realpath(File.join(MD, "..", "lib"))
+
+require_relative "#{LIB}/host_config"
+require_relative "#{LIB}/devices"
+require_relative "#{LIB}/logger"
 
 $log=set_logger(STDERR)
 
@@ -76,6 +78,22 @@ def parse(gopts)
 			opts.on('-x', '--exe SCRIPT', String, "Add script to execute after mount") { |script|
 				gopts[:scripts] << script
 				# TODO
+			}
+
+			opts.on('--init DEV', String, "Format device and add it to the named config") { |dev|
+				FileUtils.chdir("/dev/disk/by-id") {
+					real=nil
+					Dir.glob("*") { |file|
+						$log.debug "Testing file=#{file}"
+						next unless File.symlink?(file)
+						real=File.realpath(file)
+						$log.debug "Testing real=#{real}"
+						break if real.eql?(file)
+						real=nil
+					}
+					$log.die "Device #{dev} not found" if real.nil?
+				}
+				exit 0
 			}
 
 			opts.on('-D', '--debug', "Debug logging") {
