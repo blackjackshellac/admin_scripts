@@ -7,17 +7,15 @@ require 'json'
 require 'fileutils'
 require 'find'
 
+me=File.readlink($0)
 ME=File.basename($0, ".rb")
-md=File.dirname($0)
-FileUtils.chdir(md) {
-	md=Dir.pwd().strip
-}
-MD=md
+MD=File.dirname(me)
+LIB=File.realpath(File.join(MD, "..", "lib"))
+
 HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
 
-LIB=File.realpath(File.join(MD, "..", "lib"))
 require_relative "#{LIB}/logger"
 require_relative "#{LIB}/o_parser"
 
