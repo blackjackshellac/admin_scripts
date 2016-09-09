@@ -6,23 +6,20 @@ require 'logger'
 require 'json'
 require 'fileutils'
 
+me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
-md=File.dirname($0)
-FileUtils.chdir(md) {
-	md=Dir.pwd().strip
-}
-MD=md
+MD=File.dirname(me)
+LIB=File.realpath(File.join(MD, "..", "lib"))
+
 HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
-
-LIB=File.realpath(File.join(MD, "..", "lib"))
 
 require_relative "#{LIB}/host_config"
 require_relative "#{LIB}/devices"
 require_relative "#{LIB}/logger"
 
-$log=set_logger(STDERR)
+$log=Logger::set_logger(STDERR)
 
 hc=HostConfig.new(:logger=>$log)
 hc.from_file(CFG_PATH)

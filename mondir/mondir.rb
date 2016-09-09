@@ -7,7 +7,7 @@ require 'json'
 require 'fileutils'
 require 'find'
 
-me=File.readlink($0)
+me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
 MD=File.dirname(me)
 LIB=File.realpath(File.join(MD, "..", "lib"))
