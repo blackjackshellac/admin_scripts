@@ -22,3 +22,6 @@ $ export PATH=$(addPath.rb -p ~/bin)
 
 * script to monitor directory heirarchy for changes
 
+### fwscan
+
+* script to scan firewall log messages
