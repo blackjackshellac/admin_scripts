@@ -18,16 +18,20 @@ CFG_PATH=File.join(MD, ME+".json")
 require_relative "#{LIB}/logger"
 require_relative "#{LIB}/o_parser"
 require_relative "#{MD}/fwlog"
+require_relative "#{MD}/format_xlsx"
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
 
+FORMATS=[ "xlsx", "csv" ]
+
 $opts={
 	:file=>nil,
 	:filter=>/Shorewall:/,
 	:in=>"enp2s0",
+	:output=>nil,
 	:logger=>$log
 }
 
@@ -39,10 +43,18 @@ $opts = OParser.parse($opts, "") { |opts|
 	opts.on('-I', '--in NET_DEV', String, "Network device, default=#{$opts[:in]}") { |inp|
 		$opts[:in]=inp
 	}
+
+	opts.on('-O', '--output FORMAT', String, "Output format: [csv|xlsx]") { |type|
+		type.downcase!
+		format = FORMATS.include?(type) ? type.to_sym : nil
+		raise "Unknown output format: #{type}" if format.nil?
+		$opts[:output]=format
+	}
 }
 $opts[:in]=/IN=#{$opts[:in]}\s/
 
 FWLog.init($opts)
+FormatXLSX.init($opts)
 
 entries={}
 File.open($opts[:file], "r") { |fd|

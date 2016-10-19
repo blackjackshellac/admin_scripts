@@ -7,7 +7,7 @@ class FWLog
 	REGEX_NOT_WS="[^\\s]*"
 	REGEX_WORD_NUMBER="[\\w]+"
 	REGEX_NUMBER="[\\d]+"
-	REGEX_MAC="[\\d:]+"
+	REGEX_MAC="[\\da-fA-F:]+"
 
 	@@log = nil
 
