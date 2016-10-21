@@ -2,16 +2,19 @@
 # 
 #
 
+require 'socket'
+require 'resolv'
+
 class FWLog
+	@@log = nil
+
 	REGEX_IPV4_ADDR="[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+"
 	REGEX_NOT_WS="[^\\s]*"
 	REGEX_WORD_NUMBER="[\\w]+"
 	REGEX_NUMBER="[\\d]+"
 	REGEX_MAC="[\\da-fA-F:]+"
-
-	@@log = nil
-
 	FWLOG_KEYS = [ :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len ]
+
 	attr_reader :entry
 	attr_reader :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len
 	def initialize(e)
@@ -22,6 +25,14 @@ class FWLog
 		}
 	end
 
+	def getter(sym)
+		instane_variable_get("@#{sym}")
+	end
+
+	def setter(sym, val)
+		instance_variable_set("@#{sym}", val)
+	end
+
 	def self.init(opts)
 		@@log = opts[:logger]
 		raise "Logger not set in FWLog" if @@log.nil?
@@ -30,7 +41,6 @@ class FWLog
 	def self.re_matcher(line, re)
 		raise "match not found: #{line} [#{re.to_s}]" if line[re].nil?
 		m=$1
-		#@@log.debug "\t\tmatch=#{m} re=#{re.to_s}"
 		return m
 	end
 
@@ -71,9 +81,21 @@ class FWLog
 			e = parse_kernellog(line)
 			return FWLog.new(e)
 		rescue => e
-			@@log.error "Failed to parse kernel log entry: #{kernellog} [#{e}]"
+			@@log.error "Failed to parse kernel log entry: #{line} [#{e}]"
 			nil
 		end
+	end
+
+	def self.service(port)
+		Socket.getservbyport(port.to_i)
+	rescue => e
+		"port "+port.to_s
+	end
+
+	def self.hostname(ipv4)
+		Resolv.getname(ipv4)
+	rescue => e
+		ipv4
 	end
 
 	def to_json(*a)

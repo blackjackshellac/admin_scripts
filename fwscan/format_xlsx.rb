@@ -35,7 +35,43 @@ class FormatXLSX
 		raise "Logger not set in FWLog" if @@log.nil?
 	end
 
-	def self.format(array)
+	attr_reader :file
+	def initialize(file, label, opts={:force=>false})
+		file.strip!
+		file+=".xlsx" if file[/\.xlsx$/].nil?
+		@file=file
+		if File.exists?(@file)
+			raise "File exists #{@file}" if !opts[:force]
+			$log.info "Overwriting file #{@file}"
+		end
+		@workbook = WriteXLSX.new(@file)
+		@worksheet = @workbook.add_worksheet(label)
+		@@log.info "Opened workbook #{@file}"
+	end
+
+	def write_headers(row, col, array)
+		format = @workbook.add_format
+		format.set_color('light grey')
+		format.set_align('center')
+		array.each { |entry|
+			@worksheet.write(row, col, "#{entry}", format)
+			col += 1
+		}
+		return row+1
+	end
+
+	def write_row(row, col, array)
+		array.each { |entry|
+			@@log.debug "Writing row,col=#{row},#{col}: #{array.to_json}"
+			@worksheet.write(row, col, "#{entry}")
+			col+=1
+		}
+		return row+1
+	end
+
+	def close
+		@@log.info "Closing workbook #{@file}"
+		@workbook.close
 	end
 end
 
