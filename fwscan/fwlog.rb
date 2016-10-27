@@ -8,6 +8,7 @@ require 'resolv'
 class FWLog
 	@@log = nil
 
+	OUTPUT_TIME_FMT="%Y%m%d-%H%S"
 	REGEX_IPV4_ADDR="[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+"
 	REGEX_NOT_WS="[^\\s]*"
 	REGEX_WORD_NUMBER="[\\w]+"
@@ -17,7 +18,7 @@ class FWLog
 
 	attr_reader :entry
 	attr_reader :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len
-	def initialize(e)
+	def initialize(e, opts={})
 		@entry = {}
 		e.keys.each { |key|
 			@entry[key] = e[key]
@@ -36,6 +37,8 @@ class FWLog
 	def self.init(opts)
 		@@log = opts[:logger]
 		raise "Logger not set in FWLog" if @@log.nil?
+		@resolv = opts[:resolv]||false
+		@lookup = opts[:lookup]||false
 	end
 
 	def self.re_matcher(line, re)
@@ -62,13 +65,14 @@ class FWLog
 		e[:mac]=re_matcher(klog, /^.*?MAC=(#{REGEX_MAC})/)
 		e[:src]=re_matcher(klog, /^.*?SRC=(#{REGEX_IPV4_ADDR})/)
 		e[:dst]=re_matcher(klog, /^.*?DST=(#{REGEX_IPV4_ADDR})/)
-		e[:proto]=re_matcher(klog, /^.*?PROTO=(#{REGEX_WORD_NUMBER})/)
+		e[:proto]=re_matcher(klog, /^.*?PROTO=(#{REGEX_WORD_NUMBER})/).downcase
 		e[:tos]=re_matcher(klog, /^.*?TOS=(#{REGEX_WORD_NUMBER})/)
 		e[:ttl]=re_matcher(klog, /^.*?TTL=(#{REGEX_NUMBER})/)
 		e[:id] =re_matcher(klog, /^.*?ID=(#{REGEX_NUMBER})/)
 		e[:spt]=re_matcher(klog, /^.*?SPT=(#{REGEX_NUMBER})/)
 		e[:dpt]=re_matcher(klog, /^.*?DPT=(#{REGEX_NUMBER})/)
 		e[:len]=re_matcher(klog, /^.*?LEN=(#{REGEX_NUMBER})/)
+
 		e
 	end
 
@@ -86,21 +90,49 @@ class FWLog
 		end
 	end
 
-	def self.service(port)
-		Socket.getservbyport(port.to_i)
+	def self.pp(port, proto)
+		"#{port}/#{proto}"
+	end
+
+	def self.service(port, proto)
+		@lookup ? Socket.getservbyport(port.to_i) : pp(port, proto)
 	rescue => e
-		"port "+port.to_s
+		pp(port, proto)
 	end
 
 	def self.hostname(ipv4)
-		Resolv.getname(ipv4)
+		@resolv ? Resolv.getname(ipv4) : ipv4
 	rescue => e
 		ipv4
+	end
+
+	def self.output_name(name, ts_min, ts_max)
+		sts_min = ts_min.strftime(OUTPUT_TIME_FMT)
+		sts_max = ts_max.strftime(OUTPUT_TIME_FMT)
+		("%s_%s_%s" % [ $opts[:name], sts_min, sts_max ]).strip
 	end
 
 	def to_json(*a)
 		entry.to_json(*a)
 	end
-end
 
+	def self.to_a_headers
+		%w/Src TimeStamp In Proto DstPort PortName SrcName/	
+	end
+
+	# if :n == 0 print @src, otherwise print a space
+	# fields should match the headers in to_a_headers
+	def to_a(opts={:n=>0})
+		a=[]
+		a << (opts[:n]==0 ? @src : "")
+		a << @ts
+		a << @in
+		a << @proto
+		a << @dpt
+		a << FWLog.service(@dpt, @proto)
+		a << FWLog.hostname(@src)
+		a
+	end
+
+end
 
