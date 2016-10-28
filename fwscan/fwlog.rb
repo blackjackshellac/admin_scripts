@@ -76,11 +76,14 @@ class FWLog
 		e
 	end
 
+	def self.filter(line, opts)
+		return nil if !opts[:filter].nil? && opts[:filter].class == Regexp && line[opts[:filter]].nil?
+		return nil if !opts[:in].nil?     && opts[:in].class == Regexp     && line[opts[:in]].nil?
+		return line
+	end
+
 	def self.parse(line, opts)
 		result={}
-		return nil if opts.key?(:filter) && line[opts[:filter]].nil?
-		return nil if opts.key(:in) && line[opts[:in]].nil?
-
 		begin
 			e = parse_kernellog(line)
 			return FWLog.new(e)
@@ -107,6 +110,8 @@ class FWLog
 	end
 
 	def self.output_name(name, ts_min, ts_max)
+		ts_min = Time.now if ts_min.nil?
+		ts_max = Time.now if ts_max.nil?
 		sts_min = ts_min.strftime(OUTPUT_TIME_FMT)
 		sts_max = ts_max.strftime(OUTPUT_TIME_FMT)
 		("%s_%s_%s" % [ $opts[:name], sts_min, sts_max ]).strip

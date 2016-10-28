@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'find'
 require 'csv'
+require 'open3'
 
 me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
@@ -26,13 +27,16 @@ $log=Logger.set_logger(STDOUT, Logger::INFO)
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
 
-FORMATS=[ "json", "xlsx", "csv" ]
+FORMATS=[ :json, :xlsx, :csv ]
 
 $opts={
+	:since=>nil,
+	:until=>nil,
+	:ssh=>nil,
 	:file=>nil,
 	:filter=>/Shorewall:/,
 	:in=>"enp2s0",
-	:output=>nil,
+	:format=>:json,
 	:name=>File.join(TMP,ME+"_output"),
 	:label=>nil,
 	:force=>false,
@@ -42,7 +46,27 @@ $opts={
 }
 
 $opts = OParser.parse($opts, "") { |opts|
-	opts.on('-f', '--file FILE', String, "Kernel log to parse") { |file|
+	# journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
+
+	opts.on('-f', '--filter FILTER', String, "Kernel log filter string, default #{$opts[:filter]}") { |filter|
+		filter.strip!
+		filter = filter.empty? ? nil : /#{filter}/
+		$opts[:filter]=filter
+	}
+
+	opts.on('-k', '--since DATE', String, "Kernel log since YYYY-mm-dd HH:MM:SS") { |since|
+		$opts[:since]=since
+	}
+
+	opts.on('-u', '--until DATE', String, "Kernel log until YYYY-mm-dd HH:MM:SS, defaults to now") { |duntil|
+		$opts[:until]=duntil
+	}
+
+	opts.on('-S', '--ssh USER_HOST', String, "ssh to user@host to run journalctl") { |user_host|
+		$opts[:ssh]=user_host
+	}
+
+	opts.on('-i', '--input FILE', String, "Kernel log to parse") { |file|
 		$opts[:file]=file
 	}
 
@@ -50,11 +74,11 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:in]=inp
 	}
 
-	opts.on('-O', '--output FORMAT', String, "Output format: [csv|xlsx]") { |type|
-		type.downcase!
-		format = FORMATS.include?(type) ? type.to_sym : nil
-		raise "Unknown output format: #{type}" if format.nil?
-		$opts[:output]=format
+	opts.on('-O', '--output FORMAT', String, "Output format: #{FORMATS.to_json}") { |type|
+		format = type.downcase.to_sym
+		format = nil unless FORMATS.include?(format)
+		$log.die "Unknown output format: #{type}" if format.nil?
+		$opts[:format]=format
 	}
 
 	opts.on('-n', '--name FILE', String, "Output filename") { |name|
@@ -75,26 +99,63 @@ $opts = OParser.parse($opts, "") { |opts|
 }
 $opts[:in]=/IN=#{$opts[:in]}\s/
 
+$log.die "Must specify an input file (--file) or time since (--since)" if $opts[:file].nil? && $opts[:since].nil?
+
 FWLog.init($opts)
+
+input=[]
+if !$opts[:file].nil?
+	File.open($opts[:file], "r") { |fd|
+		fd.each { |line|
+			line = FWLog.filter(line, $opts)
+			input << line unless line.nil?
+		}
+	}
+elsif !$opts[:since].nil?
+	#journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
+	ssh=$opts[:ssh]
+	cmd=""
+	cmd  = %Q/ssh #{ssh} '/ unless ssh.nil?
+	cmd += %Q/journalctl -k --since "#{$opts[:since]}"/
+	cmd += %Q/ --until "#{$opts[:until]}"/ unless $opts[:until].nil?
+	cmd += %Q/'/ unless ssh.nil?
+	puts cmd
+	Open3.popen3(cmd) { |sin,sout,serr,thr|
+		pid=thr.pid
+		sout.each { |line|
+			$log.debug ">> "+line
+			line = FWLog.filter(line, $opts)
+			input << line unless line.nil?
+		}
+		status=thr.value
+		if status != 0
+			serr.each { |line|
+				$log.error line.chomp
+			}
+			$log.die "Process #{pid} exited with status #{status}"
+		end
+		$log.info "Process #{pid} exited with status #{status}"
+	}
+end
 
 ts_min=nil
 ts_max=nil
 entries={}
-File.open($opts[:file], "r") { |fd|
-	fd.each { |line|
-		e = FWLog.parse(line, $opts)
-		next if e.nil?
-		entries[e.src] ||= []
-		entries[e.src] << e
-		ts = e.ts
-		ts_min = ts if ts_min.nil? || ts_min > ts
-		ts_max = ts if ts_max.nil? || ts_max < ts
-	}
+input.each { |line|
+	e = FWLog.parse(line, $opts)
+	next if e.nil?
+	entries[e.src] ||= []
+	entries[e.src] << e
+	ts = e.ts
+	ts_min = ts if ts_min.nil? || ts_min > ts
+	ts_max = ts if ts_max.nil? || ts_max < ts
 }
 
 output_name = FWLog.output_name($opts[:name], ts_min, ts_max)
 
-case $opts[:output]
+$log.die "Nothing to output, firewall journal entries is empty" if entries.empty?
+
+case $opts[:format]
 when :xlsx
 	FormatXLSX.init($opts)
 	begin
@@ -126,7 +187,13 @@ when :csv
 		}
 	}
 when :json
-	puts JSON.pretty_generate(entries)
+	result = []
+	entries.each_pair { |src, fwla|
+		fwla.each { |fwl|
+			result << fwl.to_a
+		}
+	}
+	puts JSON.pretty_generate(result)
 else
 	puts "No output format specified"
 end
