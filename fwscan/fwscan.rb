@@ -17,10 +17,11 @@ HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
 CFG_PATH=File.join(MD, ME+".json")
 
-require_relative "#{LIB}/logger"
-require_relative "#{LIB}/o_parser"
-require_relative "#{MD}/fwlog"
-require_relative "#{MD}/format_xlsx"
+require_relative File.join(LIB, "logger")
+require_relative File.join(LIB, "o_parser")
+require_relative File.join(MD, "fwlog")
+require_relative File.join(MD, "format_xlsx")
+require_relative File.join(LIB, "whois_classifier")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
