@@ -4,6 +4,20 @@
 require 'classifier-reborn'
 require 'json'
 
+me=File.symlink?($0) ? File.readlink($0) : $0
+ME=File.basename($0, ".rb")
+MD=File.dirname(me)
+LIB=File.realpath("..")
+
+HOSTNAME=%x/hostname -s/.strip
+HOSTNAME_S=HOSTNAME.to_sym
+CFG_PATH=File.join(MD, ME+".json")
+TMP=File.join("/var/tmp", ME)
+FileUtils.mkdir_p(TMP)
+
+require_relative File.join(LIB, "logger")
+require_relative File.join(LIB, "o_parser")
+
 #$cat = %w/abuse-c abuse-mailbox address admin-c country created descr fax-no inetnum last-modified mnt-by mnt-ref netname nic-hdl org organisation org-name org-type origin phone remarks role route source status tech-c/
 
 $cat = {
@@ -16,6 +30,23 @@ $cat = {
 }
 $ignore = %w/abuse-c abuse-mailbox address phone fax-no org organisation org-name org-type netname status origin remarks admin-c tech-c mnt-ref mnt-by/
 $ignore.concat(%w/descr source role nic-hdl mnt-routes mnt-domains person at https via nethandle parent nettype originas customer ref custname city stateprov postalcode orgtechhandle orgtechname orgtechphone orgtechemail orgtechref orgabusehandle orgabusename orgabusephone orgabuseemail orgabuseref rtechhandle rtechname rtechphone rtechemail rtechref organization orgname orgid comment/)
+
+$log=Logger::set_logger(STDERR)
+
+$opts = {
+		:addresses => [],
+		:logger => $log
+}
+
+$opts = OParser.parse($opts, "") { |opts|
+	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
+			puts list.class
+			puts list.inspect
+			exit 0
+	}
+}
+
+exit 0
 
 wbc = ClassifierReborn::Bayes.new $cat.keys
 
