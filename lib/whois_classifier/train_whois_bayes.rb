@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 #
 
+require 'fileutils'
 require 'classifier-reborn'
 require 'json'
 
@@ -35,25 +36,62 @@ $log=Logger::set_logger(STDERR)
 
 $opts = {
 		:addresses => [],
+		:file => nil,
+		:data => File.join(TMP, "trained_classifier.dat"),
 		:logger => $log
 }
 
 $opts = OParser.parse($opts, "") { |opts|
 	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
-			puts list.class
-			puts list.inspect
-			exit 0
+		list.each { |addr|
+			$opts[:addresses] << addr.strip
+		}
+	}
+
+	opts.on('-i', '--input FILE', String, "Input file containing addresses for training") { |file|
+		$opts[:file] = file
+	}
+
+	opts.on('--data FILE', String, "Classifier data, default #{$opts[:data]}") { |file|
+		$opts[:data]=file
 	}
 }
 
-exit 0
+RE_WHOIS_COMMENT=/(.*)(%.*)$/
+RE_CAT=/([-\w]*):(.*)/
 
-wbc = ClassifierReborn::Bayes.new $cat.keys
+RE_SPACES=/\s+/
+RE_COMMENT=/#.*$/
+RE_DELIMS=/[\s,;:]+/
+RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
+unless $opts[:file].nil?
+	lines = File.read($opts[:file]).split(/\n/)
+	lines.each { |line|
+		line.gsub!(RE_SPACES, " ")
+		line.gsub!(RE_COMMENT, "")
+		line.strip!
+		addrs = line.split(RE_DELIMS)
+		$log.debug "addrs=#{addrs.inspect}"
+		addrs.each { |addr|
+			next if addr.empty?
+			if addr[RE_IPV4].nil?
+				$log.error "Invalid ip address: #{addr}"
+				next
+			end
+			$log.debug "Adding #{addr}"
+			$opts[:addresses] << addr
+		}
+	}
+end
+
+if File.exists?($opts[:data])
+	data=File.read($opts[:data])
+	wbc = Marshal.load data
+else
+	wbc = ClassifierReborn::Bayes.new $cat.keys
+end
 
 puts wbc.categories
-
-RE_COMMENT=/(.*)(%.*)$/
-RE_CAT=/([-\w]*):(.*)/
 
 def is_ignore(ignore_cats, cat)
 	return ignore_cats.include?(cat)
@@ -67,12 +105,12 @@ def get_category(cat_h, cat)
 end
 
 unknown={}
-addresses=%w/213.202.233.59 185.53.91.76 70.81.251.194/
+addresses=$opts[:addresses]
 addresses.each { |addr|
 	puts ">>> whois #{addr}"
 	data=%x/whois #{addr}/
 	data.split(/\n/).each { |line|
-		line = $1 unless line[RE_COMMENT].nil?
+		line = $1 unless line[RE_WHOIS_COMMENT].nil?
 		line.strip!
 		next if line.empty?
 		next if line[RE_CAT].nil?
@@ -97,6 +135,11 @@ addresses.each { |addr|
 	}
 }
 
+data = Marshal.dump wbc
+$log.info "Writing whois training data: #{$opts[:data]}"
+File.open($opts[:data], "w") { |fd|
+	fd.write(data)
+}
 tests=[
 	"inetnum:        70.81.251.0 - 70.81.251.255",
 	"inetnum:        213.202.232.0 - 213.202.235.255"
