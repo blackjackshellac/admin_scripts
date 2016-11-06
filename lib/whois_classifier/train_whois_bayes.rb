@@ -16,21 +16,17 @@ CFG_PATH=File.join(MD, ME+".json")
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
 
+RE_SPACES=/\s+/
+RE_COMMENT=/#.*$/
+RE_DELIMS=/[\s,;:]+/
+RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
+
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
+require_relative "whois_bayes.rb"
+require_relative "whois_data.rb"
 
 #$cat = %w/abuse-c abuse-mailbox address admin-c country created descr fax-no inetnum last-modified mnt-by mnt-ref netname nic-hdl org organisation org-name org-type origin phone remarks role route source status tech-c/
-
-$cat = {
-	:netrange => %w/netrange inetnum/,
-	:cidr     => %w/cidr route/,
-	:country  => %w/country/,
-	:regdate  => %w/regdate created/,
-	:updated  => %w/updated last-modified/,
-	:ignore   => %w//
-}
-$ignore = %w/abuse-c abuse-mailbox address phone fax-no org organisation org-name org-type netname status origin remarks admin-c tech-c mnt-ref mnt-by/
-$ignore.concat(%w/descr source role nic-hdl mnt-routes mnt-domains person at https via nethandle parent nettype originas customer ref custname city stateprov postalcode orgtechhandle orgtechname orgtechphone orgtechemail orgtechref orgabusehandle orgabusename orgabusephone orgabuseemail orgabuseref rtechhandle rtechname rtechphone rtechemail rtechref organization orgname orgid comment/)
 
 $log=Logger::set_logger(STDERR)
 
@@ -38,12 +34,15 @@ $opts = {
 		:addresses => [],
 		:file => nil,
 		:data => File.join(TMP, "trained_classifier.dat"),
-		:logger => $log
+		:logger => $log,
+		:log => nil
 }
 
 $opts = OParser.parse($opts, "") { |opts|
 	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
 		list.each { |addr|
+			addr.strip!
+			raise "The given address does not appear to be a valid IPV4 address: #{addr}" if addr[RE_IPV4].nil?
 			$opts[:addresses] << addr.strip
 		}
 	}
@@ -55,15 +54,18 @@ $opts = OParser.parse($opts, "") { |opts|
 	opts.on('--data FILE', String, "Classifier data, default #{$opts[:data]}") { |file|
 		$opts[:data]=file
 	}
+
+	opts.on('-l', '--log FILE', String, "Optional log file") { |file|
+		$opts[:log]=file
+	}
 }
 
-RE_WHOIS_COMMENT=/(.*)(%.*)$/
-RE_CAT=/([-\w]*):(.*)/
+unless $opts[:log].nil?
+	$log=Logger::set_logger($opts[:log])
+	$log.level = Logger::DEBUG if $opts[:debug]
+	$opts[:logger]=$log
+end
 
-RE_SPACES=/\s+/
-RE_COMMENT=/#.*$/
-RE_DELIMS=/[\s,;:]+/
-RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
 unless $opts[:file].nil?
 	lines = File.read($opts[:file]).split(/\n/)
 	lines.each { |line|
@@ -84,79 +86,39 @@ unless $opts[:file].nil?
 	}
 end
 
+WhoisBayes.init($opts)
+WhoisData.init($opts)
+
 if File.exists?($opts[:data])
-	data=File.read($opts[:data])
-	wbc = Marshal.load data
+	wb = WhoisBayes.loadTraining($opts[:data])
 else
-	wbc = ClassifierReborn::Bayes.new $cat.keys
+	wb = WhoisBayes.new
 end
+$log.debug "Categories: #{wb.wbc.categories}"
 
-puts wbc.categories
-
-def is_ignore(ignore_cats, cat)
-	return ignore_cats.include?(cat)
-end
-
-def get_category(cat_h, cat)
-	cat_h.each_pair { |kat, cats|
-		return kat if cats.include?(cat)
-	}
-	nil
-end
-
-unknown={}
 addresses=$opts[:addresses]
 addresses.each { |addr|
-	puts ">>> whois #{addr}"
-	data=%x/whois #{addr}/
-	data.split(/\n/).each { |line|
-		line = $1 unless line[RE_WHOIS_COMMENT].nil?
-		line.strip!
-		next if line.empty?
-		next if line[RE_CAT].nil?
-		cat=$1.strip.downcase
-		val=$2.strip
-
-		next if unknown.keys.include?(cat)
-
-		if is_ignore($ignore, cat)
-			#puts "Debug: classify ignore #{cat}: #{line}"
-			wbc.train(:ignore, line)
-			next
-		end
-		kat = get_category($cat, cat)
-		unless kat.nil?
-			puts "Info: classify #{cat} as #{kat}: #{line}"
-			wbc.train(kat, line)
-			next
-		end
-		unknown[cat] = line
-		puts "Warning: #{cat} category not found in input: #{line}"
-	}
+	wb.categorize(addr)
 }
 
-data = Marshal.dump wbc
-$log.info "Writing whois training data: #{$opts[:data]}"
-File.open($opts[:data], "w") { |fd|
-	fd.write(data)
+wb.saveTraining($opts[:data])
+
+addresses.each { |addr|
+	wb.classify_addr(addr)
 }
+
 tests=[
 	"inetnum:        70.81.251.0 - 70.81.251.255",
 	"inetnum:        213.202.232.0 - 213.202.235.255"
 ]
 tests.each { |test|
-	cat=wbc.classify test
+	cat=wb.classify test
 	puts "Classified as #{cat}: #{test}"
 }
 
-File.read("whois_sample.txt").each_line { |line|
-	cat = wbc.classify(line)
-	if cat == :cidr || cat.eql?(:cidr.to_s)
-		puts "Info: cidr = #{line}"
-		break
-	end
-}
+wb.classify_file("whois_sample.txt")
 
+unknown = WhoisBayes.unknown
 unless unknown.empty?
 	puts JSON.pretty_generate(unknown)
 	arr='%w/'
