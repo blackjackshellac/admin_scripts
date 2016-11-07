@@ -116,7 +116,8 @@ tests.each { |test|
 	puts "Classified as #{cat}: #{test}"
 }
 
-wb.classify_file("whois_sample.txt")
+wd = wb.classify_file("whois_sample.txt")
+puts JSON.pretty_generate(wd)
 
 unknown = WhoisBayes.unknown
 unless unknown.empty?

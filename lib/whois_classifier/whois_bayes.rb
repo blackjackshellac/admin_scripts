@@ -10,6 +10,7 @@ class WhoisBayes
 
 	RE_WHOIS_COMMENT=/(.*)(%.*)$/
 	RE_CAT=/([-\w]*):(.*)/
+	RE_NETWORK=/^\s*network:/
 
 	@@log = nil
 	@@unknown = nil
@@ -52,7 +53,7 @@ class WhoisBayes
 	end
 
 	def categorize(addr)
-		$log.info ">>> whois #{addr}"
+		@@log.debug "categorize>>> whois #{addr}"
 		WhoisData.whois(addr).each { |line|
 			unless line[RE_WHOIS_COMMENT].nil?
 				line = $1.strip
@@ -60,6 +61,7 @@ class WhoisBayes
 			end
 			line.strip!
 			next if line.empty?
+			line.sub!(RE_NETWORK, "") unless line[RE_NETWORK].nil?
 			next if line[RE_CAT].nil?
 			cat=$1.strip.downcase
 			val=$2.strip
@@ -103,7 +105,7 @@ class WhoisBayes
 			@sleep += 5
 			return classify_addr(addr)
 		rescue => e
-			@@log.error e.backtrace.join('\n')
+			@@log.error e.backtrace.join("\n")
 			@@log.die "caught unhandled exception: #{e.to_s}"
 		end
 	end
@@ -113,12 +115,7 @@ class WhoisBayes
 		File.read(file).each_line { |line|
 			wd.classify_line(line)
 		}
-		if wd.cidr.nil?
-		end
-		#if cat == :cidr || cat.eql?(:cidr.to_s)
-		#	puts "Info: cidr = #{line}"
-		#	break
-		#end
+		return wd
 	end
 
 	def classify(line)
