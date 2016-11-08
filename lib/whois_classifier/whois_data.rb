@@ -25,6 +25,8 @@ class WhoisData
 	@@ignore = %w/abuse-c abuse-mailbox address phone fax-no org organisation org-name org-type netname status origin remarks admin-c tech-c mnt-ref mnt-by/
 	@@ignore.concat(%w/descr source role nic-hdl mnt-routes mnt-domains person at https via nethandle parent nettype originas customer ref custname city stateprov postalcode orgtechhandle orgtechname orgtechphone orgtechemail orgtechref orgabusehandle orgabusename orgabusephone orgabuseemail orgabuseref rtechhandle rtechname rtechphone rtechemail rtechref organization orgname orgid comment/)
 	@@ignore.concat(%w/mnt-lower mnt-irt irt e-mail auth orgnochandle orgnocname orgnocphone orgnocemail orgnocref com network rnochandle rnocname rnocphone rnocemail rnocref rabusehandle rabusename rabusephone rabuseemail rabuseref notify net contact sponsoring-org netblock language aut-num owner ownerid responsible owner-c inetrev nserver nsstat nslastaa nic-hdl-br member-of/)
+	@@ignore.concat(%w/class-name id auth-area network-name i updated-by street-address state postal-code country-code tech-contact handle/)
+	@@ignore.concat(%w/organization;i tech-contact;i admin-contact;i id;i network-name;i parent;i org-contact;i abuse-contact;i noc-contact;i in-addr-server;i/)
 
 	attr_reader :wb, :netrange, :cidr, :country, :regdate, :updated, :ignore
 	def initialize(wb)
@@ -71,6 +73,66 @@ class WhoisData
 		text.split(/\n/)
 	end
 
+	def getNetrange(line)
+		return nil if line[RE_IPV4_NETRANGE].nil?
+		netrange = [$1,$2]
+		netrange
+	end
+
+	def getCidr(line)
+		# route:          213.202.232.0/22
+		cidr = []
+		if !line[RE_IPV4_CIDR].nil?
+			cidr << NetAddr::CIDR.create($1)
+			@@log.debug "CIDR: #{cidr[0].to_s}"
+		elsif !line[RE_IPV4_CIDR_1].nil?
+			addr = "#{$1}.0.0.0#{$2}"
+			cidr << NetAddr::CIDR.create(addr)
+			@@log.debug "CIDR_1: #{cidr[0].to_s} from #{addr}"
+		elsif !line[RE_IPV4_CIDR_2].nil?
+			addr = "#{$1}.0.0#{$2}"
+			cidr << NetAddr::CIDR.create(addr)
+			@@log.debug "CIDR_2: #{cidr[0].to_s} from #{addr}"
+		elsif !line[RE_IPV4_CIDR_3].nil?
+			addr = "#{$1}.0#{$2}"
+			cidr << NetAddr::CIDR.create(addr)
+			@@log.debug "CIDR_3: #{cidr[0].to_s} from #{addr}"
+		else
+			@@log.error "CIDR not found in line: #{line}"
+			cidr = nil
+		end
+		cidr
+	end
+
+	def getCidrFromNetrange
+		lower = upper = nil
+		if @netrange.class == Array
+			lower = @netrange[0]
+			upper = @netrange[1]
+		elsif @netrange.class == String
+			if @netrange[RE_IPV4_NETRANGE].nil?
+				@@log.error "Netrange not found in :netrange: #{@netrange}"
+				return nil
+			end
+			lower = $1
+			upper = $2
+		else
+			raise "Invalid netrange value #{@netrange.class}/#{@netrange}"
+		end
+
+		@@log.debug "CIDR not found, look in :netrange #{@netrange}"
+		# http://stackoverflow.com/questions/13406603/ip-range-to-cidr-in-ruby-rails
+		@@log.debug "Create cidr from #{lower} - #{upper}"
+		lower = NetAddr::CIDR.create(lower)
+		upper = NetAddr::CIDR.create(upper)
+		range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
+		@cidr = NetAddr.merge(range, :Objectify => true)
+		@cidr.each_index { |i|
+			cidr = @cidr[i]
+			@@log.debug "CIDR #{i} #{cidr.to_s}"
+		}
+	end
+
 	def classify_line(line)
 		line.strip!
 		cat = @wb.classify(line)
@@ -95,30 +157,10 @@ class WhoisData
 			case cat
 			when :netrange
 				# TODO look for RE_IPV4_* if range not found
-				@netrange = line
+				@netrange = getNetrange(line)
+				@cidr = getCidr(line) if @netrange.nil?
 			when :cidr
-				# route:          213.202.232.0/22
-				cidr = []
-				if !line[RE_IPV4_CIDR].nil?
-					cidr << NetAddr::CIDR.create($1)
-					@@log.debug "CIDR: #{cidr[0].to_s}"
-				elsif !line[RE_IPV4_CIDR_1].nil?
-					addr = "#{$1}.0.0.0#{$2}"
-					cidr << NetAddr::CIDR.create(addr)
-					@@log.debug "CIDR_1: #{cidr[0].to_s} from #{addr}"
-				elsif !line[RE_IPV4_CIDR_2].nil?
-					addr = "#{$1}.0.0#{$2}"
-					cidr << NetAddr::CIDR.create(addr)
-					@@log.debug "CIDR_2: #{cidr[0].to_s} from #{addr}"
-				elsif !line[RE_IPV4_CIDR_3].nil?
-					addr = "#{$1}.0#{$2}"
-					cidr << NetAddr::CIDR.create(addr)
-					@@log.debug "CIDR_3: #{cidr[0].to_s} from #{addr}"
-				else
-					@@log.error "CIDR not found in line: #{line}"
-					cidr = nil
-				end
-				@cidr = cidr
+				@cidr = getCidr(line)
 			when :country
 				@country = line
 			when :regdate
@@ -141,22 +183,8 @@ class WhoisData
 		if @cidr.nil?
 			if @netrange.nil?
 				@@log.error "Netrange or CIDR not found"
-			elsif @netrange[RE_IPV4_NETRANGE].nil?
-				@@log.error "Netrange not found in :netrange: #{@netrange}"
 			else
-				@@log.debug "CIDR not found, look in :netrange #{@netrange}"
-				# http://stackoverflow.com/questions/13406603/ip-range-to-cidr-in-ruby-rails
-				lower = $1
-				upper = $2
-				@@log.debug "Create cidr from #{lower} - #{upper}"
-				lower = NetAddr::CIDR.create($1)
-				upper = NetAddr::CIDR.create($2)
-				range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
-				@cidr = NetAddr.merge(range, :Objectify => true)
-				@cidr.each_index { |i|
-					cidr = @cidr[i]
-					@@log.debug "CIDR #{i} #{cidr.to_s}"
-				}
+				@cidr = getCidrFromNetrange
 			end
 			@@log.error "whois #{addr}>>> "+whois_text+"\n<<<" if @cidr.nil?
 		end

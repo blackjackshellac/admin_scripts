@@ -9,7 +9,7 @@ class WhoisBayes
 	end
 
 	RE_WHOIS_COMMENT=/(.*)(%.*)$/
-	RE_CAT=/([-\w]*):(.*)/
+	RE_CAT=/([-\w;]*):(.*)/
 	RE_NETWORK=/^\s*network:/
 
 	@@log = nil
@@ -84,9 +84,22 @@ class WhoisBayes
 		}
 	end
 
+	def cache_put(wd)
+		return if wd.cidr.nil?
+		wd.cidr.each { |cidr|
+			cidr_s = cidr.to_s
+			@@cache[cidr_s] = wd unless @@cache.key?(cidr_s)
+		}
+	end
+
 	def cache_lookup(addr)
-		@@cache.keys.each { |cidr|
-			return @@cache[cidr] if cidr.contains?(addr)
+		@@cache.each_pair { |cidr_s, wd|
+			wd.cidr.each { |cidr|
+				if cidr.contains?(addr)
+					@@log.debug "Cache hit for cidr=#{cidr_s} addr=#{addr}"
+					return wd
+				end
+			}
 		}
 		return nil
 	end
@@ -99,6 +112,7 @@ class WhoisBayes
 		begin
 			sleep @sleep if @sleep > 0
 			wd.classify_addr(addr)
+			cache_put(wd)
 			return wd
 		rescue WhoisRateError => e
 			@@log.error "Exceeded query rate for addr=#{addr}, slowing down: #{e.message}"

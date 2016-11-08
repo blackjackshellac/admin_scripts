@@ -35,10 +35,20 @@ $opts = {
 		:file => nil,
 		:data => File.join(TMP, "trained_classifier.dat"),
 		:logger => $log,
+		:train => false,
+		:classify => false,
 		:log => nil
 }
 
 $opts = OParser.parse($opts, "") { |opts|
+	opts.on('-t', '--train', "Train classifier data using given addresses") {
+		$opts[:train] = true
+	}
+
+	opts.on('-c', '--classify', "Classify given addresses") {
+		$opts[:classify] = true
+	}
+
 	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
 		list.each { |addr|
 			addr.strip!
@@ -59,6 +69,11 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:log]=file
 	}
 }
+
+if !File.exists?($opts[:data])
+	$opts[:train] = true
+	$opts[:classify] = false
+end
 
 unless $opts[:log].nil?
 	$log=Logger::set_logger($opts[:log])
@@ -96,40 +111,40 @@ else
 end
 $log.debug "Categories: #{wb.wbc.categories}"
 
-addresses=$opts[:addresses]
-addresses.each { |addr|
-	wb.categorize(addr)
-}
-
-wb.saveTraining($opts[:data])
-
-addresses.each { |addr|
-	wb.classify_addr(addr)
-}
-
-tests=[
-	"inetnum:        70.81.251.0 - 70.81.251.255",
-	"inetnum:        213.202.232.0 - 213.202.235.255"
-]
-tests.each { |test|
-	cat=wb.classify test
-	puts "Classified as #{cat}: #{test}"
-}
-
-wd = wb.classify_file("whois_sample.txt")
-puts JSON.pretty_generate(wd)
-
-unknown = WhoisBayes.unknown
-unless unknown.empty?
-	puts JSON.pretty_generate(unknown)
-	arr='%w/'
-	unknown.keys.each { |key|
-		arr+=key+" "
+if $opts[:train]
+	$opts[:addresses].each { |addr|
+		wb.categorize(addr)
 	}
-	arr=arr.strip+'/'
-	puts arr
+	wb.saveTraining($opts[:data])
+
+	unknown = WhoisBayes.unknown
+	unless unknown.empty?
+		arr='%w/'
+		unknown.keys.each { |key|
+			arr+=key+" "
+		}
+		arr=arr.strip+'/'
+		puts arr
+	end
 end
 
+if $opts[:classify]
+	$opts[:addresses].each { |addr|
+		wb.classify_addr(addr)
+	}
+end
+
+#tests=[
+#	"inetnum:        70.81.251.0 - 70.81.251.255",
+#	"inetnum:        213.202.232.0 - 213.202.235.255"
+#]
+#tests.each { |test|
+#	cat=wb.classify test
+#	puts "Classified as #{cat}: #{test}"
+#}
+
+#wd = wb.classify_file("whois_sample.txt")
+#puts JSON.pretty_generate(wd)
 
 #wbc.train_interesting "here are some good words. I hope you love them"
 #wbc.train_uninteresting "here are some bad words, I hate you"
