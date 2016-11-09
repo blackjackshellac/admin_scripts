@@ -1,6 +1,7 @@
 
 require 'netaddr'
 require 'json'
+require 'csv'
 
 class WhoisData
 	RE_IPV4_NETRANGE=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*-\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
@@ -9,6 +10,14 @@ class WhoisData
 	RE_IPV4_CIDR_1=/(\d{1,3})([\/]\d+)/
 	RE_IPV4_CIDR_2=/(\d{1,3}\.\d{1,3})([\/]\d+)/
 	RE_IPV4_CIDR_3=/(\d{1,3}\.\d{1,3}\.\d{1,3})([\/]\d+)/
+
+	FORMATS = {
+		:text => "Text output",
+		:inspect => "Debug inspect output",
+		:csv  => "CSV output",
+		:json => "JSON output",
+		:pretty => "Prettified JSON output"
+	}
 
 	#network:IP-Network:50.116.64.0/18
 	#network:IP-Network-Block:50.116.64.0 - 50.116.127.255
@@ -190,9 +199,10 @@ class WhoisData
 		end
 	end
 
-	def to_json(*a)
+	def to_hash
+		nr = @netrange.nil? ? "<not found>" : ("%s - %s" % @netrange)
 		h={
-			:netrange => @netrange,
+			:netrange => nr,
 			:country  => @country,
 			:regdate  => @regdate,
 			:updated  => @updated
@@ -201,8 +211,57 @@ class WhoisData
 		@cidr.each { |cidr|
 			h[:cidr] << cidr
 		}
-		h.to_json
+		h
 	end
 
+	def to_format(format, opts={:stream=>$stdout, :headers=>false})
+		res=""
+		stream=opts[:stream]||$stdout
+		case format
+		when :text
+			res=to_text
+		when :inspect
+			res=to_inspect
+		when :json
+			res=self.to_json
+		when :pretty
+			res=JSON.pretty_generate(to_hash)
+		when :csv
+			stream.puts to_csv(true) if opts[:headers]
+			res=to_csv
+		else
+			raise "Unknown format: #{format}"
+		end
+		stream.puts res
+	end
+
+	def to_text
+		h=to_hash
+%/NetRange: #{h[:netrange]}
+Country: #{h[:country]}
+RegDate: #{h[:regdate]}
+Updated: #{h[:updated]}
+CIDR: #{h[:cidr].join(", ")}
+
+/
+	end
+
+	def to_inspect
+		to_hash.inspect
+	end
+
+	def to_json(*a)
+		to_hash.to_json
+	end
+
+	def csv_headers
+		%w/netrange country regdate updated cidr/.to_csv
+	end
+
+	def to_csv(headers=false)
+		return csv_headers if headers
+		h = to_hash
+		[ h[:netrange], h[:country], h[:regdate], h[:updated], h[:cidr].join(" ") ].to_csv
+	end
 end
 

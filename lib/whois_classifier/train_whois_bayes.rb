@@ -37,6 +37,7 @@ $opts = {
 		:logger => $log,
 		:train => false,
 		:classify => false,
+		:format => WhoisData::FORMATS.keys[0],
 		:log => nil
 }
 
@@ -57,7 +58,7 @@ $opts = OParser.parse($opts, "") { |opts|
 		}
 	}
 
-	opts.on('-i', '--input FILE', String, "Input file containing addresses for training") { |file|
+	opts.on('-i', '--input FILE', String, "Input file containing addresses for training, - for stdin") { |file|
 		$opts[:file] = file
 	}
 
@@ -67,6 +68,10 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-l', '--log FILE', String, "Optional log file") { |file|
 		$opts[:log]=file
+	}
+
+	opts.on('-f', '--format FORMAT', String, "Output formats [#{WhoisData::FORMATS.keys.join(",")}], default #{$opts[:format]}") { |format|
+		$opts[:format] = format.to_sym
 	}
 }
 
@@ -81,9 +86,16 @@ unless $opts[:log].nil?
 	$opts[:logger]=$log
 end
 
+def readfile(file, &block)
+	input = "-".eql?(file) ? $< : File.new(file, "r")
+	input.each { |line|
+		yield(line)
+	}
+end
+
 unless $opts[:file].nil?
-	lines = File.read($opts[:file]).split(/\n/)
-	lines.each { |line|
+	#lines = File.read($opts[:file]).split(/\n/)
+	readfile($opts[:file]) { |line|
 		line.gsub!(RE_SPACES, " ")
 		line.gsub!(RE_COMMENT, "")
 		line.strip!
@@ -129,8 +141,14 @@ if $opts[:train]
 end
 
 if $opts[:classify]
+	fopts={
+		:stream=>$stdout,
+		:headers=>true
+	}
 	$opts[:addresses].each { |addr|
-		wb.classify_addr(addr)
+		wd = wb.classify_addr(addr)
+		wd.to_format($opts[:format], fopts)
+		fopts[:headers]=false
 	}
 end
 
