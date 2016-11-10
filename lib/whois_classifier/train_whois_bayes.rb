@@ -136,7 +136,7 @@ if $opts[:train]
 			arr+=key+" "
 		}
 		arr=arr.strip+'/'
-		puts arr
+		$stderr.puts arr
 	end
 end
 
