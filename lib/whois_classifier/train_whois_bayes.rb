@@ -25,6 +25,7 @@ require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative "whois_bayes.rb"
 require_relative "whois_data.rb"
+require_relative "command_shell"
 
 #$cat = %w/abuse-c abuse-mailbox address admin-c country created descr fax-no inetnum last-modified mnt-by mnt-ref netname nic-hdl org organisation org-name org-type origin phone remarks role route source status tech-c/
 
@@ -37,6 +38,7 @@ $opts = {
 		:logger => $log,
 		:train => false,
 		:classify => false,
+		:shell => false,
 		:format => WhoisData::FORMATS.keys[0],
 		:log => nil
 }
@@ -48,6 +50,10 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-c', '--classify', "Classify given addresses") {
 		$opts[:classify] = true
+	}
+
+	opts.on('-s', '--shell', "Command shell for training, classifying input") {
+		$opts[:shell] = true
 	}
 
 	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
@@ -75,7 +81,7 @@ $opts = OParser.parse($opts, "") { |opts|
 	}
 }
 
-if !File.exists?($opts[:data])
+unless File.exists?($opts[:data])
 	$opts[:train] = true
 	$opts[:classify] = false
 end
@@ -122,6 +128,38 @@ else
 	wb = WhoisBayes.new
 end
 $log.debug "Categories: #{wb.wbc.categories}"
+
+if $opts[:shell]
+	CommandShell::CLI.init($opts)
+
+	COMMANDS = %w/train classify history help quit /
+
+	train = Proc.new { |cli|
+		puts "Called proc train: #{cli.class}"
+		cli.prompt "train"
+	}
+	classify = Proc.new { |cli|
+		cli.prompt "classify"
+	}
+	help = Proc.new { |cli|
+		puts cli.commands.join(", ")
+		puts "args = #{cli.args}" unless cli.args.nil? || cli.args.empty?
+	}
+	quit = Proc.new { |cli|
+		cli.action = :quit
+	}
+
+	cli=CommandShell::CLI.new
+	$opts[:classify] ? classify.call(cli) : train.call(cli)
+
+	cli.set_commands(COMMANDS)
+	cli.command_proc("train", train)
+	cli.command_proc("classify", classify)
+	cli.command_proc("help", help)
+	cli.command_proc("quit", quit)
+	cli.shell
+	exit
+end
 
 if $opts[:train]
 	$opts[:addresses].each { |addr|

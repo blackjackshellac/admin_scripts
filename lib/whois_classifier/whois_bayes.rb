@@ -105,6 +105,7 @@ class WhoisBayes
 	end
 
 	def classify_addr(addr)
+		@@log.debug "Classify addr >> #{addr}"
 		wd = cache_lookup(addr)
 		return wd unless wd.nil?
 

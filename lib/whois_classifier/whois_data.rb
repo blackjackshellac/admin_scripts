@@ -142,6 +142,11 @@ class WhoisData
 		}
 	end
 
+	def getNetrangeFromCidr(cidr)
+		nr = cidr.range(0, nil)
+		return nr.first, nr.last
+	end
+
 	def classify_line(line)
 		line.strip!
 		cat = @wb.classify(line)
@@ -196,6 +201,8 @@ class WhoisData
 				@cidr = getCidrFromNetrange
 			end
 			@@log.error "whois #{addr}>>> "+whois_text+"\n<<<" if @cidr.nil?
+		elsif @netrange.nil?
+			@netrange = getNetrangeFromCidr(@cidr[0])
 		end
 	end
 
