@@ -8,7 +8,7 @@ class WhoisBayes
 	class WhoisRateError < StandardError
 	end
 
-	RE_WHOIS_COMMENT=/(.*)(%.*)$/
+	RE_WHOIS_COMMENT=/(.*)(#%.*)$/
 	RE_CAT=/([-\w;]*):(.*)/
 	RE_NETWORK=/^\s*network:/
 
@@ -52,35 +52,49 @@ class WhoisBayes
 		@wbc = Marshal.load data
 	end
 
+	def categorize_line(line)
+		unless line[RE_WHOIS_COMMENT].nil?
+			line = $1.strip
+			comment = $2.strip
+			@wbc.train(:ignore, comment)
+			@@log.debug "Stripped comment: #{comment}"
+		end
+		line.strip!
+		return if line.empty?
+
+		# TODO fix hackish tweak to deal with network: prefix
+		line.sub!(RE_NETWORK, "") unless line[RE_NETWORK].nil?
+
+		# extract category from line
+		if line[RE_CAT].nil?
+			@@log.debug "ignore category not found in input: '#{line}'"
+			@wbc.train(:ignore, line)
+			return
+		end
+		cat=$1.strip.downcase
+		val=$2.strip
+
+		return if @@unknown.keys.include?(cat)
+
+		if WhoisData.is_ignore(cat)
+			@@log.debug "classify ignore #{cat}: #{line}"
+			@wbc.train(:ignore, line)
+			return	
+		end
+		kat = WhoisData.get_category(cat)
+		if kat.nil?
+			@@unknown[cat] = line
+			@@log.warn "#{cat} category not found in input: #{line}"
+		else
+			@@log.info "classify #{cat} as #{kat}: #{line}"
+			@wbc.train(kat, line)
+		end
+	end
+
 	def categorize(addr)
 		@@log.debug "categorize>>> whois #{addr}"
 		WhoisData.whois(addr).each { |line|
-			unless line[RE_WHOIS_COMMENT].nil?
-				line = $1.strip
-				wbc.train(:ignore, $2)
-			end
-			line.strip!
-			next if line.empty?
-			line.sub!(RE_NETWORK, "") unless line[RE_NETWORK].nil?
-			next if line[RE_CAT].nil?
-			cat=$1.strip.downcase
-			val=$2.strip
-
-			next if @@unknown.keys.include?(cat)
-
-			if WhoisData.is_ignore(cat)
-				#puts "Debug: classify ignore #{cat}: #{line}"
-				wbc.train(:ignore, line)
-				next
-			end
-			kat = WhoisData.get_category(cat)
-			unless kat.nil?
-				@@log.info "classify #{cat} as #{kat}: #{line}"
-				wbc.train(kat, line)
-				next
-			end
-			@@unknown[cat] = line
-			@@log.warn "#{cat} category not found in input: #{line}"
+			categorize_line(line)
 		}
 	end
 
@@ -123,6 +137,12 @@ class WhoisBayes
 			@@log.error e.backtrace.join("\n")
 			@@log.die "caught unhandled exception: #{e.to_s}"
 		end
+	end
+
+	def classify_line(line)
+		wd = WhoisData.new(@wbc)
+		wd.classify_line(line)
+		return wd
 	end
 
 	def classify_file(file)

@@ -37,7 +37,7 @@ class WhoisData
 	@@ignore.concat(%w/class-name id auth-area network-name i updated-by street-address state postal-code country-code tech-contact handle/)
 	@@ignore.concat(%w/organization;i tech-contact;i admin-contact;i id;i network-name;i parent;i org-contact;i abuse-contact;i noc-contact;i in-addr-server;i/)
 
-	attr_reader :wb, :netrange, :cidr, :country, :regdate, :updated, :ignore
+	attr_reader :wb, :netrange, :cidr, :country, :regdate, :updated, :ignore, :line_cat
 	def initialize(wb)
 		@wb = wb
 
@@ -47,6 +47,8 @@ class WhoisData
 		@regdate = nil
 		@updated = nil
 		@ignore = nil
+
+		@line_cat = :ignore
 	end
 
 	def self.init(opts)
@@ -152,9 +154,10 @@ class WhoisData
 		cat = @wb.classify(line)
 		cat = cat.to_sym
 
-		return if :ignore.eql?(cat)
+		@line_cat = cat
 
 		@@log.debug "Classified cat = #{cat}/#{cat.class}: #{line}"
+		return if :ignore.eql?(cat)
 
 		@@log.debug "Look for #{cat} in #{@@cat_keys.inspect}"
 		if @@cat_keys.include?(cat)
@@ -187,6 +190,14 @@ class WhoisData
 		end
 	end
 
+	def classify_cleanup
+		if @cidr.nil?
+			@cidr = getCidrFromNetrange unless @netrange.nil?
+		elsif @netrange.nil?
+			@netrange = getNetrangeFromCidr(@cidr[0])
+		end
+	end
+
 	# RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
 	def classify_addr(addr)
 		whois_text = ""
@@ -194,15 +205,14 @@ class WhoisData
 			whois_text += "\n"+line
 			classify_line(line)
 		}
+		classify_cleanup
 		if @cidr.nil?
 			if @netrange.nil?
 				@@log.error "Netrange or CIDR not found"
 			else
-				@cidr = getCidrFromNetrange
+				@@log.error "CIDR not found"
 			end
 			@@log.error "whois #{addr}>>> "+whois_text+"\n<<<" if @cidr.nil?
-		elsif @netrange.nil?
-			@netrange = getNetrangeFromCidr(@cidr[0])
 		end
 	end
 
@@ -217,7 +227,7 @@ class WhoisData
 		h[:cidr]=[]
 		@cidr.each { |cidr|
 			h[:cidr] << cidr
-		}
+		} unless @cidr.nil?
 		h
 	end
 

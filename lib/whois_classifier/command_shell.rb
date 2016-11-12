@@ -25,11 +25,13 @@ module CommandShell
 
 		attr_accessor :prompt, :action
 		attr_reader :commands, :commandh, :commanda, :command, :args
-		def initialize(opts=DEF_OPTS)
+		def initialize(execute_proc, opts=DEF_OPTS)
 			@prompt = opts[:prompt]||DEF_OPTS[:prompt]
 			@mode = opts[:mode]||DEF_OPTS[:mode]
-			@procs = {}
-			@action = opts[:action]||:running
+			@procs = {
+				:execute => execute_proc
+			}
+			@action = opts[:action]||:execute
 
 			@command = ""
 			@args = ""
@@ -56,7 +58,8 @@ module CommandShell
 		end
 
 		def prompt(l)
-			@action = l.to_sym if @commands.include?(l)
+			raise "Action #{l} not found in commands: #{@commands.join(',')}" unless @commands.include?(l)
+			@action = l.to_sym
 			@prompt = "#{l}> "
 		end
 
@@ -81,6 +84,12 @@ module CommandShell
 			line.strip
 		end
 
+		def history
+			Readline::HISTORY.to_a.each { |line|
+				puts line
+			}
+		end
+
 		def shell 
 			# Store the state of the terminal
 			stty_save = %x/stty -g/.chomp
@@ -91,7 +100,8 @@ module CommandShell
 					@args = "" if @args.nil?
 					cproc = @procs[@cmd]
 					if cproc.nil?
-						p line
+						cproc = @procs[:execute]
+						cproc.call(self, line)
 					else
 						@@log.debug "Calling proc #{@cmd}"
 						cproc.call(self)

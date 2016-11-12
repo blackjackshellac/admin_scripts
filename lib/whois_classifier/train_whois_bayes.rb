@@ -37,6 +37,7 @@ $opts = {
 		:data => File.join(TMP, "trained_classifier.dat"),
 		:logger => $log,
 		:train => false,
+		:retrain => false,
 		:classify => false,
 		:shell => false,
 		:format => WhoisData::FORMATS.keys[0],
@@ -54,6 +55,10 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-s', '--shell', "Command shell for training, classifying input") {
 		$opts[:shell] = true
+	}
+
+	opts.on('--retrain', "Retrain the classifier and backup classifier data") {
+		$opts[:retrain] = true
 	}
 
 	opts.on('-a', '--addr LIST', Array, "One or more addresses to use for training") { |list|
@@ -81,7 +86,19 @@ $opts = OParser.parse($opts, "") { |opts|
 	}
 }
 
-unless File.exists?($opts[:data])
+if File.exists?($opts[:data])
+	if $opts[:retrain]
+		now=%x/date +"%Y%m%d-%H%M%S"/.strip
+		src=$opts[:data]
+		ext=""
+		if !src[/^(.*)(\..*$)/].nil?
+			src=$1
+			ext=$2
+		end
+		dst="%s.%s%s" % [ src, now, ext ]
+		puts FileUtils.mv $opts[:data], dst, :verbose=>true
+	end
+else # training data file doesn't exist, make sure we are training
 	$opts[:train] = true
 	$opts[:classify] = false
 end
@@ -130,17 +147,23 @@ end
 $log.debug "Categories: #{wb.wbc.categories}"
 
 if $opts[:shell]
-	CommandShell::CLI.init($opts)
+	fopts={
+		:stream=>$stdout,
+		:headers=>true
+	}
 
 	COMMANDS = %w/train classify history help quit /
-
 	train = Proc.new { |cli|
-		puts "Called proc train: #{cli.class}"
+		$log.debug "Called proc train: #{cli.class}"
 		cli.prompt "train"
 	}
 	classify = Proc.new { |cli|
 		cli.prompt "classify"
 	}
+	history = Proc.new { |cli|
+		cli.history
+	}
+
 	help = Proc.new { |cli|
 		puts cli.commands.join(", ")
 		puts "args = #{cli.args}" unless cli.args.nil? || cli.args.empty?
@@ -149,12 +172,31 @@ if $opts[:shell]
 		cli.action = :quit
 	}
 
-	cli=CommandShell::CLI.new
+	execute = Proc.new { |cli, line|
+		$log.debug "Execute line=#{line}, action=#{cli.action}"
+		case cli.action 
+		when :train
+			wb.categorize_line(line)
+		when :classify
+			wd = wb.classify_line(line)
+			wd.classify_cleanup
+			$log.info "Classified line as #{wd.line_cat}: #{line}"
+			wd.to_format($opts[:format], fopts)
+		else
+			$log.error "Unknown action: #{cli.action}"
+		end
+	}
+
+	CommandShell::CLI.init($opts)
+
+	cli=CommandShell::CLI.new(execute)
+	cli.set_commands(COMMANDS)
+
 	$opts[:classify] ? classify.call(cli) : train.call(cli)
 
-	cli.set_commands(COMMANDS)
 	cli.command_proc("train", train)
 	cli.command_proc("classify", classify)
+	cli.command_proc("history", history)
 	cli.command_proc("help", help)
 	cli.command_proc("quit", quit)
 	cli.shell
