@@ -38,8 +38,9 @@ class OParser
 		elsif File.exists?(help_text)
 			help_text=File.read(help_text)
 		end
+		banner=gopts[:banner]||"#{ME}.rb [options]\n"
 		optparser = OptionParser.new { |opts|
-			opts.banner = "#{ME}.rb [options]\n"
+			opts.banner = banner
 
 			block.call(opts) unless block.nil?
 
