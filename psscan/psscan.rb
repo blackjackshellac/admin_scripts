@@ -6,8 +6,13 @@ require 'time'
 require 'json'
 require 'fileutils'
 
-me=File.symlink?($0) ? File.readlink($0) : $0
-ME=File.basename($0, ".rb")
+me=$0
+if File.symlink?(me)
+	me=File.readlink($0)
+	md=File.dirname($0)
+	me=File.realpath(File.join(md, me))
+end
+ME=File.basename(me, ".rb")
 MD=File.dirname(me)
 LIB=File.realpath(File.join(MD, "..", "lib"))
 
