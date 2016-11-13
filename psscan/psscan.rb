@@ -28,6 +28,8 @@ $log=Logger.set_logger(STDOUT, Logger::INFO)
 
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
+ym=Time.now.strftime('%Y%m')
+LOG_PATH=File.join(TMP, ME+"_#{ym}"+".log")
 
 SUSPEND_FILE=File.join(TMP, "suspend.ts")
 
@@ -36,6 +38,7 @@ $opts={
 	:kill => "TERM",
 	:dryrun => false,
 	:cancel => false,
+	:log => nil,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ..."
 }
@@ -51,8 +54,8 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:kill] = sig
 	}
 	
-	opts.on('-n', '--[no-]dry-run', "Don't actually kill the process") {
-		$opts[:dryrun] = true
+	opts.on('-n', '--[no-]dry-run', "Don't actually kill the process") { |dryrun|
+		$opts[:dryrun] = dryrun
 	}
 
 	opts.on('-s', '--until DATE', String, "Suspend kill until given date") { |date|
@@ -62,7 +65,14 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-c', '--cancel', "Cancel suspend timeout") {
 		$opts[:cancel]=true
 	}
+
+	opts.on('-l', '--[no-]log', "Log to file #{LOG_PATH}") { |log|
+		$opts[:log]=log ? LOG_PATH : nil
+	}
 }
+
+$log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
+$opts[:logger]=$log
 
 def cancel_suspend
 	$log.info "Cancelling suspend timeout: #{File.read(SUSPEND_FILE).strip}"
