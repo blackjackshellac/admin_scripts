@@ -72,6 +72,7 @@ $opts = OParser.parse($opts, HELP) { |opts|
 }
 
 $log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
+$log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
 
 def cancel_suspend
@@ -133,9 +134,14 @@ ARGV.each { |p|
 	end
 
 	cmd="pkill -u #{u} --signal #{k} #{p}"
-	$log.debug "#{ps}: Running #{cmd}#{dr}"
+	$log.info "#{ps}: Running #{cmd}#{dr}"
 	unless n
-		puts %x/#{cmd}/
+		out=%x/#{cmd}/.strip
+		unless out.empty?
+			out.split(/\n/).each { |line|
+				$log.info line
+			}
+		end
 		sl=5
 		sleep sl
 		ps=getps(u, p)
