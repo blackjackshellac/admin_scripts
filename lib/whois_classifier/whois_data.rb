@@ -28,7 +28,8 @@ class WhoisData
 		:country  => %w/country/,
 		:regdate  => %w/regdate created/,
 		:updated  => %w/updated last-modified changed/,
-		:ignore   => %w//
+		:ignore   => %w//,
+		:comment  => %w//
 	}
 	@@cat_keys = @@cat.keys
 	@@ignore = %w/abuse-c abuse-mailbox address phone fax-no org organisation org-name org-type netname status origin remarks admin-c tech-c mnt-ref mnt-by/
@@ -51,8 +52,29 @@ class WhoisData
 		@line_cat = :ignore
 	end
 
+	def self.str2re(re)
+		/#{re}/i
+	rescue => e
+		puts e.backtrace.join("\n")
+		raise "Failed to create regular expression from string #{re}: "+e.to_s
+	end
+
+	def self.make_cat_re
+		if @@cat_keys.empty?
+			@@cat_re=str2re("^$")
+		else
+			re="^\\s*("
+			@@cat_keys.each { |key|
+				re+=Regexp.escape(key)+"|"
+			}
+			re+=")\\s+(.*)$"
+			@@cat_re=str2re(re)
+		end
+	end
+
 	def self.init(opts)
 		@@log = opts[:logger]
+		make_cat_re
 	end
 
 	def self.cat
@@ -67,12 +89,22 @@ class WhoisData
 		@@cat_keys
 	end
 
+	def self.cat_re
+		@@cat_re
+	end
+
+	def self.cat_from_line(line)
+		return nil if line[@@cat_re].nil?
+		return $1,$2
+	end
+
 	def self.is_ignore(cat)
 		return @@ignore.include?(cat)
 	end
 
 	def self.get_category(cat)
 		@@cat.each_pair { |kat, cats|
+			return kat if kat.to_s.eql?(cat)
 			return kat if cats.include?(cat)
 		}
 		nil

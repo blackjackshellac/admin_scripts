@@ -52,11 +52,27 @@ class WhoisBayes
 		@wbc = Marshal.load data
 	end
 
-	def categorize_line(line)
+	def train(cat, line)
+		@@log.debug "Training as :#{cat} [#{line}]"
+		@wbc.train(cat, line)
+	end
+
+	def train_cat_line(cat, line)
+		kat = WhoisData.get_category(cat)
+		if kat.nil?
+			@@unknown[cat] = line
+			@@log.warn "[#{cat}] category not found in input: [#{line}]"
+		else
+			train(kat, line)
+		end
+		kat
+	end
+
+	def train_line(line)
 		unless line[RE_WHOIS_COMMENT].nil?
 			line = $1.strip
 			comment = $2.strip
-			@wbc.train(:ignore, comment)
+			train(:comment, comment)
 			@@log.debug "Stripped comment: #{comment}"
 		end
 		line.strip!
@@ -67,8 +83,7 @@ class WhoisBayes
 
 		# extract category from line
 		if line[RE_CAT].nil?
-			@@log.debug "ignore category not found in input: '#{line}'"
-			@wbc.train(:ignore, line)
+			train(:ignore, line)
 			return
 		end
 		cat=$1.strip.downcase
@@ -77,24 +92,16 @@ class WhoisBayes
 		return if @@unknown.keys.include?(cat)
 
 		if WhoisData.is_ignore(cat)
-			@@log.debug "classify ignore #{cat}: #{line}"
-			@wbc.train(:ignore, line)
-			return	
-		end
-		kat = WhoisData.get_category(cat)
-		if kat.nil?
-			@@unknown[cat] = line
-			@@log.warn "#{cat} category not found in input: #{line}"
+			train(:ignore, line)
 		else
-			@@log.info "classify #{cat} as #{kat}: #{line}"
-			@wbc.train(kat, line)
+			train_cat_line(cat, line)
 		end
 	end
 
 	def categorize(addr)
 		@@log.debug "categorize>>> whois #{addr}"
 		WhoisData.whois(addr).each { |line|
-			categorize_line(line)
+			train_line(line)
 		}
 	end
 

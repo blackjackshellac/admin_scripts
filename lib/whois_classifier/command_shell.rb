@@ -8,57 +8,88 @@ module CommandShell
 	class CLI 
 
 		@@log = nil
+		@@procs = {}
+
+		@@commands = []
+		@@commanda = []
+		@@commandh = {}
 
 		DEF_OPTS={
 			:prompt => "> ",
-			:mode => :vi
+			:mode => :vi,
+			:commands => [],
+			:action => :execute
 		}
 
 		COMPLETION = Proc.new { |s|
-			s.strip!
+			commands = CommandShell::CLI.commands
+			commandh = CommandShell::CLI.commandh
+			s=s.strip
 			if s.empty?
-				puts @commands.join(", ")
-				return s
+				puts commands.join(", ")
+			elsif commandh.key?(s)
+				s=commandh[s]
+			else
+				s=""
 			end
-			@commandh.key?(s) ? @commandh[s] : s
+			s
 		}
 
 		attr_accessor :prompt, :action
-		attr_reader :commands, :commandh, :commanda, :command, :args
+		attr_reader :command, :args
 		def initialize(execute_proc, opts=DEF_OPTS)
-			@prompt = opts[:prompt]||DEF_OPTS[:prompt]
-			@mode = opts[:mode]||DEF_OPTS[:mode]
-			@procs = {
-				:execute => execute_proc
-			}
-			@action = opts[:action]||:execute
+			@prompt = get_opt(opts,:prompt)
+			@mode = get_opt(opts,:mode)
+			@action = get_opt(opts,:action)
+
+			@@procs[:execute] = execute_proc
+			@@procs[:completion] = opts[:completion]||COMPLETION
 
 			@command = ""
 			@args = ""
-			@commands = []
+
+			CommandShell::CLI.set_commands(get_opt(opts, :commands))
 
 			Readline.completion_append_character = " "
-			Readline.completion_proc = proc { |s| COMPLETION.call(s) }
+			Readline.completion_proc = @@procs[:completion] #proc { |s| COMPLETION.call(s) }
 
 			edit_mode(@mode)
+		end
+
+		def get_opt(opts, key)
+			opt=opts[key]||DEF_OPTS[key]
+			raise "No option found for key=:#{key}" if opt.nil?
+			opt
 		end
 
 		def self.init(opts)
 			@@log = opts[:logger]
 		end
 
-		def set_commands(c)
-			@commands = c
-			@commandh = c.abbrev
-			@commanda = commandh.keys
+		def self.set_commands(c)
+			@@commands = c
+			@@commandh = c.abbrev
+			@@commanda = @@commandh.keys
+		end
+
+		def self.commands
+			@@commands
+		end
+
+		def self.commanda
+			@@commanda
+		end
+
+		def self.commandh
+			@@commandh
 		end
 
 		def command_proc(c, cproc)
-			@procs[c] = cproc
+			@@procs[c] = cproc
 		end
 
 		def prompt(l)
-			raise "Action #{l} not found in commands: #{@commands.join(',')}" unless @commands.include?(l)
+			raise "Action #{l} not found in commands: #{@@commands.join(',')}" unless @@commands.include?(l)
 			@action = l.to_sym
 			@prompt = "#{l}> "
 		end
@@ -98,9 +129,9 @@ module CommandShell
 				while line = readline_with_history
 					@cmd,@args = line.split(/\s+/, 2)
 					@args = "" if @args.nil?
-					cproc = @procs[@cmd]
+					cproc = @@procs[@cmd]
 					if cproc.nil?
-						cproc = @procs[:execute]
+						cproc = @@procs[:execute]
 						cproc.call(self, line)
 					else
 						@@log.debug "Calling proc #{@cmd}"

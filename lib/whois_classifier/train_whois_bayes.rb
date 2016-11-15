@@ -176,7 +176,12 @@ if $opts[:shell]
 		$log.debug "Execute line=#{line}, action=#{cli.action}"
 		case cli.action 
 		when :train
-			wb.categorize_line(line)
+			cat,val = WhoisData.cat_from_line(line)
+			if cat.nil?
+				puts "No category specified in input #{line}: [#{WhoisData.cat_keys.join(", ")}]"
+			else
+				kat = wb.train_cat_line(cat, val)
+			end
 		when :classify
 			wd = wb.classify_line(line)
 			wd.classify_cleanup
@@ -187,10 +192,25 @@ if $opts[:shell]
 		end
 	}
 
+	completion = Proc.new { |s|
+		commands = CommandShell::CLI.commands
+		commandh = CommandShell::CLI.commandh
+		s=s.strip
+		if s.empty?
+			puts commands.join(", ")
+		elsif commandh.key?(s)
+			s=commandh[s]
+		else
+			s=nil
+		end
+		s
+	}
+
 	CommandShell::CLI.init($opts)
 
-	cli=CommandShell::CLI.new(execute)
-	cli.set_commands(COMMANDS)
+	cli = CommandShell::CLI.new(execute,
+								:commands=>COMMANDS,
+								:completion=>completion)
 
 	$opts[:classify] ? classify.call(cli) : train.call(cli)
 
