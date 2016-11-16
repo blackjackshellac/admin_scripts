@@ -8,7 +8,7 @@ class WhoisBayes
 	class WhoisRateError < StandardError
 	end
 
-	RE_WHOIS_COMMENT=/(.*)(#%.*)$/
+	RE_WHOIS_COMMENT=/(.*)([#%].*)$/
 	RE_CAT=/([-\w;]*):(.*)/
 	RE_NETWORK=/^\s*network:/
 
@@ -50,6 +50,17 @@ class WhoisBayes
 
 	def load(data)
 		@wbc = Marshal.load data
+		# ensure that wbc contains all WhoisData categories
+		kats=WhoisData.cat_keys
+		kats.each { |kat|
+			next if @wbc.categories.include?(kat)
+			# found new category, add it to the @wbc
+			@wbc.add_category(kat)
+		}
+		@wbc.categories.each { |cat|
+			next if kats.include?(cat.to_sym)
+			@@log.warn "Category #{cat} no longer in WhoisData"
+		}
 	end
 
 	def train(cat, line)
