@@ -198,7 +198,7 @@ if $opts[:shell]
 		when :train
 			wb.categorize(args)
 		when :classify
-			wb.classify_addr(args)
+			wb.classify_addr(args, false)
 		else
 			$log.info "Invalid action for whois: #{cli.action}"
 		end
