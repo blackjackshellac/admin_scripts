@@ -135,7 +135,7 @@ module CommandShell
 						cproc.call(self, line)
 					else
 						@@log.debug "Calling proc #{@cmd}"
-						cproc.call(self)
+						cproc.call(self, @args)
 					end
 					break if @action == :quit
 				end

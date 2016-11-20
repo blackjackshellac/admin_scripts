@@ -152,7 +152,7 @@ if $opts[:shell]
 		:headers=>true
 	}
 
-	COMMANDS = %w/train classify history help quit /
+	COMMANDS = %w/train classify whois history help quit /
 	train = Proc.new { |cli|
 		$log.debug "Called proc train: #{cli.class}"
 		cli.prompt "train"
@@ -192,6 +192,19 @@ if $opts[:shell]
 		end
 	}
 
+	whois_proc = Proc.new { |cli, args|
+		$log.debug "Called whois_proc #{args}"
+		case cli.action
+		when :train
+			wb.categorize(args)
+		when :classify
+			wb.classify_addr(args)
+		else
+			$log.info "Invalid action for whois: #{cli.action}"
+		end
+	}
+
+
 	completion = Proc.new { |s|
 		commands = CommandShell::CLI.commands
 		commandh = CommandShell::CLI.commandh
@@ -216,6 +229,7 @@ if $opts[:shell]
 
 	cli.command_proc("train", train)
 	cli.command_proc("classify", classify)
+	cli.command_proc("whois", whois_proc)
 	cli.command_proc("history", history)
 	cli.command_proc("help", help)
 	cli.command_proc("quit", quit)
