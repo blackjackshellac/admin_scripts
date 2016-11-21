@@ -41,7 +41,8 @@ $opts = {
 		:classify => false,
 		:shell => false,
 		:format => WhoisData::FORMATS.keys[0],
-		:log => nil
+		:log => nil,
+		:whois_cache => File.join(TMP, "whois_cache.json")
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -265,6 +266,8 @@ if $opts[:classify]
 		fopts[:headers]=false
 	}
 end
+
+WhoisData.save_cache
 
 #tests=[
 #	"inetnum:        70.81.251.0 - 70.81.251.255",

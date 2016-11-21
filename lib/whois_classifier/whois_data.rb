@@ -19,6 +19,9 @@ class WhoisData
 		:pretty => "Prettified JSON output"
 	}
 
+	@@whois_addr_cache = {}
+	@@whois_cache_file = nil
+
 	#network:IP-Network:50.116.64.0/18
 	#network:IP-Network-Block:50.116.64.0 - 50.116.127.255
 
@@ -72,9 +75,25 @@ class WhoisData
 		end
 	end
 
+	def self.load_cache
+		return if @@whois_cache_file.nil? || !File.exist?(@@whois_cache_file)
+		return unless @@whois_addr_cache.empty?
+		@@whois_addr_cache = JSON.parse(File.read(@@whois_cache_file))
+	end
+
+	def self.save_cache
+		return if @@whois_cache_file.nil?
+		return if @@whois_addr_cache.empty?
+		File.open(@@whois_cache_file, "w") { |fd|
+			fd.puts JSON.pretty_generate(@@whois_addr_cache)
+		}
+	end
+
 	def self.init(opts)
 		@@log = opts[:logger]
 		make_cat_re
+		@@whois_cache_file = opts[:whois_cache]
+		load_cache
 	end
 
 	def self.cat
@@ -112,8 +131,15 @@ class WhoisData
 
 	def self.whois(addr)
 		#You can use encode for that. text.encode('UTF-8', :invalid => :replace, :undef => :replace)
-		text = %x/whois #{addr}/.chars.select(&:valid_encoding?).join
-		text.split(/\n/)
+		if @@whois_addr_cache[addr].nil?
+			text = %x/whois #{addr}/.chars.select(&:valid_encoding?).join
+			unless $? == 0
+				@@log.error "whois #{addr} failed"
+				return []
+			end
+			@@whois_addr_cache[addr] = text.split(/\n/)
+		end
+		return @@whois_addr_cache[addr]
 	end
 
 	def getNetrange(line)
