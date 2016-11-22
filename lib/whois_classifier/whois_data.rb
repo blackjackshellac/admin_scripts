@@ -142,7 +142,7 @@ class WhoisData
 			end
 			@@whois_addr_cache[addr] = text.split(/\n/)
 		else
-			@@log.debug "whois cache hit: #{addr}"
+			@@log.info "whois cache hit: #{addr}"
 		end
 		return @@whois_addr_cache[addr]
 	end
