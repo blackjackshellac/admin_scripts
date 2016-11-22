@@ -139,6 +139,7 @@ end
 
 WhoisBayes.init($opts)
 WhoisData.init($opts)
+WhoisData.load_cache
 
 if File.exists?($opts[:data])
 	wb = WhoisBayes.loadTraining($opts[:data])
@@ -199,7 +200,12 @@ if $opts[:shell]
 		when :train
 			wb.categorize(args)
 		when :classify
-			wb.classify_addr(args, false)
+			fopts={
+				:stream=>$stdout,
+				:headers=>true
+			}
+			wd = wb.classify_addr(args, false)
+			wd.to_format($opts[:format], fopts)
 		else
 			$log.info "Invalid action for whois: #{cli.action}"
 		end
