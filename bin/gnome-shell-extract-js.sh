@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# updated from here,
+#
+# https://blogs.gnome.org/mclasen/2014/03/24/keeping-gnome-shell-approachable/
+#
 
 gs=/usr/lib64/gnome-shell/libgnome-shell.so
 
