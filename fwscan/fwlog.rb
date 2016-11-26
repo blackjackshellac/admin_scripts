@@ -109,12 +109,13 @@ class FWLog
 		ipv4
 	end
 
-	def self.output_name(name, ts_min, ts_max)
+	def self.output_name(name, ts_min, ts_max, ext="")
+		return name if "-".eql?(name)
 		ts_min = Time.now if ts_min.nil?
 		ts_max = Time.now if ts_max.nil?
 		sts_min = ts_min.strftime(OUTPUT_TIME_FMT)
 		sts_max = ts_max.strftime(OUTPUT_TIME_FMT)
-		("%s_%s_%s" % [ $opts[:name], sts_min, sts_max ]).strip
+		("%s_%s_%s%s" % [ $opts[:name], sts_min, sts_max, ext ]).strip
 	end
 
 	def to_json(*a)

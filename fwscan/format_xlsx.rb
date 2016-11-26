@@ -38,7 +38,7 @@ class FormatXLSX
 	attr_reader :file
 	def initialize(file, label, opts={:force=>false})
 		file.strip!
-		file+=".xlsx" if file[/\.xlsx$/].nil?
+		file+=".xlsx" if file[/\.xlsx$/i].nil?
 		@file=file
 		if File.exists?(@file)
 			raise "File exists #{@file}" if !opts[:force]

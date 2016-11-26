@@ -18,7 +18,8 @@ module CommandShell
 			:prompt => "> ",
 			:mode => :vi,
 			:commands => [],
-			:action => :execute
+			:action => :execute,
+			:help => {}
 		}
 
 		COMPLETION = Proc.new { |s|
@@ -35,18 +36,22 @@ module CommandShell
 			s
 		}
 
-		attr_accessor :prompt, :action
-		attr_reader :command, :args
+		attr_accessor :prompt, :action, :stack
+		attr_reader :command, :args, :commands, :help
 		def initialize(execute_proc, opts=DEF_OPTS)
 			@prompt = get_opt(opts,:prompt)
 			@mode = get_opt(opts,:mode)
 			@action = get_opt(opts,:action)
+			@commands = get_opt(opts, :commands)
+			@help = get_opt(opts, :help)
 
 			@@procs[:execute] = execute_proc
 			@@procs[:completion] = opts[:completion]||COMPLETION
 
 			@command = ""
 			@args = ""
+
+			@stack = []
 
 			CommandShell::CLI.set_commands(get_opt(opts, :commands))
 
@@ -82,6 +87,15 @@ module CommandShell
 
 		def self.commandh
 			@@commandh
+		end
+
+		def get_help(key)
+			key = key.to_sym if key.class == String
+			if @help.key?(key)
+				@help[key][:help]
+			else
+				"unknown help command: #{key}"
+			end
 		end
 
 		def command_proc(c, cproc)

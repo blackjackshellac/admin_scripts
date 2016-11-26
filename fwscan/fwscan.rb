@@ -10,8 +10,12 @@ require 'open3'
 
 me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
-MD=File.dirname(me)
+MD=File.realpath(File.dirname(me))
 LIB=File.realpath(File.join(MD, "..", "lib"))
+
+#puts "ME="+ME
+#puts "MD="+MD
+#puts "LIB="+LIB
 
 HOSTNAME=%x/hostname -s/.strip
 HOSTNAME_S=HOSTNAME.to_sym
@@ -23,7 +27,7 @@ require_relative File.join(MD, "fwlog")
 require_relative File.join(MD, "format_xlsx")
 #require_relative File.join(LIB, "whois_classifier", "whois_bayes")
 
-$log=Logger.set_logger(STDOUT, Logger::INFO)
+$log=Logger.set_logger(STDERR, Logger::INFO)
 
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
@@ -43,13 +47,14 @@ $opts={
 	:force=>false,
 	:resolv=>false,
 	:lookup=>false,
-	:logger=>$log
+	:logger=>$log,
+	:headers=>true
 }
 
 $opts = OParser.parse($opts, "") { |opts|
 	# journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
 
-	opts.on('-f', '--filter FILTER', String, "Kernel log filter string, default #{$opts[:filter]}") { |filter|
+	opts.on('-K', '--filter FILTER', String, "Kernel log filter string, default #{$opts[:filter]}") { |filter|
 		filter.strip!
 		filter = filter.empty? ? nil : /#{filter}/
 		$opts[:filter]=filter
@@ -75,14 +80,14 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:in]=inp
 	}
 
-	opts.on('-O', '--output FORMAT', String, "Output format: #{FORMATS.to_json}") { |type|
+	opts.on('-f', '--format FORMAT', String, "Output format: #{FORMATS.to_json}") { |type|
 		format = type.downcase.to_sym
 		format = nil unless FORMATS.include?(format)
 		$log.die "Unknown output format: #{type}" if format.nil?
 		$opts[:format]=format
 	}
 
-	opts.on('-n', '--name FILE', String, "Output filename") { |name|
+	opts.on('-o', '--output FILE', String, "Output filename, use - for stdout") { |name|
 		$opts[:name]=name
 	}
 
@@ -96,6 +101,10 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-L', '--[no-]lookup', "Lookup service name") { |lookup|
 		$opts[:lookup]=lookup
+	}
+
+	opts.on('--[no-]headers', "Disable headers, default=#{$opts[:headers]}") { |headers|
+		$opts[:headers]=headers
 	}
 }
 $opts[:in]=/IN=#{$opts[:in]}\s/
@@ -120,7 +129,7 @@ elsif !$opts[:since].nil?
 	cmd += %Q/journalctl -k --since "#{$opts[:since]}"/
 	cmd += %Q/ --until "#{$opts[:until]}"/ unless $opts[:until].nil?
 	cmd += %Q/'/ unless ssh.nil?
-	puts cmd
+	$log.info cmd
 	Open3.popen3(cmd) { |sin,sout,serr,thr|
 		pid=thr.pid
 		sout.each { |line|
@@ -152,14 +161,13 @@ input.each { |line|
 	ts_max = ts if ts_max.nil? || ts_max < ts
 }
 
-output_name = FWLog.output_name($opts[:name], ts_min, ts_max)
-
 $log.die "Nothing to output, firewall journal entries is empty" if entries.empty?
 
 case $opts[:format]
 when :xlsx
 	FormatXLSX.init($opts)
 	begin
+		output_name = FWLog.output_name($opts[:name], ts_min, ts_max, ".xlsx")
 		fxlsx = FormatXLSX.new(output_name, $opts[:label], $opts)
 	rescue => e
 		$log.die "Failed to create xlsx object: #{e}"
@@ -175,18 +183,20 @@ when :xlsx
 	}
 	fxlsx.close
 when :csv
-	output_name+=".csv" if output_name[/\.csv$/].nil?
+	output_name = FWLog.output_name($opts[:name], ts_min, ts_max, ".csv")
 	$log.die "File exists: #{output_name}" if File.exists?(output_name) && !$opts[:force]
 	$log.info "Writing #{output_name}"
-	CSV.open(output_name, 'w') { |csv|
-		csv << FWLog.to_a_headers
-		entries.each_pair { |src,fwla|
-			fwla.each { |fwl|
-				# set :n to 0 to print every :src row
-				csv << fwl.to_a(:n=>0)
-			}
+	fd = output_name.eql?("-") ? $stdout : File.open(output_name, "w")
+	csv = CSV.new(fd)
+	csv << FWLog.to_a_headers if $opts[:headers]
+	entries.each_pair { |src,fwla|
+		fwla.each { |fwl|
+			# set :n to 0 to print every :src row
+			csv << fwl.to_a(:n=>0)
 		}
 	}
+	csv.close
+	fd.close
 when :json
 	result = []
 	entries.each_pair { |src, fwla|

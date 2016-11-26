@@ -23,6 +23,7 @@ RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
 
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
+require_relative File.join(LIB, "runner")
 require_relative "whois_bayes.rb"
 require_relative "whois_data.rb"
 require_relative "command_shell"
@@ -154,27 +155,70 @@ if $opts[:shell]
 		:headers=>true
 	}
 
-	COMMANDS = %w/train classify whois history help quit /
-	train = Proc.new { |cli|
+	COMMANDS = %w/train classify whois fetch run history help quit /
+	HELP = {
+		:train => {
+			:args => "",
+			:help => ""
+		},
+		:classify => {
+			:args => "",
+			:help => ""
+		},
+		:whois => {
+			:args => "",
+			:help => ""
+		},
+		:fetch => {
+			:args => "",
+			:help => "fetch addresses using fwscan.rb, can pop for training or classifying"
+		},
+		:run => {
+			:args => "",
+			:help => ""
+		},
+		:history => {
+			:args => "",
+			:help => "Command history"
+		},
+		:help => {
+			:args => "",
+			:help => ""
+		},
+		:quit => {
+			:args => "",
+			:help => ""
+		}
+	}
+
+	train_proc = Proc.new { |cli|
 		$log.debug "Called proc train: #{cli.class}"
 		cli.prompt "train"
 	}
-	classify = Proc.new { |cli|
+
+	classify_proc = Proc.new { |cli|
 		cli.prompt "classify"
 	}
-	history = Proc.new { |cli|
+
+	history_proc = Proc.new { |cli|
 		cli.history
 	}
 
-	help = Proc.new { |cli|
+	help_proc = Proc.new { |cli|
 		puts cli.commands.join(", ")
-		puts "args = #{cli.args}" unless cli.args.nil? || cli.args.empty?
+		args = cli.args
+		args = "" if args.nil? || args.empty?
+		unless args.empty?
+			# TODO implement help output from cli.help[args]
+			puts cli.get_help(args.split(/\s+/)[0])
+		end
 	}
-	quit = Proc.new { |cli|
+
+	quit_proc = Proc.new { |cli|
 		cli.action = :quit
 	}
 
-	execute = Proc.new { |cli, line|
+	execute_proc = Proc.new { |cli, line|
 		$log.debug "Execute line=#{line}, action=#{cli.action}"
 		case cli.action 
 		when :train
@@ -211,6 +255,23 @@ if $opts[:shell]
 		end
 	}
 
+	# run command to stdout
+	run_proc = Proc.new { |cli, args|
+		$log.debug "Called run_proc #{args}"
+		Runner.run3(args)
+	}
+
+	# run command and fetch lines to stdout
+	fetch_proc = Proc.new { |cli, args|
+		$log.debug "Called fetch #{args}"
+		opts={
+			:lines=>[],
+			:echo=>true
+		}
+		err = Runner.run3(%q/fwscan.rb -S valium -k "24 hours ago" -o - -f csv --no-headers | cut -f1 -d','/, opts)
+		cli.stack.concat(opts[:lines]) if err == 0 && opts[:lines].length > 0
+		cli.stack.sort!.uniq!
+	}
 
 	completion = Proc.new { |s|
 		commands = CommandShell::CLI.commands
@@ -228,18 +289,21 @@ if $opts[:shell]
 
 	CommandShell::CLI.init($opts)
 
-	cli = CommandShell::CLI.new(execute,
+	cli = CommandShell::CLI.new(execute_proc,
 								:commands=>COMMANDS,
+								:help=>HELP,
 								:completion=>completion)
 
-	$opts[:classify] ? classify.call(cli) : train.call(cli)
+	$opts[:classify] ? classify_proc.call(cli) : train_proc.call(cli)
 
-	cli.command_proc("train", train)
-	cli.command_proc("classify", classify)
+	cli.command_proc("train", train_proc)
+	cli.command_proc("classify", classify_proc)
 	cli.command_proc("whois", whois_proc)
-	cli.command_proc("history", history)
-	cli.command_proc("help", help)
-	cli.command_proc("quit", quit)
+	cli.command_proc("run", run_proc)
+	cli.command_proc("fetch", fetch_proc)
+	cli.command_proc("history", history_proc)
+	cli.command_proc("help", help_proc)
+	cli.command_proc("quit", quit_proc)
 	cli.shell
 	exit
 end
