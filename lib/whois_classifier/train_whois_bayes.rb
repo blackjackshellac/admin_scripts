@@ -159,23 +159,23 @@ if $opts[:shell]
 	HELP = {
 		:train => {
 			:args => "",
-			:help => ""
+			:help => "Train given input"
 		},
 		:classify => {
 			:args => "",
-			:help => ""
+			:help => "Classify given input"
 		},
 		:whois => {
-			:args => "",
-			:help => ""
+			:args => "<addr>|pop",
+			:help => "Send whois output to train or classify, can pop from address stack filled with fetch"
 		},
 		:fetch => {
-			:args => "",
-			:help => "fetch addresses using fwscan.rb, can pop for training or classifying"
+			:args => "host",
+			:help => "fetch addresses using fwscan.rb, see whois to pop for training or classifying"
 		},
 		:run => {
 			:args => "",
-			:help => ""
+			:help => "Run the given command"
 		},
 		:history => {
 			:args => "",
@@ -183,11 +183,11 @@ if $opts[:shell]
 		},
 		:help => {
 			:args => "",
-			:help => ""
+			:help => "Help for commands [#{COMMANDS.join(',')}]"
 		},
 		:quit => {
 			:args => "",
-			:help => ""
+			:help => "Quit the shell and exit"
 		}
 	}
 
@@ -268,15 +268,21 @@ if $opts[:shell]
 			:lines=>[],
 			:echo=>true
 		}
-		err = Runner.run3(%q/fwscan.rb -S valium -k "24 hours ago" -o - -f csv --no-headers | cut -f1 -d','/, opts)
-		cli.stack.concat(opts[:lines]) if err == 0 && opts[:lines].length > 0
-		cli.stack.sort!.uniq!
+		a=args.split(/\s+/, 2)
+		if a.length < 1
+			$log.error "Argument is host to scan"
+		else
+			err = Runner.run3(%Q/fwscan.rb -S #{a[0]} -k "24 hours ago" -o - -f csv --no-headers | cut -f1 -d','/, opts)
+			cli.stack.concat(opts[:lines]) if err == 0 && opts[:lines].length > 0
+			cli.stack.sort!.uniq!
+		end
 	}
 
-	completion = Proc.new { |s|
+	completion_proc = Proc.new { |s|
 		commands = CommandShell::CLI.commands
 		commandh = CommandShell::CLI.commandh
 		s=s.strip
+		$stderr.puts "[#{s}]"
 		if s.empty?
 			puts commands.join(", ")
 		elsif commandh.key?(s)
@@ -292,7 +298,9 @@ if $opts[:shell]
 	cli = CommandShell::CLI.new(execute_proc,
 								:commands=>COMMANDS,
 								:help=>HELP,
-								:completion=>completion)
+								:completion=>completion_proc,
+							    :append_char=>" ",
+							    :word_break_char=>"")
 
 	$opts[:classify] ? classify_proc.call(cli) : train_proc.call(cli)
 

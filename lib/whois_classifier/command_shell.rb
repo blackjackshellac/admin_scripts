@@ -19,6 +19,8 @@ module CommandShell
 			:mode => :vi,
 			:commands => [],
 			:action => :execute,
+			:append_char => " ",
+			:word_break_char => " ",
 			:help => {}
 		}
 
@@ -55,7 +57,9 @@ module CommandShell
 
 			CommandShell::CLI.set_commands(get_opt(opts, :commands))
 
-			Readline.completion_append_character = " "
+			Readline.completion_append_character = get_opt(opts, :append_char)
+			# use completer_word_break_characters="" to send who input each time
+			Readline.completer_word_break_characters = get_opt(opts, :word_break_char)
 			Readline.completion_proc = @@procs[:completion] #proc { |s| COMPLETION.call(s) }
 
 			edit_mode(@mode)
