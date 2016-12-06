@@ -27,7 +27,6 @@ FileUtils.mkdir_p(TMP)
 $opts={
 	:mondirs=>[],
 	:dryrun=>false,
-	:populate=>false,
 	:update=>false,
 	:changed=>false,
 	:logger=>$log
@@ -42,29 +41,20 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:dryrun]=true
 	}
 
-	opts.on('-p', '--populate', "Repopulate data for given dirs") {
-		$opts[:populate]=true
-	}
-
 	opts.on('-u', '--update', "Update the data") {
 		$opts[:update]=true
 	}
 }
 
-KEYS=[:ftype, :mtime, :size, :uid, :gid]
+KEYS=%w/ftype mtime size uid gid/
 def stat_path(path)
 	lstat=File.lstat(path)
 	pstat={}
 	KEYS.each { |key|
-		pstat[key]=lstat.send(key.to_s)
+		pstat[key]=lstat.send(key)
 		next if pstat[key].class == String || pstat[key].class == Fixnum
 		pstat[key] = pstat[key].to_s
 	}
-	#pstat[:ftype]=lstat.ftype
-	#pstat[:mtime]=lstat.mtime
-	#pstat[:size]=lstat.size
-	#pstat[:uid]=lstat.uid
-	#pstat[:gid]=lstat.gid
 	pstat
 end
 
@@ -72,46 +62,46 @@ def comp_stat(path, dstat, opts)
 	pstat=stat_path(path)
 	KEYS.each { |key|
 		v=pstat[key]
-		key=key.to_s
-		unless dstat.key?(key)
-			opts[:changed]=true
-			$log.warn "Path data missing for #{key}: #{path}"
-			if opts[:update]
-				dstat[key]=v
-			end
-			continue
-		end
 		u = dstat[key]
-		unless v.eql?(u)
-			opts[:changed]=true
-			$log.warn "#{key} changed [#{u}] != [#{v}] for: #{path}"
-			if opts[:update]
-				dstat[key]=v
-			end
+		if u.nil?
+			$log.warn "Path data missing for #{key}: #{path}"
+		elsif !u.eql?(v)
+			$log.warn "#{key} changed [#{u}] != [#{v}] for: #{path}" unless v.eql?(u)
+		else
+			next
 		end
+		dstat[key]=v if opts[:update]
+		opts[:changed]=true
 	}
 end
 
 def find_data(dir, data, opts)
-	populate=opts[:populate] ? true : data.empty?
+	update=opts[:update] ? true : data.empty?
 	Find.find(dir) { |path|
+		bn=File.basename(path)
 		if data.key?(path)
 			comp_stat(path, data[path], opts)
 		else
-			if populate
-				$log.debug "Populating #{path}"
+			stat=stat_path(path)
+			if update
+				$log.warn "Updating #{path}"
 			else
-				$log.warn "Populating: #{path}"
+				$log.warn "Update to add #{stat["ftype"]} #{path}"
 			end
-			data[path]=stat_path(path)
+			data[path]=stat if opts[:update]
+			opts[:changed]=true
 		end
 	}
 
 	data.keys.each { |path|
 		next if File.exist?(path)
-		$log.error "File missing: "+path
+		if opts[:update]
+			$log.info "Adding missing path #{path}"
+			data.delete(path)
+		else
+			$log.error "#{data[path]["ftype"].capitalize} deleted "+path unless opts[:update]
+		end
 		opts[:changed]=true
-		data.delete(path) if opts[:update]
 	}
 
 	$log.debug "ohash=#{$opts.object_id}"
@@ -130,6 +120,7 @@ rescue => e
 end
 
 def write_monitor_data(jsonf, data, opts)
+	return unless opts[:update]
 	$log.info "Writing data to #{jsonf}"
 	return if opts[:dryrun]
 	File.open(jsonf, "w+") { |fd|
@@ -159,7 +150,9 @@ dirs.each { |dir|
 
 $log.debug "options="+$opts.inspect
 if $opts[:changed]
-	$log.warn "Run #{ME} --update"
-	exit 1
+	unless $opts[:update]
+		$log.warn "Run #{ME} --update"
+		exit 1
+	end
 end
 
