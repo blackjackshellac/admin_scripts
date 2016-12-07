@@ -43,7 +43,8 @@ $opts = {
 		:shell => false,
 		:format => WhoisData::FORMATS.keys[0],
 		:log => nil,
-		:whois_cache => File.join(TMP, "whois_cache.json")
+		:whois_cache => File.join(TMP, "whois_cache.json"),
+		:prompt => false
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -149,13 +150,19 @@ else
 end
 $log.debug "Categories: #{wb.wbc.categories}"
 
+class String
+	def to_bool
+		(self =~ /^(true|1)$/i) == 0
+	end
+end
+
 if $opts[:shell]
 	fopts={
 		:stream=>$stdout,
 		:headers=>true
 	}
 
-	COMMANDS = %w/train classify whois fetch run history help quit /
+	COMMANDS = %w/train classify whois dump fetch set run history help quit /
 	HELP = {
 		:train => {
 			:args => "",
@@ -167,11 +174,19 @@ if $opts[:shell]
 		},
 		:whois => {
 			:args => "<addr>|pop",
-			:help => "Send whois output to train or classify, can pop from address stack filled with fetch"
+			:help => "Send whois output to train or classify, will pop from address stack filled with fetch"
+		},
+		:dump => {
+			:args => "",
+			:help => "Dump the current stack in reverse order (first is shown last)"
 		},
 		:fetch => {
 			:args => "host",
 			:help => "fetch addresses using fwscan.rb, see whois to pop for training or classifying"
+		},
+		:set => {
+			:args => "[debug|prompt] <true/false>",
+			:help => "Set debug or prompt"
 		},
 		:run => {
 			:args => "",
@@ -192,7 +207,7 @@ if $opts[:shell]
 	}
 
 	train_proc = Proc.new { |cli|
-		$log.debug "Called proc train: #{cli.class}"
+		$log.debug "Called proc train: #{cli}"
 		cli.prompt "train"
 	}
 
@@ -239,19 +254,31 @@ if $opts[:shell]
 	}
 
 	whois_proc = Proc.new { |cli, args|
-		$log.debug "Called whois_proc #{args}"
-		case cli.action
-		when :train
-			wb.categorize(args)
-		when :classify
-			fopts={
-				:stream=>$stdout,
-				:headers=>true
-			}
-			wd = wb.classify_addr(args, false)
-			wd.to_format($opts[:format], fopts)
+		case args
+		when /(^$|pop)/
+			args = cli.pop
+		when /last/
+			args = cli.last
+		when RE_IPV4
 		else
-			$log.info "Invalid action for whois: #{cli.action}"
+			$log.warn "Invalid argument: #{args}"
+			args=""
+		end
+		$log.debug "Called whois_proc [#{args}]"
+		unless args.empty?
+			case cli.action
+			when :train
+				wb.categorize(args)
+			when :classify
+				fopts={
+					:stream=>$stdout,
+					:headers=>true
+				}
+				wd = wb.classify_addr(args, false)
+				wd.to_format($opts[:format], fopts)
+			else
+				$log.info "Invalid action for whois: #{cli.action}"
+			end
 		end
 	}
 
@@ -266,7 +293,8 @@ if $opts[:shell]
 		$log.debug "Called fetch #{args}"
 		opts={
 			:lines=>[],
-			:echo=>true
+			:echo=>true,
+			:strip=>true
 		}
 		a=args.split(/\s+/, 2)
 		if a.length < 1
@@ -276,6 +304,31 @@ if $opts[:shell]
 			cli.stack.concat(opts[:lines]) if err == 0 && opts[:lines].length > 0
 			cli.stack.sort!.uniq!
 		end
+	}
+
+	set_proc = Proc.new { |cli, args|
+		$log.debug "Called set #{args}"
+		command,value = args.split(/\s+/, 2)
+		unless value.nil?
+			case command.to_sym
+			when :debug
+				$log.level = value.to_bool ? Logger::DEBUG : Logger::INFO
+				$log.info "Log level set to #{$log.level}"
+			when :prompt
+				$opts[:prompt]= value.to_bool
+				$log.info "Prompt=#{$opts[:prompt]}"
+				wb.prompt($opts[:prompt])
+			else
+				$log.error "Unknown command argument #{command}"
+			end
+		end
+	}
+
+	dump_proc = Proc.new { |cli, args|
+		$log.debug "Called dump #{args}"
+		cli.stack.reverse.each { |addr|
+			puts addr
+		}
 	}
 
 	completion_proc = Proc.new { |s|
@@ -309,6 +362,8 @@ if $opts[:shell]
 	cli.command_proc("whois", whois_proc)
 	cli.command_proc("run", run_proc)
 	cli.command_proc("fetch", fetch_proc)
+	cli.command_proc("dump", dump_proc)
+	cli.command_proc("set", set_proc)
 	cli.command_proc("history", history_proc)
 	cli.command_proc("help", help_proc)
 	cli.command_proc("quit", quit_proc)

@@ -7,6 +7,7 @@ module Runner
 	DEF_OPTS={
 		:dryrun=>false,
 		:trim => false,
+		:strip => false,
 		:fail => true,
 		:echo => true,
 		:errmsg => "Command failed to run",
@@ -27,6 +28,7 @@ module Runner
 		@@log.debug "#{Dir.pwd}/ $ #{cmd}"
 		unless gov(opts, :dryrun)
 			lines = gov(opts, :lines)
+			strip = gov(opts, :strip)
 			Open3.popen3(cmd) do |stdin, stdout, stderr, wait_thr|
 				# or, if you have to do something with the output
 				pid = wait_thr.pid
@@ -39,11 +41,12 @@ module Runner
 					return exit_status
 				end
 				stdout.each { |line|
+					line.strip! if strip
 					if gov(opts, :echo)
 						$stdout.puts line
 						$stdout.flush
 					end
-					lines.push(line) unless lines.nil?
+					lines.push(line)unless lines.nil?
 				}
 			end
 		end

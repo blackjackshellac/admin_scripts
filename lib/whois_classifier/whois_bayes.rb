@@ -18,10 +18,15 @@ class WhoisBayes
 	# :cidr => WhoisData
 	@@cache = {}
 
-	attr_reader :wbc
+	attr_reader :wbc, :prompt
 	def initialize
 		@wbc = ClassifierReborn::Bayes.new(WhoisData.cat_keys)
 		@sleep = 1
+		@prompt = false
+	end
+
+	def prompt(val=true)
+		@prompt = val
 	end
 
 	def self.init(opts)

@@ -54,6 +54,7 @@ module CommandShell
 			@args = ""
 
 			@stack = []
+			@last = ""
 
 			CommandShell::CLI.set_commands(get_opt(opts, :commands))
 
@@ -69,6 +70,17 @@ module CommandShell
 			opt=opts[key]||DEF_OPTS[key]
 			raise "No option found for key=:#{key}" if opt.nil?
 			opt
+		end
+
+		# save the last value off the stack and return it
+		def pop
+			@last = @stack.pop||""
+			@last
+		end
+
+		# return the last value popped off the stack again
+		def last
+			@last
 		end
 
 		def self.init(opts)
@@ -96,7 +108,7 @@ module CommandShell
 		def get_help(key)
 			key = key.to_sym if key.class == String
 			if @help.key?(key)
-				@help[key][:help]
+				"\n%s %s\n\t%s" % [key, @help[key][:args], @help[key][:help]]
 			else
 				"unknown help command: #{key}"
 			end
@@ -152,7 +164,7 @@ module CommandShell
 						cproc = @@procs[:execute]
 						cproc.call(self, line)
 					else
-						@@log.debug "Calling proc #{@cmd}"
+						@@log.debug "Calling proc #{@cmd} [#{@args}]"
 						cproc.call(self, @args)
 					end
 					break if @action == :quit
