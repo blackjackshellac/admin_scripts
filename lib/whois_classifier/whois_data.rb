@@ -42,7 +42,7 @@ class WhoisData
 	@@ignore.concat(%w/organization;i tech-contact;i admin-contact;i id;i network-name;i parent;i org-contact;i abuse-contact;i noc-contact;i in-addr-server;i/)
 
 	attr_reader :wb, :netrange, :cidr, :country, :regdate, :updated, :ignore, :line_cat
-	def initialize(wb)
+	def initialize(wb, opts)
 		@wb = wb
 
 		@netrange = nil
@@ -52,6 +52,7 @@ class WhoisData
 		@updated = nil
 		@ignore = nil
 
+		@opts = opts
 		@line_cat = :ignore
 	end
 
@@ -217,12 +218,16 @@ class WhoisData
 		cat = @wb.classify(line)
 		cat = cat.to_sym
 
+		#TODO - check @opts[:prompt] to validate selected cat
+		cat = CommandShell::Query.ask(line, "Enter category [#{cat}]: ", cat, @@cat_keys) if @opts[:prompt]
+
 		@line_cat = cat
 
+		#TODO - check @opts[:prompt] to validate selected cat
 		@@log.debug "Classified cat = #{cat}/#{cat.class}: #{line}"
 		return if :ignore.eql?(cat)
 
-		@@log.debug "Look for #{cat} in #{@@cat_keys.inspect}"
+		#@@log.debug "Look for #{cat} in #{@@cat_keys.inspect}"
 		if @@cat_keys.include?(cat)
 			cats = @@cat[cat]
 			cats.each { |kat|
@@ -344,4 +349,3 @@ CIDR: #{h[:cidr].join(", ")}
 		[ h[:netrange], h[:country], h[:regdate], h[:updated], h[:cidr].join(" ") ].to_csv
 	end
 end
-

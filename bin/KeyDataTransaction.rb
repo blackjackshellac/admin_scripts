@@ -107,15 +107,16 @@ class KeyDataTransaction
 		puts "#{key}: #{data}"
 	end
 
-	def playback
+	def playback(printkey=false)
 		return if empty?
 
-		puts "\n+++++"
+		puts "\n"
 		@order.each { |key|
 			out=filter_data(key)
-			puts "#{key}: #{out}"
+			out.prepend("#{key}: ") if printkey
+			puts out
 		}
-		puts "+++++\n"
+		puts "\n"
 	end
 end
 

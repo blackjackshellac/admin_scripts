@@ -5,7 +5,66 @@ require 'readline'
 require 'abbrev'
 
 module CommandShell
-	class CLI 
+	class Query
+		@@vals = nil
+		@@cproc = Proc.new { |s|
+			STDERR.puts "s=#{s}"
+			if s.empty?
+				puts "\n[#{@@vals.join(", ")}]"
+				s=nil
+			else
+				t=s
+				s=nil
+				@@vals.each { |val|
+					if val.to_s.start_with?(t)
+						s=t
+						break
+					end
+				}
+			end
+			s
+		}
+
+		def self.ask(result, question, key, vals)
+			begin
+				cac = Readline.completion_append_character
+				# use completer_word_break_characters="" to send who input each time
+				cwbc = Readline.completer_word_break_characters
+				cproc = Readline.completion_proc
+
+				Readline.completion_append_character = " "
+				Readline.completer_word_break_characters = ""
+				Readline.completion_proc = @@cproc
+
+				@@vals = vals
+
+				while true
+					puts "*****\n>>> "+result
+					res=Readline.readline(question).strip
+					res= res.empty? ? key : res.to_sym
+					return res if vals.include?(res)
+					puts "select one of #{vals.inspect}"
+				end
+
+			rescue Interrupt => e
+				puts "Interrupted"
+				return key
+			rescue => e
+				e.backtrace.each { |line|
+					puts line
+				}
+				puts "Exception error: #{e.to_s}"
+				return key
+			ensure
+				Readline.completion_append_character = cac
+				# use completer_word_break_characters="" to send who input each time
+				Readline.completer_word_break_characters = cwbc
+				Readline.completion_proc = cproc
+			end
+		end
+	end
+
+	class CLI
 
 		@@log = nil
 		@@procs = {}
@@ -139,7 +198,7 @@ module CommandShell
 		def readline_with_history
 			line = Readline.readline(@prompt, true)
 			return nil if line.nil?
-			
+
 			Readline::HISTORY.pop if line =~ /^\s*$/ || Readline::HISTORY.to_a[-2] == line
 
 			line.strip
@@ -151,7 +210,7 @@ module CommandShell
 			}
 		end
 
-		def shell 
+		def shell
 			# Store the state of the terminal
 			stty_save = %x/stty -g/.chomp
 
@@ -176,4 +235,3 @@ module CommandShell
 
 	end #CLI
 end #CommandShell
-

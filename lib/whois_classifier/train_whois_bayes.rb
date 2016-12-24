@@ -165,8 +165,8 @@ if $opts[:shell]
 	COMMANDS = %w/train classify whois dump fetch set run history help quit /
 	HELP = {
 		:train => {
-			:args => "",
-			:help => "Train given input"
+			:args => "[pop|last|all]",
+			:help => "Train given input, can specify pop to train off stack, retrain last, or all to train all addresses in stack"
 		},
 		:classify => {
 			:args => "",
@@ -206,9 +206,29 @@ if $opts[:shell]
 		}
 	}
 
-	train_proc = Proc.new { |cli|
-		$log.debug "Called proc train: #{cli}"
+	train_proc = Proc.new { |cli, args|
+		$log.debug "Called proc train: #{cli} [#{args}]"
 		cli.prompt "train"
+		addrs = []
+		case args
+		when /pop/
+			addrs << cli.pop
+		when /last/
+			addrs << cli.last
+		when /all/
+			addrs.concat(cli.stack)
+		when RE_IPV4
+			addrs << args
+		when /^$/	# do nothing
+		when nil	# do nothing
+		else
+			$log.warn "Invalid argument: #{args}"
+		end
+
+		addrs.each { |addr|
+			wb.train_addr(addr)
+		}
+
 	}
 
 	classify_proc = Proc.new { |cli|
@@ -235,7 +255,7 @@ if $opts[:shell]
 
 	execute_proc = Proc.new { |cli, line|
 		$log.debug "Execute line=#{line}, action=#{cli.action}"
-		case cli.action 
+		case cli.action
 		when :train
 			cat,val = WhoisData.cat_from_line(line)
 			if cat.nil?
@@ -253,6 +273,7 @@ if $opts[:shell]
 		end
 	}
 
+	# TODO this should only run whois, not train
 	whois_proc = Proc.new { |cli, args|
 		case args
 		when /(^$|pop)/
@@ -268,7 +289,7 @@ if $opts[:shell]
 		unless args.empty?
 			case cli.action
 			when :train
-				wb.categorize(args)
+				wb.train_addr(args)
 			when :classify
 				fopts={
 					:stream=>$stdout,
@@ -313,15 +334,22 @@ if $opts[:shell]
 			case command.to_sym
 			when :debug
 				$log.level = value.to_bool ? Logger::DEBUG : Logger::INFO
-				$log.info "Log level set to #{$log.level}"
 			when :prompt
 				$opts[:prompt]= value.to_bool
-				$log.info "Prompt=#{$opts[:prompt]}"
 				wb.prompt($opts[:prompt])
 			else
-				$log.error "Unknown command argument #{command}"
+				#$log.error "Unknown command argument #{command}"
 			end
 		end
+		case command.to_sym
+		when :debug
+			$log.info "Log level set to #{$log.level}"
+		when :prompt
+			$log.info "Prompt=#{$opts[:prompt]}"
+		else
+			$log.error "Unknown command argument: [#{command}]"
+		end
+
 	}
 
 	dump_proc = Proc.new { |cli, args|
@@ -335,7 +363,7 @@ if $opts[:shell]
 		commands = CommandShell::CLI.commands
 		commandh = CommandShell::CLI.commandh
 		s=s.strip
-		$stderr.puts "[#{s}]"
+		#$stderr.puts "[#{s}]"
 		if s.empty?
 			puts commands.join(", ")
 		elsif commandh.key?(s)
@@ -373,7 +401,7 @@ end
 
 if $opts[:train]
 	$opts[:addresses].each { |addr|
-		wb.categorize(addr)
+		wb.train_addr(addr)
 	}
 	wb.saveTraining($opts[:data])
 

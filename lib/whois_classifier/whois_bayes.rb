@@ -8,9 +8,13 @@ class WhoisBayes
 	class WhoisRateError < StandardError
 	end
 
+	DEF_OPTS = {
+		:prompt => false
+	}
 	RE_WHOIS_COMMENT=/(.*)([#%].*)$/
 	RE_CAT=/([-\w;]*):(.*)/
 	RE_NETWORK=/^\s*network:/
+	RE_IPV4=/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/
 
 	@@log = nil
 	@@unknown = nil
@@ -18,15 +22,20 @@ class WhoisBayes
 	# :cidr => WhoisData
 	@@cache = {}
 
-	attr_reader :wbc, :prompt
-	def initialize
+	attr_reader :wbc, :opts
+	def initialize(opts=DEF_OPTS)
 		@wbc = ClassifierReborn::Bayes.new(WhoisData.cat_keys)
 		@sleep = 1
-		@prompt = false
+		@opts = DEF_OPTS.clone
+	end
+
+	def gov(opts, key)
+		val=opts[key]||DEF_OPTS[key]
+		@opts[key]=val
 	end
 
 	def prompt(val=true)
-		@prompt = val
+		@opts[:prompt]=val
 	end
 
 	def self.init(opts)
@@ -37,7 +46,7 @@ class WhoisBayes
 
 	def self.loadTraining(file)
 		wb = WhoisBayes.new
-		wb.load(File.read(file)) 
+		wb.load(File.read(file))
 		wb
 	end
 
@@ -114,11 +123,16 @@ class WhoisBayes
 		end
 	end
 
-	def categorize(addr)
+	def train_addr(addr)
+		addr.strip!
 		@@log.debug "categorize>>> whois #{addr}"
-		WhoisData.whois(addr).each { |line|
-			train_line(line)
-		}
+		if addr[RE_IPV4].nil?
+			@@log.error "addr is not a valid IPV4 address [#{addr}]"
+		else
+			WhoisData.whois(addr).each { |line|
+				train_line(line)
+			}
+		end
 	end
 
 	def cache_put(wd)
@@ -146,7 +160,7 @@ class WhoisBayes
 		wd = cache ? cache_lookup(addr) : nil
 		return wd unless wd.nil?
 
-		wd = WhoisData.new(@wbc)
+		wd = WhoisData.new(@wbc, @opts)
 		begin
 			sleep @sleep if @sleep > 0
 			wd.classify_addr(addr)
@@ -163,13 +177,13 @@ class WhoisBayes
 	end
 
 	def classify_line(line)
-		wd = WhoisData.new(@wbc)
+		wd = WhoisData.new(@wbc, @opts)
 		wd.classify_line(line)
 		return wd
 	end
 
 	def classify_file(file)
-		wd = WhoisData.new(@wbc)
+		wd = WhoisData.new(@wbc, @opts)
 		File.read(file).each_line { |line|
 			wd.classify_line(line)
 		}
@@ -179,8 +193,7 @@ class WhoisBayes
 	def classify(line)
 		line=line.strip
 		# %error 320 Exceeded query rate limit, wait 5s before trying again
-		raise WhoisRateError, "Exceeded error rate: #{line}" unless line[/^%error.*?Exceeded query rate/].nil?
+		raise WhoisRateError, "Exceeded error rate: #{line}" unless line[/^(Exceeded query rate limit)/].nil?
 		@wbc.classify(line)
 	end
 end
-
