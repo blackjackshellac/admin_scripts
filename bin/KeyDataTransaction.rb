@@ -19,19 +19,31 @@ class KeyDataTransaction
 	end
 
 	def self.process
+		transa=[]
 		trans=KeyDataTransaction.new
 		begin
 			@@log.info "Enter transaction data, type . to filter, Ctrl-C to quit"
 			%x/stty -echo/
 			ARGF.each { |line|
+				line.strip!
+				next if line.empty?
 				break unless line[/^\s*\.\s*/].nil?
+				@@log.debug "Process: [#{line}]"
 				key=trans.process_line(line)
+				if key.nil?
+					trans.playback
+					transa << trans
+					trans=KeyDataTransaction.new
+					key=trans.process_line(line)
+					raise "Unexpected nil key in new transaction: [#{line}]" if key.nil?
+				end
 				trans.echo(key)
 			}
 			trans.playback
+			transa << trans
 		rescue Interrupt => e
 			@@log.info "Caught interrupt, exiting"
-			trans=nil
+			return nil
 		rescue => e
 			e.backtrace.each { |line|
 				puts line
@@ -40,7 +52,7 @@ class KeyDataTransaction
 		ensure
 			%x/stty echo/
 		end
-		trans
+		transa
 	end
 
 	def empty?
@@ -56,7 +68,8 @@ class KeyDataTransaction
 			data=m[:data]
 			@@log.warn "Unknown data key>> [#{key}]" if key[KNOWN_KEYS_RE].nil?
 			if @order.include?(key)
-				@@log.warn "Key already recorded #{key}, two transactions?"
+				@@log.warn "Key already recorded #{key}, create new transaction"
+				return nil
 			else
 				@order << key unless @order.include?(key)
 			end

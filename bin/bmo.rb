@@ -55,7 +55,7 @@ transactions=[]
 while
 	tra = KeyDataTransaction.process
 	break if tra.nil?
-	transactions << tra unless tra.empty?
+	transactions.concat(tra) unless tra.empty?
 end
 
 puts "\nSummarizing ..."
