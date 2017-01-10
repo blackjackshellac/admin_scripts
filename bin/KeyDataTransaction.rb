@@ -3,6 +3,7 @@ class KeyDataTransaction
 	FROM_TO_RE=/^(From|To)$/i
 	ACCOUNTS_RE=/^(Chequing|Savings|Other\s+\d+\s+\w+)\s+(.*)/i
 	KEY_COLON_DATA_RE=/^(?<key>.*?):(?<data>.*)$/
+	IGNORE_RE=/(?<ignore>(Cancel this Payment))/i
 	KNOWN_KEYS_RE=/^(From|To|Amount|Date|Reference#)$/i
 
 	@@log=Logger.new(STDERR)
@@ -25,6 +26,10 @@ class KeyDataTransaction
 			@@log.info "Enter transaction data, type . to filter, Ctrl-C to quit"
 			%x/stty -echo/
 			ARGF.each { |line|
+				IGNORE_RE.match(line) { |m|
+					@@log.debug "Ignoring input: #{m[:ignore]}"
+				}
+				line.gsub!(IGNORE_RE, " ").nil?
 				line.strip!
 				next if line.empty?
 				break unless line[/^\s*\.\s*/].nil?
