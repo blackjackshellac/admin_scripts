@@ -65,17 +65,23 @@ $opts = OParser.parse($opts, HELP) { |opts|
 			$opts[:json]=json
 		end
 	}
+
+	opts.on('-l', '--log FILE', String, "Log file name, default to logging to console") { |log|
+		$opts[:log]=log
+	}
 }
+
+$log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
 $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
 
 $outlets=JSON.parse(File.read($opts[:json]), :symbolize_names=>true)
-puts JSON.pretty_generate($outlets) if $opts[:debug]
+$log.debug JSON.pretty_generate($outlets)
 
 def outlet(outlet, state)
 	on=$outlets[outlet.to_sym]
 	$log.info "Set outlet \"#{on[:name]}\": #{state}"
-	puts %x[#{CODESEND} #{on[state.to_sym]}]
+	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
 end
 
 o=$opts[:outlet]
