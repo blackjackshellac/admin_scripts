@@ -67,15 +67,21 @@ $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
 
 $outlets=JSON.parse(File.read($opts[:json]), :symbolize_names=>true)
-puts JSON.pretty_generate($outlets)
+puts JSON.pretty_generate($outlets) if $opts[:debug]
 
 def outlet(outlet, state)
-	$log.info "Set outlet \"#{$outlets[outlet.to_sym][:name]}\": #{state}"
-	puts %x[#{CODESEND} #{$outlets[outlet.to_sym][state.to_sym]}]
+	on=$outlets[outlet.to_sym]
+	$log.info "Set outlet \"#{on[:name]}\": #{state}"
+	puts %x[#{CODESEND} #{on[state.to_sym]}]
 end
 
 o=$opts[:outlet]
 s=$opts[:state]
 
+if $opts[:delay] > 0
+	delay=Random.rand(0...$opts[:delay])
+	$log.debug "Sleeping #{delay} seconds before firing"
+	sleep delay
+end
 outlet(o, s)
 
