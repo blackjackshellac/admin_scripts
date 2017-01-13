@@ -60,7 +60,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	}
 
 	opts.on('-j', '--json FILE', String, "JSON data file, default #{$opts[:json]}") { |json|
-		$opts[:json]=json if File.exists?(json)
+		if File.exists?(json)
+			$log.info "JSON data file=#{json}"
+			$opts[:json]=json
+		end
 	}
 }
 $log.level = Logger::DEBUG if $opts[:debug]
@@ -80,7 +83,7 @@ s=$opts[:state]
 
 if $opts[:delay] > 0
 	delay=Random.rand(0...$opts[:delay])
-	$log.debug "Sleeping #{delay} seconds before firing"
+	$log.info "Sleeping #{delay} seconds before firing"
 	sleep delay
 end
 outlet(o, s)
