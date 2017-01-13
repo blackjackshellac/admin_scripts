@@ -1,0 +1,36 @@
+
+1. Download and Build WiringPi
+
+$ git clone git://git.drogon.net/wiringPi
+$ cd wiringPi
+$ ./build
+$ gpio -v
+$ gpio readall
+
+2. Install Apache & PHP
+
+$ sudo apt-get install apache2 php5 libapache2-mod-php5 -y
+
+3. Connect Transmitter and reciever to Raspberry Pi
+
+Transmitter Module
+
+    DATA (left pin) -> GPIO #17  - Pin #11 (orange)
+    VCC (center pin) -> +5VDC    - Pin #2  (red)
+    GND (right pin) -> Ground    - Pin #9  (brown)
+
+Receiver Module
+
+    VCC (left pin) -> +5VDC      - Pin #4 (yellow)
+    DATA (2nd pin from left) -> GPIO 21/27 - Pin #13 (blue)
+    GND (far right pin) -> Ground - Pin #39 (black)
+
+4. Install RFSniffer to Find Outlet Control Codes
+
+$ git clone git://github.com/timleland/rfoutlet.git /var/www/rfoutlet
+$ sudo chown root.root /var/www/html/rfoutlet/codesend
+$ sudo chmod 4755 /var/www/html/rfoutlet/codesend
+$ sudo /var/www/html/rfoutlet/RFSniffer
+
+5. The ruby rfoutput.rb script uses codesend and RFSniffer
+
