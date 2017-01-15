@@ -3,6 +3,7 @@
 
 require 'json'
 require 'fileutils'
+require 'daemons'
 
 me=$0
 if File.symlink?(me)
@@ -27,7 +28,7 @@ $log=Logger.set_logger(STDOUT, Logger::INFO)
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
 YM=Time.now.strftime('%Y%m')
-LOG_PATH=File.join(TMP, ME+"_#{YM}"+".log")
+LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 
 CODESEND="/var/www/html/rfoutlet/codesend"
 
@@ -36,6 +37,7 @@ $opts={
 	:state=>"off",
 	:delay=>0,
 	:log => nil,
+	:daemonize => false,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
 	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json")
@@ -56,12 +58,12 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	}
 
 	opts.on('-d', '--delay TIMEOUT', Integer, "Random delay in seconds") { |delay|
-		$opts[:delay]=delay
+		$opts[:delay]=Random.rand(0...delay)
 	}
 
 	opts.on('-j', '--json FILE', String, "JSON data file, default #{$opts[:json]}") { |json|
 		if File.exists?(json)
-			$log.info "JSON data file=#{json}"
+			$log.debug "JSON data file=#{json}"
 			$opts[:json]=json
 		end
 	}
@@ -69,28 +71,53 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-l', '--log FILE', String, "Log file name, default to logging to console") { |log|
 		$opts[:log]=log
 	}
+
+	opts.on('-b', '--bg', "Daemonize the script") {
+		$opts[:daemonize]=true
+	}
 }
+
+def outlet(outlet, state, opts)
+	on=$outlets[outlet.to_sym]
+	$log.info "Set outlet \"#{on[:name]}\": #{state}"
+
+	if opts[:delay] > 0
+		$log.info "Sleeping #{opts[:delay]} seconds before firing: #{on[:name]}"
+		sleep opts[:delay]
+	end
+
+	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
+end
+
+def read_config(file)
+	json=""
+	begin
+		json = File.read(file)
+	rescue => e
+		$log.die "Failed to read config #{file}: #{e}"
+	end
+	begin
+		JSON.parse(json, :symbolize_names=>true)
+	rescue
+		$log.die "failed to parse json config in #{file}: #{e}"
+	end
+end
+
+$outlets=read_config($opts[:json])
+$log.debug JSON.pretty_generate($outlets)
+
+if $opts[:daemonize]
+	$opts[:log]=LOG_PATH if $opts[:log].nil?
+	$log.debug "Daemonizing script"
+	Daemons.daemonize
+end
 
 $log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
 $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
 
-$outlets=JSON.parse(File.read($opts[:json]), :symbolize_names=>true)
-$log.debug JSON.pretty_generate($outlets)
-
-def outlet(outlet, state)
-	on=$outlets[outlet.to_sym]
-	$log.info "Set outlet \"#{on[:name]}\": #{state}"
-	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
-end
-
 o=$opts[:outlet]
 s=$opts[:state]
 
-if $opts[:delay] > 0
-	delay=Random.rand(0...$opts[:delay])
-	$log.info "Sleeping #{delay} seconds before firing"
-	sleep delay
-end
-outlet(o, s)
+outlet(o, s, $opts)
 
