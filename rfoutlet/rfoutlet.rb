@@ -79,13 +79,12 @@ $opts = OParser.parse($opts, HELP) { |opts|
 
 def outlet(outlet, state, opts)
 	on=$outlets[outlet.to_sym]
-	$log.info "Set outlet \"#{on[:name]}\": #{state}"
-
 	if opts[:delay] > 0
 		$log.info "Sleeping #{opts[:delay]} seconds before firing: #{on[:name]}"
 		sleep opts[:delay]
 	end
 
+	$log.info "Set outlet \"#{on[:name]}\": #{state}"
 	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
 end
 
