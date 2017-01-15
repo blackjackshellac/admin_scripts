@@ -1,7 +1,7 @@
 
 Sample crontab entry to turn on/off outlet 3 with a random delay of 0 to 7200 seconds (0-2 hours).  Turn on outlet
-at 6am and 4pm and turn off at 9am and 11pm,
+at 6am and 4pm and turn off at 9am and 11pm, logs to /var/tmp/rfoutlet/,
 
-0 6,16 * * * /home/pi/bin/rfoutlet.rb -l /var/tmp/rfoutlet.log -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -1
-0 9,23 * * * /home/pi/bin/rfoutlet.rb -l /var/tmp/rfoutlet.log -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -0
+0 6,16 * * * /home/pi/bin/rfoutlet.rb --bg -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -1
+0 9,23 * * * /home/pi/bin/rfoutlet.rb --bg -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -0
 
