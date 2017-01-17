@@ -5,3 +5,11 @@ at 6am and 4pm and turn off at 9am and 11pm, logs to /var/tmp/rfoutlet/,
 0 6,16 * * * /home/pi/bin/rfoutlet.rb --bg -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -1
 0 9,23 * * * /home/pi/bin/rfoutlet.rb --bg -j /home/pi/bin/rfoutlet.json -o3 -d 7200 -0
 
+Turn on outlet 3 within 1800 seconds of sunrise, and then turn it on again within 1800 seconds of sunset,
+
+./rfoutlet.rb --bg -j ~/bin/rfoutlet.json --sunrise 1800 --sunset 1800 -o3
+DEBUG 2017-01-17 11:29:50 -0500: Sunrise/Sunset = 2017-01-17 07:29:22 -0500/2017-01-17 16:39:31 -0500
+DEBUG 2017-01-17 11:29:50 -0500: Advancing sunrise to tomorrow: 2017-01-18 07:29:22 -0500
+DEBUG 2017-01-17 11:29:50 -0500: Secs to sunrise=71972
+DEBUG 2017-01-17 11:29:50 -0500: Secs to sunset =18581
+DEBUG 2017-01-17 11:29:50 -0500: {71625=>"on", 78825=>"off", 19366=>"on", 40966=>"off"}

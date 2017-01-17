@@ -4,6 +4,7 @@
 require 'json'
 require 'fileutils'
 require 'daemons'
+require 'sun_times'
 
 me=$0
 if File.symlink?(me)
@@ -36,6 +37,11 @@ $opts={
 	:outlet=>"o1",
 	:state=>"off",
 	:delay=>0,
+	:sched=>{},
+	:sunrise=>nil,
+	:sunset=>nil,
+	:lat=>nil,
+	:long=>nil,
 	:log => nil,
 	:daemonize => false,
 	:logger => $log,
@@ -57,8 +63,23 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:state]="on"
 	}
 
+	opts.on('--sunrise RANDOM', Integer, "Random seconds around time of sunrise") { |delay|
+		delay = delay / 2
+		$opts[:sunrise]=Random.rand(-delay...delay)
+	}
+
+	opts.on('--sunset RANDOM', Integer, "Random seconds around time of sunset") { |delay|
+		delay = delay / 2
+		$opts[:sunset]=Random.rand(-delay...delay)
+	}
+
+	opts.on('--latlong LAT,LONG', Array, "Latitude and Longitude") { |array|
+		$opts[:lat] = array[0].to_f
+		$opts[:long] = array[1].to_f
+	}
+
 	opts.on('-d', '--delay TIMEOUT', Integer, "Random delay in seconds") { |delay|
-		$opts[:delay]=Random.rand(0...delay)
+		$opts[:delay] = Random.rand(0...delay)
 	}
 
 	opts.on('-j', '--json FILE', String, "JSON data file, default #{$opts[:json]}") { |json|
@@ -77,13 +98,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	}
 }
 
-def outlet(outlet, state, opts)
-	on=$outlets[outlet.to_sym]
-	if opts[:delay] > 0
-		$log.info "Sleeping #{opts[:delay]} seconds before firing: #{on[:name]}"
-		sleep opts[:delay]
-	end
+$log.debug $opts.inspect
 
+def outlet(outlet, state)
+	on=$outlets[outlet.to_sym]
 	$log.info "Set outlet \"#{on[:name]}\": #{state}"
 	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
 end
@@ -102,8 +120,73 @@ def read_config(file)
 	end
 end
 
-$outlets=read_config($opts[:json])
-$log.debug JSON.pretty_generate($outlets)
+$config=read_config($opts[:json])
+$outlets=$config[:outlets]
+$log.debug JSON.pretty_generate($config)
+
+$log.die "Outlet not configured: #{$opts[:outlet]}" unless $outlets.key?($opts[:outlet].to_sym)
+
+$opts[:lat] = $config[:lat] if $opts[:lat].nil?
+$opts[:long] = $config[:long] if $opts[:long].nil?
+
+if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
+	#today = Date.today
+	now   = Time.now
+	st = SunTimes.new
+
+	sunrise = st.rise(now, $opts[:lat], $opts[:long])
+	sunset  = st.set(now, $opts[:lat], $opts[:long])
+
+	$log.debug "Sunrise/Sunset = #{sunrise.localtime}/#{sunset.localtime}"
+
+	if sunrise < now
+		sunrise = sunrise+86400
+		$log.debug "Advancing sunrise to tomorrow: #{sunrise.localtime}"
+	end
+
+	if sunset < now
+		sunset = sunset+86400
+		$log.debug "Advancing sunset to tomorrow: #{sunset.localtime}"
+	end
+
+	tnow=now.to_i
+	secs2sunrise=(sunrise.to_i-tnow)
+	secs2sunset =(sunset.to_i-tnow)
+
+	$log.debug "Secs to sunrise=#{secs2sunrise}"
+	$log.debug "Secs to sunset =#{secs2sunset}"
+
+	unless $opts[:sunrise].nil?
+		$log.debug "Random sunrise adjustment #{$opts[:sunrise]}"
+		secs2sunrise+=$opts[:sunrise]
+		secs2sunrise = 0 if secs2sunrise < 0
+
+		$opts[:sunrise]=secs2sunrise
+		$opts[:sched][secs2sunrise]="on"
+
+		#TODO set timeout to turn off - 2 hours in the morning
+		$opts[:sched][secs2sunrise+7200]="off"
+	end
+
+	unless $opts[:sunset].nil?
+		$log.debug "Random sunset adjustment #{$opts[:sunset]}"
+		secs2sunset += $opts[:sunset]
+		secs2sunset = 0 if secs2sunset < 0
+		$opts[:sunset]=secs2sunset
+		$opts[:sched][secs2sunset]="on"
+
+		#TODO set timeout to turn off - 6 hours in the evening
+		$opts[:sched][secs2sunset+21600]="off"
+	end
+
+	#puts $opts[:sched].inspect
+	#skeys=$opts[:sched].keys.sort
+	#
+	#skeys.each { |key|
+	#	$log.debug "#{key} : #{$opts[:sched][key]}"
+	#}
+	#$log.die "testing"
+end
 
 if $opts[:daemonize]
 	$opts[:log]=LOG_PATH if $opts[:log].nil?
@@ -118,5 +201,36 @@ $opts[:logger]=$log
 o=$opts[:outlet]
 s=$opts[:state]
 
-outlet(o, s, $opts)
+if $opts[:sched].empty?
+	delay = $opts[:delay]
+	if delay > 0
+		on = $outlets[o.to_sym]
+		$log.info "Sleeping #{delay} seconds before firing: #{on[:name]}"
+		sleep delay
+	end
+	outlet(o, s)
+else
+	#22142
+	#75533
+	#sleep 22142 seconds (6 hours)
+	#sleep 75533-22142 seconds (14.8 hours later)
+	on = $outlets[o.to_sym]
+	adjust = 0
+	$log.debug $opts[:sched].inspect
+	$opts[:sched].keys.sort.each { |delay|
+		s = $opts[:sched][delay]
+		delay -= adjust
+		$log.info "Sleeping #{delay} seconds before setting #{on[:name]} #{s}"
+		begin
+			sleep delay
+		rescue Interrupt => e
+			$log.warn "Caught exception: #{e}"
+			# ignore Interrupt
+			next
+		ensure
+			adjust += delay
+		end
+		outlet(o, s)
+	}
+end
 

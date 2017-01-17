@@ -1,17 +1,21 @@
 {
-	"o1": {
-		"name": "Kitchen counter",
-		"on": 35923,
-		"off": 35932
-	},
-	"o2": {
-		"name": "Heater",
-		"on": 36067,
-		"off": 36076
-	},
-	"o3": {
-		"name": "Living room lamp",
-		"on": 36387,
-		"off": 36396
+	"lat": 45.4966780,
+	"long": -73.5039060,
+	"outlets": {
+		"o1": {
+			"name": "Kitchen counter",
+			"on": 35923,
+			"off": 35932
+		},
+		"o2": {
+			"name": "Heater",
+			"on": 36067,
+			"off": 36076
+		},
+		"o3": {
+			"name": "Living room lamp",
+			"on": 36387,
+			"off": 36396
+		}
 	}
 }
