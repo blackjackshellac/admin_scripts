@@ -49,6 +49,25 @@ $opts={
 	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json")
 }
 
+def random_delay_range(delay)
+	delay=[0,1] if delay.nil?
+	delay.each_index { |i|
+		delay[i]=delay[i].to_i
+		$log.die "Specified delay is not an integer: #{delay[i]}" unless delay[i].is_a?(Integer)
+	}
+	sdelay=delay[0]
+	edelay=delay[1]
+	if edelay.nil?
+		# --sunrise 1800 will be a random delay from -900 to 900 seconds around the time of sunrise
+		sdelay = sdelay / 2
+		edelay = sdelay
+		sdelay = -sdelay
+	end
+	delay=Random.rand(sdelay...edelay)
+	$log.debug "Random integer between #{sdelay} and #{edelay}: #{delay}"
+	delay
+end
+
 $opts = OParser.parse($opts, HELP) { |opts|
 	# journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
 	opts.on('-o', '--outlet NUM', String, "Outlet number") { |num|
@@ -63,14 +82,12 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:state]="on"
 	}
 
-	opts.on('--sunrise RANDOM', Integer, "Random seconds around time of sunrise") { |delay|
-		delay = delay / 2
-		$opts[:sunrise]=Random.rand(-delay...delay)
+	opts.on('--sunrise [RANDOM]', Array, "Random seconds around time of sunrise") { |delay|
+		$opts[:sunrise]=random_delay_range(delay)
 	}
 
-	opts.on('--sunset RANDOM', Integer, "Random seconds around time of sunset") { |delay|
-		delay = delay / 2
-		$opts[:sunset]=Random.rand(-delay...delay)
+	opts.on('--sunset [RANDOM]', Array, "Random seconds around time of sunset") { |delay|
+		$opts[:sunset]=random_delay_range(delay)
 	}
 
 	opts.on('--latlong LAT,LONG', Array, "Latitude and Longitude") { |array|
@@ -102,7 +119,7 @@ $log.debug $opts.inspect
 
 def outlet(outlet, state)
 	on=$outlets[outlet.to_sym]
-	$log.info "Set outlet \"#{on[:name]}\": #{state}"
+	$log.info "Turn #{state} outlet \"#{on[:name]}\""
 	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
 end
 
@@ -118,6 +135,11 @@ def read_config(file)
 	rescue
 		$log.die "failed to parse json config in #{file}: #{e}"
 	end
+end
+
+def outlet_name
+	outlet=$opts[:outlet]
+	$outlets[outlet.to_sym][:name]
 end
 
 $config=read_config($opts[:json])
@@ -180,11 +202,15 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 	end
 
 	#puts $opts[:sched].inspect
-	#skeys=$opts[:sched].keys.sort
-	#
-	#skeys.each { |key|
-	#	$log.debug "#{key} : #{$opts[:sched][key]}"
-	#}
+	sched=$opts[:sched]
+	skeys=sched.keys.sort
+	oname=outlet_name
+
+	skeys.each { |key|
+		secs=key+tnow
+		state=sched[key]
+		$log.info "Turn #{oname} #{state} at #{Time.at(secs).to_s}: delay=#{key}"
+	}
 	#$log.die "testing"
 end
 
@@ -200,12 +226,13 @@ $opts[:logger]=$log
 
 o=$opts[:outlet]
 s=$opts[:state]
+oname=outlet_name
 
 if $opts[:sched].empty?
 	delay = $opts[:delay]
 	if delay > 0
 		on = $outlets[o.to_sym]
-		$log.info "Sleeping #{delay} seconds before firing: #{on[:name]}"
+		$log.info "Sleeping #{delay} seconds before firing: #{oname}"
 		sleep delay
 	end
 	outlet(o, s)
@@ -220,11 +247,11 @@ else
 	$opts[:sched].keys.sort.each { |delay|
 		s = $opts[:sched][delay]
 		delay -= adjust
-		$log.info "Sleeping #{delay} seconds before setting #{on[:name]} #{s}"
+		$log.info "Sleeping #{delay} seconds before setting #{oname} #{s}"
 		begin
 			sleep delay
 		rescue Interrupt => e
-			$log.warn "Caught exception: #{e}"
+			$log.warn "Caught exception: #{e.inspect}"
 			# ignore Interrupt
 			next
 		ensure
