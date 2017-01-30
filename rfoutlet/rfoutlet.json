@@ -18,9 +18,19 @@
 			"off": 1136396
 		},
 		"o4": {
-			"name": "Blackboard hall lamp",
+			"name": "0304-3 Blackboard hall lamp",
 			"on": 5330691,
 			"off": 5330700
+		},
+		"o5": {
+			"name": "0304-1",
+			"on": 5330227,
+			"off": 5330236
+		},
+		"o6": {
+			"name": "0304-2",
+			"on": 5330371,
+			"off": 5330380
 		}
 
 	}

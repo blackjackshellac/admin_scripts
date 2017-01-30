@@ -43,6 +43,7 @@ $opts={
 	:lat=>nil,
 	:long=>nil,
 	:log => nil,
+	:list => false,
 	:daemonize => false,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
@@ -106,7 +107,11 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		end
 	}
 
-	opts.on('-l', '--log FILE', String, "Log file name, default to logging to console") { |log|
+	opts.on('-l', '--list', "List outlets") {
+		$opts[:list]=true
+	}
+
+	opts.on('-L', '--log FILE', String, "Log file name, default to logging to console") { |log|
 		$opts[:log]=log
 	}
 
@@ -137,14 +142,23 @@ def read_config(file)
 	end
 end
 
-def outlet_name
-	outlet=$opts[:outlet]
+def outlet_name(outlet=nil)
+	outlet=$opts[:outlet] if outlet.nil?
 	$outlets[outlet.to_sym][:name]
 end
 
 $config=read_config($opts[:json])
 $outlets=$config[:outlets]
-$log.debug JSON.pretty_generate($config)
+
+if $opts[:list]
+	$log.debug JSON.pretty_generate($config)
+	$outlets.each_key { |outlet|
+		on=outlet_name(outlet)
+		on="<unnamed>" if on.empty?
+		puts "#{outlet}: #{on}"
+	}
+	exit 0
+end
 
 $log.die "Outlet not configured: #{$opts[:outlet]}" unless $outlets.key?($opts[:outlet].to_sym)
 
