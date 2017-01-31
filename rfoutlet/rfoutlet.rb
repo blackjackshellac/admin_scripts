@@ -23,6 +23,8 @@ HELP=File.join(MD, ME+".help")
 
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
+require_relative File.join(MD, "rf_outlet")
+require_relative File.join(MD, "rfoutletconfig")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
@@ -31,11 +33,9 @@ FileUtils.mkdir_p(TMP)
 YM=Time.now.strftime('%Y%m')
 LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 
-CODESEND="/var/www/html/rfoutlet/codesend"
-
 $opts={
 	:outlet=>"o1",
-	:state=>"off",
+	:state=>RFOutlet::OFF,
 	:delay=>0,
 	:sched=>{},
 	:sunrise=>nil,
@@ -76,11 +76,11 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	}
 
 	opts.on('-0', '--off', "Outlet off") {
-		$opts[:state]="off"
+		$opts[:state]=RFOutlet::OFF
 	}
 
 	opts.on('-1', '--on', "Outlet on") {
-		$opts[:state]="on"
+		$opts[:state]=RFOutlet::ON
 	}
 
 	opts.on('--sunrise [RANDOM]', Array, "Random seconds around time of sunrise") { |delay|
@@ -122,48 +122,18 @@ $opts = OParser.parse($opts, HELP) { |opts|
 
 $log.debug $opts.inspect
 
-def outlet(outlet, state)
-	on=$outlets[outlet.to_sym]
-	$log.info "Turn #{state} outlet \"#{on[:name]}\""
-	$log.info %x[#{CODESEND} #{on[state.to_sym]}].strip
-end
-
-def read_config(file)
-	json=""
-	begin
-		json = File.read(file)
-	rescue => e
-		$log.die "Failed to read config #{file}: #{e}"
-	end
-	begin
-		JSON.parse(json, :symbolize_names=>true)
-	rescue
-		$log.die "failed to parse json config in #{file}: #{e}"
-	end
-end
-
-def outlet_name(outlet=nil)
-	outlet=$opts[:outlet] if outlet.nil?
-	$outlets[outlet.to_sym][:name]
-end
-
-$config=read_config($opts[:json])
-$outlets=$config[:outlets]
+RFOutletConfig.init($opts)
+rfoc = RFOutletConfig.new($opts[:json])
 
 if $opts[:list]
-	$log.debug JSON.pretty_generate($config)
-	$outlets.each_key { |outlet|
-		on=outlet_name(outlet)
-		on="<unnamed>" if on.empty?
-		puts "#{outlet}: #{on}"
-	}
+	rfoc.list
 	exit 0
 end
 
-$log.die "Outlet not configured: #{$opts[:outlet]}" unless $outlets.key?($opts[:outlet].to_sym)
+rfoc.set_outlet($opts[:outlet])
 
-$opts[:lat] = $config[:lat] if $opts[:lat].nil?
-$opts[:long] = $config[:long] if $opts[:long].nil?
+$opts[:lat] = rfoc.lat if $opts[:lat].nil?
+$opts[:long] = rfoc.long if $opts[:long].nil?
 
 if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 	#today = Date.today
@@ -198,10 +168,10 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 		secs2sunrise = 0 if secs2sunrise < 0
 
 		$opts[:sunrise]=secs2sunrise
-		$opts[:sched][secs2sunrise]="on"
+		$opts[:sched][secs2sunrise]=RFOutlet::ON
 
 		#TODO set timeout to turn off - 2 hours in the morning
-		$opts[:sched][secs2sunrise+7200]="off"
+		$opts[:sched][secs2sunrise+7200]=RFOutlet::OFF
 	end
 
 	unless $opts[:sunset].nil?
@@ -209,22 +179,13 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 		secs2sunset += $opts[:sunset]
 		secs2sunset = 0 if secs2sunset < 0
 		$opts[:sunset]=secs2sunset
-		$opts[:sched][secs2sunset]="on"
+		$opts[:sched][secs2sunset]=RFOutlet::ON
 
 		#TODO set timeout to turn off - 6 hours in the evening
-		$opts[:sched][secs2sunset+21600]="off"
+		$opts[:sched][secs2sunset+21600]=RFOutlet::OFF
 	end
 
 	#puts $opts[:sched].inspect
-	sched=$opts[:sched]
-	skeys=sched.keys.sort
-	oname=outlet_name
-
-	skeys.each { |key|
-		secs=key+tnow
-		state=sched[key]
-		$log.info "Turn #{oname} #{state} at #{Time.at(secs).to_s}: delay=#{key}"
-	}
 	#$log.die "testing"
 end
 
@@ -237,28 +198,39 @@ end
 $log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
 $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
+RFOutletConfig.init($opts)
 
-o=$opts[:outlet]
+#o=$opts[:outlet]
 s=$opts[:state]
-oname=outlet_name
+outlet=rfoc.outlet
+oname=outlet.name
 
 if $opts[:sched].empty?
 	delay = $opts[:delay]
 	if delay > 0
-		on = $outlets[o.to_sym]
 		$log.info "Sleeping #{delay} seconds before firing: #{oname}"
 		sleep delay
 	end
-	outlet(o, s)
+	rfcode=outlet.get_rfcode(s)
+	$log.info "Turn #{s} outlet \"#{oname}\" [#{rfcode}]"
+	$log.info outlet.sendcode(rfcode)
 else
 	#22142
 	#75533
 	#sleep 22142 seconds (6 hours)
 	#sleep 75533-22142 seconds (14.8 hours later)
-	on = $outlets[o.to_sym]
 	adjust = 0
 	$log.debug $opts[:sched].inspect
-	$opts[:sched].keys.sort.each { |delay|
+
+	sched=$opts[:sched]
+	skeys=sched.keys.sort
+	skeys.each { |key|
+		secs=key+tnow
+		state=sched[key]
+		$log.info "Turn #{oname} #{state} at #{Time.at(secs).to_s}: delay=#{key}"
+	}
+
+	skeys.each { |delay|
 		s = $opts[:sched][delay]
 		delay -= adjust
 		$log.info "Sleeping #{delay} seconds before setting #{oname} #{s}"
@@ -271,7 +243,10 @@ else
 		ensure
 			adjust += delay
 		end
-		outlet(o, s)
+
+		rfcode=outlet.get_rfcode(s)
+		$log.info "Turn #{s} outlet \"#{oname}\" [#{rfcode}]"
+		$log.info outlet.sendcode(rfcode)
 	}
 end
 
