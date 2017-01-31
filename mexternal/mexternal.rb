@@ -5,6 +5,7 @@ require 'optparse'
 require 'logger'
 require 'json'
 require 'fileutils'
+require 'readline'
 
 me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
@@ -77,18 +78,44 @@ def parse(gopts)
 				# TODO
 			}
 
-			opts.on('--init DEV', String, "Format device and add it to the named config") { |dev|
-				FileUtils.chdir("/dev/disk/by-id") {
-					real=nil
+			opts.on('--init DEV', String, "Format device and add it to the named config, eg., /dev/sdg") { |dev|
+				ans=Readline.readline("Do you want to encrypt and format the device #{dev} YES/no >> ")
+				$log.die "Bailing, type uppercase YES to continue" unless ans.eql?("YES")
+
+				byid="/dev/disk/by-id"
+				FileUtils.chdir(byid) {
+					devs=[]
 					Dir.glob("*") { |file|
 						$log.debug "Testing file=#{file}"
 						next unless File.symlink?(file)
 						real=File.realpath(file)
-						$log.debug "Testing real=#{real}"
-						break if real.eql?(file)
-						real=nil
+						$log.debug "Testing real=#{real} dev=#{dev}"
+						next unless real.eql?(dev)
+						file=File.join(byid, file)
+						$log.info "Found symlink #{file} -> dev=#{dev}"
+						devs << file
 					}
-					$log.die "Device #{dev} not found" if real.nil?
+					$log.die "Device #{dev} not found" if devs.empty?
+
+					system("cryptsetup luksFormat #{dev}")
+					$log.die "Failed to format #{dev}" unless $?.success?
+
+					# use the symlink as the dev
+					dev=Readline.readline("Enter path to device symlink found above: ")
+					$log.die "Refusing to add unknown symlink: #{dev}" unless devs.include?(dev)
+
+					system("#{$0} --debug --add #{dev}")
+					$log.die "Failed to add #{dev}" unless $?.success?
+
+					system("cryptsetup open --type luks #{dev} backup")
+					$log.die "Failed to open luks device #{dev}" unless $?.success?
+
+					dev="/dev/mapper/backup"
+					ans=Readline.readline("Do you want to format the luks device #{dev} YES/no >> ")
+					$log.die "Bailing, type uppercase YES to continue" unless ans.eql?("YES")
+					system("mkfs.btrfs #{dev}")
+
+					$log.info "created luks device and formatted as btrfs filesystem"
 				}
 				exit 0
 			}
