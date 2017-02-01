@@ -1,0 +1,37 @@
+{
+	"lat": 45.4966780,
+	"long": -73.5039060,
+	"outlets": {
+		"o1": {
+			"name": "Upstairs lamp",
+			"on": 1135923,
+			"off": 1135932
+		},
+		"o2": {
+			"name": "Front hall xmas lights",
+			"on": 1136067,
+			"off": 1136076
+		},
+		"o3": {
+			"name": "Living room lamp",
+			"on": 1136387,
+			"off": 1136396
+		},
+		"o4": {
+			"name": "0304-3 Blackboard hall lamp",
+			"on": 5330691,
+			"off": 5330700
+		},
+		"o5": {
+			"name": "0304-1",
+			"on": 5330227,
+			"off": 5330236
+		},
+		"o6": {
+			"name": "0304-2",
+			"on": 5330371,
+			"off": 5330380
+		}
+
+	}
+}

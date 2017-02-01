@@ -1,0 +1,87 @@
+[Querying whois.ripe.net]
+[whois.ripe.net]
+% This is the RIPE Database query service.
+% The objects are in RPSL format.
+%
+% The RIPE Database is subject to Terms and Conditions.
+% See http://www.ripe.net/db/support/db-terms-conditions.pdf
+
+% Note: this output has been filtered.
+%       To receive output for a database update, use the "-B" flag.
+
+% Information related to '213.202.232.0 - 213.202.235.255'
+
+% Abuse contact for '213.202.232.0 - 213.202.235.255' is 'abuse@myloc.de'
+
+inetnum:        213.202.232.0 - 213.202.235.255
+netname:        MYLOC-SUBALLOC-UGS
+descr:          myLoc managed IT AG
+country:        DE
+org:            ORG-fIG1-RIPE
+admin-c:        MOPS-RIPE
+tech-c:         MOPS-RIPE
+status:         SUB-ALLOCATED PA
+mnt-by:         MYLOC-MNT
+created:        2016-08-10T16:40:44Z
+last-modified:  2016-08-10T16:40:44Z
+source:         RIPE
+
+organisation:   ORG-fIG1-RIPE
+org-name:       myLoc managed IT AG
+org-type:       LIR
+address:        Am Gatherhof 44
+address:        40472
+address:        Duesseldorf
+address:        GERMANY
+phone:          +4921161708110
+fax-no:         +4921161708111
+admin-c:        DTH
+admin-c:        KBU
+admin-c:        MST
+abuse-c:        MOPS-RIPE
+mnt-ref:        RIPE-NCC-HM-MNT
+mnt-ref:        MYLOC-MNT
+abuse-mailbox:  abuse@myLoc.de
+mnt-by:         RIPE-NCC-HM-MNT
+mnt-by:         MYLOC-MNT
+created:        2004-04-17T11:07:16Z
+last-modified:  2016-08-05T11:57:32Z
+source:         RIPE # Filtered
+
+role:           myLoc NOC
+address:        myLoc managed IT AG
+address:        Network Operations & Services
+address:        Am Gatherhof 44
+address:        40472 Duesseldorf DE
+admin-c:        DTH
+tech-c:         DTH
+tech-c:         MST
+tech-c:         KBU
+nic-hdl:        MOPS-RIPE
+remarks:        +---------------------------------------------------+
+remarks:        | 24/7 NOC email: noc_at_myLoc.de                   |
+remarks:        | 24/7 NOC phone: +49 211 61708 110                 |
+remarks:        | Please direct abuse issues ONLY                   |
+remarks:        | to abuse_at_myLoc.de                              |
+remarks:        | Complaints to other adresses will be deemed       |
+remarks:        | as spam and not further processed!                |
+remarks:        +---------------------------------------------------+
+abuse-mailbox:  abuse@myloc.de
+mnt-by:         MYLOC-MNT
+created:        2013-02-11T16:38:10Z
+last-modified:  2016-08-30T09:09:54Z
+source:         RIPE # Filtered
+
+% Information related to '213.202.232.0/22AS24961'
+
+route:          213.202.232.0/22
+descr:          myLoc managed IT AG
+origin:         AS24961
+mnt-by:         MYLOC-MNT
+created:        2016-08-10T16:40:45Z
+last-modified:  2016-08-10T16:40:45Z
+source:         RIPE
+
+% This query was served by the RIPE Database Query Service version 1.87.4 (BLAARKOP)
+
+
