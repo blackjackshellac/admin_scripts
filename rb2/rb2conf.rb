@@ -63,6 +63,9 @@ sample={
 	}
 }
 
+class Rb2Error < StandardError
+end
+
 class Rb2Version
 	RB2V_MAJOR=0
 	RB2V_MINOR=0
@@ -93,7 +96,45 @@ class Rb2Version
 end
 
 class Rb2Conf
+	RB2CONF_NINCREMENTALS=5
+	RB2CONF_COMPRESS=false
+
 	attr_accessor :opts, :includes, :excludes, :nincrementals, :compress
+
+	def initialize
+		@opts=""
+		@includes=[]
+		@excludes=[]
+		@nincrementals=RB2CONF_NINCREMENTALS
+		@compress=RB2CONF_COMPRESS
+	end
+
+	def append_key_array(key, ilist)
+		var=instance_variable_get("@#{key}")
+		raise Rb2Error, "Rb2Conf array variable #{key} unknown" if var.nil?
+		ilist.each { |item|
+			item.strip!
+			next if var.include?(item)
+			var << item 
+		}
+		var.uniq!
+	end
+
+	def delete_key_array(key, ilist)
+		var=instance_variable_get("@#{key}")
+		raise Rb2Error "Rb2Conf array variable #{key} unknown" if var.nil?
+		ilist.each { |item|
+			item.strip!
+			raise Rb2Error, "Array #{key} does not contain item #{item}" unless var.include?(item)
+			var.delete(item)
+		}
+		var.uniq!
+	end
+
+	def set_incrementals(nincrementals)
+		nincrementals = RB2CONF_NINCREMENTALS if nincrementals.nil? || nincrementals <= 0
+		@nincrementals = nincrementals
+	end
 
 	def self.from_hash(h)
 		h={} if h.nil?
@@ -101,8 +142,8 @@ class Rb2Conf
 		rb2conf.opts = h[:opts]||""
 		rb2conf.includes = h[:includes]||[]
 		rb2conf.excludes = h[:excludes]||[]
-		rb2conf.nincrementals = h[:nincrementals]||5
-		rb2conf.compress = h[:compress]||false
+		rb2conf.nincrementals = h[:nincrementals]||RB2CONF_NINCREMENTALS
+		rb2conf.compress = h[:compress]||RB2CONF_COMPRESS
 		rb2conf
 	end
 
@@ -158,19 +199,43 @@ class Rb2Globals
 end
 
 class Rb2Client
-	attr_accessor :address, :conf
+	attr_accessor :client, :address, :conf
 
-	def self.from_hash(h)
+	def self.from_hash(client, h=nil)
 		h={} if h.nil?
 
 		rb2client = Rb2Client.new
+		rb2client.client = client.to_s
 		rb2client.address = h[:address]||"localhost"
 		rb2client.conf = Rb2Conf.from_hash(h[:conf])
 		rb2client
 	end
 
+	def set_address(addr)
+		@address=addr
+	end
+
+	def set_incrementals(n)
+		@conf.set_incrementals(n)
+	end
+
+	def delete_address(addr)
+		return false unless @address.eql?(addr)
+		@address=@client
+		return true
+	end
+
+	def append_conf_key_array(key, ilist)
+		@conf.append_key_array(key, ilist)
+	end
+
+	def delete_conf_key_array(key, ilist)
+		@conf.delete_key_array(key, ilist)
+	end
+
 	def to_hash
 		{
+			:client  => @client,
 			:address => @address,
 			:conf => @conf.to_hash
 		}
@@ -212,6 +277,99 @@ class Rb2Config
 		@clients = @config[:clients]
 	end
 
+	def set_client_address(clist, alist)
+		clist.each_index { |i|
+			client=clist[i]
+			address=alist[i]
+			address=client if address.empty?
+
+			@@log.debug "Set address=#{address} for #{client}"
+			client=client.to_sym
+			@clients[client]||=Rb2Client.from_hash(client)
+			@@log.info "Set client #{client} address #{address}"
+			@clients[client].set_address(address)
+		}
+	end
+
+	def delete_client_address(clist, alist)
+		clist.each_index { |i|
+			client=clist[i]
+			address=alist[i]
+			client = client.to_sym
+			@@log.die "Client config not found #{client}" if @clients[client].nil?
+			@@log.warn "Client address not changed for #{client}: #{address}" unless @clients[client].delete_address(address)
+		}
+	end
+
+	def set_client_conf_array(clist, ilist, key)
+		clist.each { |client|
+			client = client.to_sym
+			@clients[client]||=Rb2Client.from_hash(client)
+			begin
+				@clients[client].append_conf_key_array(key, ilist)
+			rescue Rb2Error => e
+				@@log.error "#{client}: "+e.to_s
+			end
+		}
+	end
+
+	def set_client_includes(clist, ilist)
+		set_client_conf_array(clist, ilist, :includes)
+	end
+
+	def set_client_excludes(clist, ilist)
+		set_client_conf_array(clist, ilist, :excludes)
+	end
+
+	def set_client_incrementals(clist, nincrementals)
+		clist.each { |client|
+			client = client.to_sym
+			@@log.die "Client config not found #{client}" if @clients[client].nil?
+			@@log.debug "Set client #{client} nincrementals=#{nincrementals}"
+			@clients[client].set_incrementals(nincrementals)
+		}
+	end
+
+	def delete_client_conf_array(clist, ilist, key)
+		@@log.debug "clients=#{clist.inspect}"
+		@@log.debug "  array=#{ilist.inspect}"
+		@@log.debug "    key=#{key.inspect}"
+		clist.each { |client|
+			client = client.to_sym
+			unless @clients.key?(client)
+				@@log.warn "No client found: #{client}"
+				next
+			end
+			begin
+				@clients[client].delete_conf_key_array(key, ilist)
+			rescue Rb2Error => e
+				@@log.error "#{client}: "+e.to_s
+			end
+		}
+	end
+
+	def delete_client_includes(clist, ilist)
+		delete_client_conf_array(clist, ilist, :includes)
+	end
+
+	def delete_client_excludes(clist, ilist)
+		delete_client_conf_array(clist, ilist, :excludes)
+	end
+
+	def delete_clients(clist)
+		@@log.debug "Deleting clients: #{clist.inspect}"
+		clist.each { |client|
+			client = client.to_sym
+			@@log.debug "Deleting client #{client}: #{@clients[client].inspect}"
+			@@log.warn "Client not found #{client}" if @clients.delete(client).nil?
+		}
+	end
+
+	def list(compact)
+		# TODO make compact a little more readable
+		puts compact ? self.to_json : JSON.pretty_generate(self)
+	end
+
 	def load_config(conf)
 		json=File.read(conf)
 	rescue => e
@@ -237,7 +395,7 @@ class Rb2Config
 		cc = {}
 		clients.each_pair { |client,conf|
 			@@log.debug "client=#{client} conf=#{conf.inspect}"
-			cc[client.to_sym]=Rb2Client.from_hash(conf)
+			cc[client.to_sym]=Rb2Client.from_hash(client, conf)
 		}
 		config[:clients]=cc
 		config

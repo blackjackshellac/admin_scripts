@@ -31,6 +31,13 @@ YM=Time.now.strftime('%Y%m')
 LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 
 $opts={
+	:global => false,
+	:clients => [],
+	:address => [],
+	:includes => [],
+	:excludes => [],
+	:nincrementals => nil,
+	:action => :NADA,
 	:daemonize => false,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
@@ -38,7 +45,58 @@ $opts={
 }
 
 $opts = OParser.parse($opts, HELP) { |opts|
-	# journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
+# -c, --client HOST       Client to backup (default is localhost), can specify multiple clients
+# -a, --address HOST      Set the client host address (default is the client name)
+# -i, --include PATH      Include path, comma separate multiple paths
+# -x, --exclude PATH      Exclude path, comma separate multiple paths
+# -o, --opts OPTS         Extra rsync options
+# --delete            Delete any specified includes, excludes, opts
+# --delete [client]   Delete the specified client configuration (does not purge the backups)
+# -d, --dest DEST         Local destination path (eg., /mnt/backup)
+
+	opts.on('-g', '--global', "Apply changes globally") {
+		$opts[:global]=true
+	}
+
+	opts.on('-c', '--clients LIST', Array, "List of clients to act on") { |clients|
+		$opts[:clients].concat(clients)
+		$opts[:clients].uniq!
+	}
+
+	opts.on('-a', '--address HOSTS', Array, "Network address for specified client, should match client list") { |addrs|
+		$opts[:address].concat(addrs)
+		$opts[:address].uniq!
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('-i', '--include PATHS', Array, "Include path, comma separate multiple paths") { |paths|
+		$opts[:includes].concat(paths)
+		$opts[:includes].uniq!
+		$opts[:action]=:RECONFIG
+	}
+	opts.on('-x', '--exclude PATHS', Array, "Exclude paths, comma separate multiple paths") { |paths|
+		$opts[:excludes].concat(paths)
+		$opts[:excludes].uniq!
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('-I', '--incrementals NUM', Integer, "Number of incremental backup directories") { |n|
+		$opts[:nincrementals]=n
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('--delete', "Delete specified address, includes, excludes, opts, etc") {
+		$opts[:action]=:DELETE
+	}
+
+	opts.on('--delete-client', "Delete client config") {
+		$opts[:action]=:DELETE_CLIENT
+	}
+
+	opts.on('-l', '--list [compact]', "List config") { |compact|
+		$opts[:action]=compact.nil? ? :LIST : :LIST_COMPACT
+	}
+
 	opts.on('-b', '--bg', "Daemonize and run in background") {
 		$opts[:daemonize]=true
 	}
@@ -48,7 +106,50 @@ $log.debug $opts.inspect
 
 Rb2Config.init($opts)
 rb2c = Rb2Config.new
-puts JSON.pretty_generate(rb2c)
+updated = false
+case $opts[:action]
+when :RECONFIG
+	clen=$opts[:clients].length
+	unless $opts[:address].empty?
+		alen=$opts[:address].length
+		# allow only 1 address per client
+		raise "Client list length is different than address list length" if clen != alen
+		rb2c.set_client_address($opts[:clients], $opts[:address])
+	end
 
-rb2c.save_config #(Rb2Config::CONF_ROOT)
+	rb2c.set_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
+	rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
+	rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
+
+	updated=true
+
+when :DELETE
+
+	$log.die "Must specify client(s) to delete options" if $opts[:clients].empty?
+
+	rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
+	rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
+	rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
+
+	updated=true
+
+when :DELETE_CLIENT
+
+	$log.die "Must specify client to delete" if $opts[:clients].empty?
+	$log.debug "Deleting clients: #{$opts[:clients].inspect}"
+	rb2c.delete_clients($opts[:clients])
+
+	updated=true
+
+when :LIST
+	rb2c.list(false)
+when :LIST_COMPACT
+	rb2c.list(true)
+when :NADA
+	$log.die "No action options specified"
+else
+	raise "Shouldn't get here"
+end
+
+rb2c.save_config if updated #(Rb2Config::CONF_ROOT)
 
