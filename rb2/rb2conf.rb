@@ -96,6 +96,7 @@ class Rb2Version
 end
 
 class Rb2Conf
+	KEYS=[:opts, :includes, :excludes, :nincrementals, :compress]
 	RB2CONF_NINCREMENTALS=5
 	RB2CONF_COMPRESS=false
 
@@ -160,32 +161,101 @@ class Rb2Conf
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+	def list(compact, indent="\t")
+		KEYS.each { |key|
+			var=instance_variable_get("@#{key}")
+			puts "#{indent}#{key}: #{var}"
+		}
+	end
 end
 
 class Rb2Globals
-	RB2G_DEST = "/mnt/backup"
-	RB2G_LOGDIR = "/var/tmp/rb2"
-	RB2G_EMAIL  = ""
-	RB2G_SMTP   = "localhost"
-	attr_accessor :dest, :logdir, :email, :smtp, :version, :conf
+	KEYS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
+
+	@@rb2g={
+		:dest => "/mnt/backup",
+		:logdir => "/var/tmp/rb2",
+		:logformat => "rb2_%Y-%m-%d.log",
+		:email => [],
+		:smtp => "localhost",
+		:syslog => false
+	}
+
+	@@rb2g_email = ""
+	@@rb2g_smtp = "localhost"
+	attr_accessor :dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf
+
+	def self.init(opts)
+		[:dest, :logdir, :logformat, :syslog, :email, :smtp].each { |key|
+			next unless opts.key?(key)
+			@@rb2g[key]=opts[key]
+		}
+	end
 
 	def self.from_hash(h)
 		h={} if h.nil?
 
-		rb2g        = Rb2Globals.new
-		rb2g.dest   = h[:dest]   ||RB2G_DEST
-		rb2g.logdir = h[:logdir] ||RB2G_LOGDIR
-		rb2g.email  = h[:email]  ||RB2G_LOGDIR
-		rb2g.smtp   = h[:smtp]   ||RB2G_SMTP
-		rb2g.conf   = Rb2Conf.from_hash(h[:conf])
-		rb2g.version = Rb2Version.from_hash(h[:version])
+		rb2g           = Rb2Globals.new
+		rb2g.dest      = h[:dest]   ||@@rb2g[:dest]
+		rb2g.logdir    = h[:logdir] ||@@rb2g[:logdir]
+		rb2g.logformat = h[:logformat] || @@rb2g[:logformat]
+		rb2g.syslog    = h[:syslog] ||@@rb2g[:syslog]
+		rb2g.email     = h[:email]  ||@@rb2g[:email]
+		rb2g.smtp      = h[:smtp]   ||@@rb2g[:smtp]
+		rb2g.conf      = Rb2Conf.from_hash(h[:conf])
+		rb2g.version   = Rb2Version.from_hash(h[:version])
 		rb2g
+	end
+
+	def set_option(key, val)
+		raise Rb2Error, "No value for variable #{key}" if val.nil?
+		var=instance_variable_get("@#{key}")	
+		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
+		clazz=var.class
+		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
+		case var
+		when String,TrueClass,FalseClass
+			var = val
+		when Array
+			var.concat(val)
+			var.uniq!
+		else
+			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
+		end
+		var
+	end
+
+	def delete_option(key, val)
+		raise Rb2Error, "No value for variable #{key}" if val.nil?
+
+		var=instance_variable_get("@#{key}")	
+		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
+
+		default=@@rb2g[key]
+		raise Rb2Error, "No default value found for key=#{key}" if default.nil?
+
+		clazz=var.class
+		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
+		case var
+		when String,TrueClass,FalseClass
+			var = default
+		when Array
+			val.each { |v|
+				var.delete(v)
+			}
+			var = default if var.empty?
+		else
+			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
+		end
+		var
 	end
 
 	def to_hash
 		{
 			:dest => @dest,
 			:logdir => @logdir,
+			:logformat => @logformat,
 			:email => @email,
 			:smtp => @smtp,
 			:version => @version.to_hash,
@@ -196,9 +266,23 @@ class Rb2Globals
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+	def list(compact, indent="\t")
+		KEYS.each { |key|
+			var=instance_variable_get("@#{key}")
+			raise Rb2Error, "Variable not defined for key=#{key}" if var.nil?
+			if var.method_defined? :list
+				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
+		}
+	end
 end
 
 class Rb2Client
+	KEYS=[:client, :address, :conf]
+
 	attr_accessor :client, :address, :conf
 
 	def self.from_hash(client, h=nil)
@@ -244,6 +328,17 @@ class Rb2Client
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+	def list(compact, indent="\t")
+		KEYS.each { |key|
+			var=instance_variable_get("@#{key}")
+			if var.method_defined? :list
+				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
+		}
+	end
 end
 
 class Rb2Config
@@ -273,7 +368,7 @@ class Rb2Config
 		conf=Rb2Config::get_conf(conf)
 		@config_file = conf
 		@config = read_config(conf)
-		@global = @config[:globals]
+		@globals = @config[:globals]
 		@clients = @config[:clients]
 	end
 
@@ -330,6 +425,32 @@ class Rb2Config
 		}
 	end
 
+	# return val == nil if it failed
+	def set_global_option(opts, key)
+		val=opts[key]
+		val=@globals.set_option(key, val)
+		@@log.info "Set global option #{key}=#{val.inspect}"
+	rescue => e
+		@@log.error "Failed to set global option #{key}=#{val}: #{e.message}"
+		val=nil
+	ensure
+		return val
+	end
+
+	def delete_global_option(opts, key)
+		val=opts[key]
+		var=@globals.delete_option(key, val)
+		@@log.info "Deleted global option #{key}=#{val.inspect}"
+	rescue Rb2Error => e
+		@@log.error "Failed to delete global option #{key}=#{val}: #{e.message}"
+		var=nil
+	rescue => e
+		@@log.error "Unexpected exception: #{e.to_s}"
+		var=nil
+	ensure
+		return var
+	end
+
 	def delete_client_conf_array(clist, ilist, key)
 		@@log.debug "clients=#{clist.inspect}"
 		@@log.debug "  array=#{ilist.inspect}"
@@ -367,7 +488,15 @@ class Rb2Config
 
 	def list(compact)
 		# TODO make compact a little more readable
-		puts compact ? self.to_json : JSON.pretty_generate(self)
+		if compact
+			@globals.list(compact,"")
+			@clients.each_pair { |client,conf|
+				puts conf.class
+				puts "#{client}: #{conf.list(compact, "\t")}"
+			}
+		else
+			puts JSON.pretty_generate(self)
+		end
 	end
 
 	def load_config(conf)
@@ -433,7 +562,7 @@ class Rb2Config
 
 	def to_hash
 		{
-			:global=>@global.to_hash,
+			:global=>@globals.to_hash,
 			:clients => @clients.to_hash
 		}
 	end

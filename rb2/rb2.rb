@@ -27,8 +27,18 @@ $log=Logger.set_logger(STDOUT, Logger::INFO)
 
 TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
-YM=Time.now.strftime('%Y%m')
-LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
+YMD=Time.now.strftime('%Y%m')
+
+DEF_LOG_FORMAT="#{ME}.%Y-%m-%d.log"
+LOG_FILE=Time.now.strftime(DEF_LOG_FORMAT)
+
+UINDEX=Process.uid == 0 ? 0 : 1
+LOG_DIR_ARRAY=[ File.join("/var/log", ME), TMP ]
+
+DEF_LOG_DIR=LOG_DIR_ARRAY[UINDEX]
+DEF_LOG_PATH=File.join(DEF_LOG_DIR, LOG_FILE)
+DEF_SMTP="localhost"
+DEF_EMAIL=[]
 
 $opts={
 	:global => false,
@@ -37,6 +47,12 @@ $opts={
 	:includes => [],
 	:excludes => [],
 	:nincrementals => nil,
+	:dest => nil,
+	:logdir => DEF_LOG_DIR,
+	:email => DEF_EMAIL,
+	:smtp => DEF_SMTP,
+	:logformat => DEF_LOG_FORMAT,
+	:syslog => false,
 	:action => :NADA,
 	:daemonize => false,
 	:logger => $log,
@@ -85,6 +101,37 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=:RECONFIG
 	}
 
+	opts.on('-d', "--dest PATH", String, "Backup path") { |path|
+		$opts[:dest]=path
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('-L', "--logdir PATH", String, "Directory for logging, default #{DEF_LOG_DIR}") { |path|
+		$opts[:logdir]=path
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('--log', "--log FORMAT", String, "Name format of log file, default #{DEF_LOG_FORMAT} - allow date/time formats") { |format|
+		$opts[:logformat]=format
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('-m', '--mail EMAIL', Array, "Notification email address(es)") { |email|
+		$opts[:email].concat(email)
+		$opts[:email].uniq!
+		$opts[:action]=:RECONFIG
+	}
+
+	opts.on('--syslog', "TODO use syslog for logging") {
+		$opts[:syslog]=true
+	}
+
+#   -L, --logdir PATH       Directory for logging (root default is /var/log/rubac, otherwise TMP/rubac)
+#       --log [NAME]        TODO Name of log file, (default is rubac.%Y-%m-%d.log)  - allow date/time formats
+#   -m, --mail EMAIL        Notification email, comma separated list
+#       --smtp SERVER       IP Address of smtp server (default is localhost)
+#   -y, --syslog            TODO Use syslog for logging [??] [probably not since we have privlog]
+
 	opts.on('--delete', "Delete specified address, includes, excludes, opts, etc") {
 		$opts[:action]=:DELETE
 	}
@@ -105,6 +152,8 @@ $opts = OParser.parse($opts, HELP) { |opts|
 $log.debug $opts.inspect
 
 Rb2Config.init($opts)
+Rb2Globals.init($opts)
+
 rb2c = Rb2Config.new
 updated = false
 case $opts[:action]
@@ -117,21 +166,34 @@ when :RECONFIG
 		rb2c.set_client_address($opts[:clients], $opts[:address])
 	end
 
-	rb2c.set_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
-	rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
-	rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
+	unless $opts[:clients].empty?
+		rb2c.set_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
+		rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
+		rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
+	end
+	rb2c.set_global_option($opts, :dest) unless $opts[:dest].nil?
+	rb2c.set_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
+	rb2c.set_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
+	rb2c.set_global_option($opts, :email) unless $opts[:email].empty?
+	rb2c.set_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
 
 	updated=true
 
 when :DELETE
 
-	$log.die "Must specify client(s) to delete options" if $opts[:clients].empty?
-
-	rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
-	rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
-	rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
-
-	updated=true
+	unless $opts[:clients].empty?
+		rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
+		rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
+		rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
+		updated=true
+	end
+	res=nil
+	res||=rb2c.delete_global_option($opts, :dest) unless $opts[:dest].nil?
+	res||=rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
+	res||=rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
+	res||=rb2c.delete_global_option($opts, :email) unless $opts[:email].empty?
+	res||=rb2c.delete_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
+	updated=!res.nil?
 
 when :DELETE_CLIENT
 

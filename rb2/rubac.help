@@ -17,6 +17,7 @@
    -i, --include PATH      Include path, comma separate multiple paths
    -x, --exclude PATH      Exclude path, comma separate multiple paths
    -o, --opts OPTS         Extra rsync options
+   -I, --incremental NUM   Number of incremental backups (default is 5)
        --delete            Delete any specified includes, excludes, opts
        --delete [client]   Delete the specified client configuration (does not purge the backups)
    -d, --dest DEST         Local destination path (eg., /mnt/backup)
@@ -29,7 +30,6 @@
 
    -l, --list [compact]    List the includes, excludes, etc., for the named profile
    -u, --update            Perform update backup, no incremental backups
-   -I, --incremental NUM   Number of incremental backups (default is 5)
    -r, --run               Run specified profile
    -s, --snapshot NAME     Created a snapshot based on most recent backup
    -n, --dry-run           Perform a trial run of the backup
