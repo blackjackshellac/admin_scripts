@@ -8,16 +8,17 @@
         "~/bin/rsync_audio.sh"
       ],
       "pre": [
-		"systemctl stop nfs smb nmb"
+		"systemctl stop smb nmb"
       ],
       "post": [
-		"systemctl start nfs smb nmb"
+		"systemctl start smb nmb"
       ],
       "devices": [
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2XC97-part1",
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1",
         "/dev/disk/by-id/ata-ST3000DM001-1E6166_Z1F63QM1",
-        "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1"
+        "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
+        "/dev/disk/by-id/ata-ST5000DM000-1FK178_W4J1HVGR"
       ]
     }
   },
