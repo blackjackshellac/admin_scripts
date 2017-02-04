@@ -189,6 +189,7 @@ class Rb2Globals
 	def self.init(opts)
 		[:dest, :logdir, :logformat, :syslog, :email, :smtp].each { |key|
 			next unless opts.key?(key)
+			raise Rb2Error, "Option value is null for #{key.inspect}" if opts[key].nil?
 			@@rb2g[key]=opts[key]
 		}
 	end
@@ -270,8 +271,8 @@ class Rb2Globals
 	def list(compact, indent="\t")
 		KEYS.each { |key|
 			var=instance_variable_get("@#{key}")
-			raise Rb2Error, "Variable not defined for key=#{key}" if var.nil?
-			if var.method_defined? :list
+			raise Rb2Error, "Variable not defined for key=#{key.inspect}: #{self.to_json}" if var.nil?
+			if var.class.method_defined? :list
 				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
 			else
 				puts "#{indent}#{key}: #{var}"
@@ -332,7 +333,7 @@ class Rb2Client
 	def list(compact, indent="\t")
 		KEYS.each { |key|
 			var=instance_variable_get("@#{key}")
-			if var.method_defined? :list
+			if var.class.method_defined? :list
 				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
 			else
 				puts "#{indent}#{key}: #{var}"
@@ -370,6 +371,8 @@ class Rb2Config
 		@config = read_config(conf)
 		@globals = @config[:globals]
 		@clients = @config[:clients]
+		@@log.debug "globals=#{@globals.inspect}"
+		@@log.debug "clients=#{@clients.inspect}"
 	end
 
 	def set_client_address(clist, alist)
@@ -518,6 +521,7 @@ class Rb2Config
 
 	def read_config(conf)
 		json=load_config(conf)
+		@@log.debug "json=#{json}"
 		config=parse_config(json)
 		config[:globals]=Rb2Globals.from_hash(config[:globals])
 		clients = config[:clients]||{}
@@ -562,7 +566,7 @@ class Rb2Config
 
 	def to_hash
 		{
-			:global=>@globals.to_hash,
+			:globals=>@globals.to_hash,
 			:clients => @clients.to_hash
 		}
 	end

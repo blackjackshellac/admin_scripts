@@ -35,6 +35,7 @@ LOG_FILE=Time.now.strftime(DEF_LOG_FORMAT)
 UINDEX=Process.uid == 0 ? 0 : 1
 LOG_DIR_ARRAY=[ File.join("/var/log", ME), TMP ]
 
+DEF_DEST="/mnt/backup"
 DEF_LOG_DIR=LOG_DIR_ARRAY[UINDEX]
 DEF_LOG_PATH=File.join(DEF_LOG_DIR, LOG_FILE)
 DEF_SMTP="localhost"
@@ -47,7 +48,7 @@ $opts={
 	:includes => [],
 	:excludes => [],
 	:nincrementals => nil,
-	:dest => nil,
+	:dest => DEF_DEST,
 	:logdir => DEF_LOG_DIR,
 	:email => DEF_EMAIL,
 	:smtp => DEF_SMTP,
@@ -188,7 +189,7 @@ when :DELETE
 		updated=true
 	end
 	res=nil
-	res||=rb2c.delete_global_option($opts, :dest) unless $opts[:dest].nil?
+	res||=rb2c.delete_global_option($opts, :dest) unless $opts[:dest].eql?(DEF_DEST)
 	res||=rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
 	res||=rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
 	res||=rb2c.delete_global_option($opts, :email) unless $opts[:email].empty?

@@ -25,3 +25,12 @@ $ export PATH=$(addPath.rb -p ~/bin)
 ### fwscan
 
 * script to scan firewall log messages
+
+### rfoutlet
+
+* script to turn rf outlets on/off using Raspberry PI with rf receiver/transmitter
+
+### rb2
+
+* rubac version 2, ruby backup frontend to rsync
+
