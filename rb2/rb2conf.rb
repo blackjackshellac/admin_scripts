@@ -67,6 +67,8 @@ class Rb2Error < StandardError
 end
 
 class Rb2Version
+	KEYS_VERSION=[:major, :minor, :revision]
+
 	RB2V_MAJOR=0
 	RB2V_MINOR=0
 	RB2V_REVISION=0
@@ -93,10 +95,21 @@ class Rb2Version
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+	def list(compact, indent="\t")
+		KEYS_VERSION.each { |key|
+			var=instance_variable_get("@#{key}")
+			if var.class.method_defined? :list
+				var.list(compact, "\t"+indent)
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
+		}
+	end
 end
 
 class Rb2Conf
-	KEYS=[:opts, :includes, :excludes, :nincrementals, :compress]
+	KEYS_CONF=[:opts, :includes, :excludes, :nincrementals, :compress]
 	RB2CONF_NINCREMENTALS=5
 	RB2CONF_COMPRESS=false
 
@@ -163,15 +176,19 @@ class Rb2Conf
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_CONF.each { |key|
 			var=instance_variable_get("@#{key}")
-			puts "#{indent}#{key}: #{var}"
+			if var.class.method_defined? :list
+				var.list(compact, "\t"+indent)
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
 		}
 	end
 end
 
 class Rb2Globals
-	KEYS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
+	KEYS_GLOBALS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
 
 	@@rb2g={
 		:dest => "/mnt/backup",
@@ -269,11 +286,12 @@ class Rb2Globals
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_GLOBALS.each { |key|
 			var=instance_variable_get("@#{key}")
 			raise Rb2Error, "Variable not defined for key=#{key.inspect}: #{self.to_json}" if var.nil?
 			if var.class.method_defined? :list
-				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+				puts "#{indent}#{key}:"
+				var.list(compact, "\t"+indent)
 			else
 				puts "#{indent}#{key}: #{var}"
 			end
@@ -282,7 +300,7 @@ class Rb2Globals
 end
 
 class Rb2Client
-	KEYS=[:client, :address, :conf]
+	KEYS_CLIENT=[:client, :address, :conf]
 
 	attr_accessor :client, :address, :conf
 
@@ -331,10 +349,11 @@ class Rb2Client
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_CLIENT.each { |key|
 			var=instance_variable_get("@#{key}")
 			if var.class.method_defined? :list
-				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+				puts "#{indent}#{key}:"
+				var.list(compact, "\t"+indent)
 			else
 				puts "#{indent}#{key}: #{var}"
 			end
@@ -489,13 +508,15 @@ class Rb2Config
 		}
 	end
 
-	def list(compact)
+	def list(compact, indent="")
 		# TODO make compact a little more readable
 		if compact
-			@globals.list(compact,"")
+			puts "#{indent}Globals"
+			@globals.list(compact,"\t"+indent)
+			puts "#{indent}Clients"
 			@clients.each_pair { |client,conf|
-				puts conf.class
-				puts "#{client}: #{conf.list(compact, "\t")}"
+				puts "#{indent}#{client}:"
+				conf.list(compact, "\t"+indent)
 			}
 		else
 			puts JSON.pretty_generate(self)
