@@ -51,18 +51,26 @@ $opts={
 }
 
 def random_delay_range(delay)
-	delay=[0,1] if delay.nil?
+	return 0 if delay.nil?
+	raise "delay should be nil or Array" unless delay.class == Array
+
 	delay.each_index { |i|
+		next if delay[i].nil?
 		delay[i]=delay[i].to_i
-		$log.die "Specified delay is not an integer: #{delay[i]}" unless delay[i].is_a?(Integer)
 	}
+
 	sdelay=delay[0]
+	$log.die "delay array cannot be null" if sdelay.nil?
+	$log.die "Start delay is not an integer: #{sdelay.class}" unless sdelay.is_a?(Integer)
+
 	edelay=delay[1]
 	if edelay.nil?
 		# --sunrise 1800 will be a random delay from -900 to 900 seconds around the time of sunrise
 		sdelay = sdelay / 2
 		edelay = sdelay
 		sdelay = -sdelay
+	else
+		$log.die "End delay is not an integer: #{edelay}" unless edelay.is_a?(Integer)
 	end
 	delay=Random.rand(sdelay...edelay)
 	$log.debug "Random integer between #{sdelay} and #{edelay}: #{delay}"
@@ -143,7 +151,8 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 	sunrise = st.rise(now, $opts[:lat], $opts[:long])
 	sunset  = st.set(now, $opts[:lat], $opts[:long])
 
-	$log.debug "Sunrise/Sunset = #{sunrise.localtime}/#{sunset.localtime}"
+	$log.debug "Sunrise = #{sunrise.localtime}"
+	$log.debug " Sunset = #{sunset.localtime}"
 
 	if sunrise < now
 		sunrise = sunrise+86400
@@ -164,7 +173,7 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 
 	unless $opts[:sunrise].nil?
 		$log.debug "Random sunrise adjustment #{$opts[:sunrise]}"
-		secs2sunrise+=$opts[:sunrise]
+		secs2sunrise-=$opts[:sunrise]
 		secs2sunrise = 0 if secs2sunrise < 0
 
 		$opts[:sunrise]=secs2sunrise
@@ -176,7 +185,7 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 
 	unless $opts[:sunset].nil?
 		$log.debug "Random sunset adjustment #{$opts[:sunset]}"
-		secs2sunset += $opts[:sunset]
+		secs2sunset -= $opts[:sunset]
 		secs2sunset = 0 if secs2sunset < 0
 		$opts[:sunset]=secs2sunset
 		$opts[:sched][secs2sunset]=RFOutlet::ON

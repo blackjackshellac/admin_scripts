@@ -16,9 +16,9 @@ DEBUG 2017-01-17 11:29:50 -0500: {71625=>"on", 78825=>"off", 19366=>"on", 40966=
 
 Turn on outlet #3 at between 1800 seconds before and 3600 seconds after sunset, note that you have to use an equal sign with the argument containing a negative number,
 
-./rfoutlet.rb ... --sunset=-1800,3600 ... -o 3 --on
+./rfoutlet.rb ... --sunset=-1800,3600 ... -o3 
 
 Turn on outlet #3 at sunset,
 
-./rfoutlet.rb ... --sunset -o3 --on
+./rfoutlet.rb ... --sunset -o3
 
