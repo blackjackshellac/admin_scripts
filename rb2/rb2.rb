@@ -43,6 +43,7 @@ DEF_EMAIL=[]
 
 $opts={
 	:global => false,
+	:dryrun => false,
 	:clients => [],
 	:address => [],
 	:includes => [],
@@ -102,9 +103,9 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=:RECONFIG
 	}
 
-	opts.on('-d', "--dest PATH", String, "Backup path") { |path|
+	opts.on('-d', "--init PATH", String, "Set and initialize backup destination path") { |path|
 		$opts[:dest]=path
-		$opts[:action]=:RECONFIG
+		$opts[:action]=:INIT
 	}
 
 	opts.on('-L', "--logdir PATH", String, "Directory for logging, default #{DEF_LOG_DIR}") { |path|
@@ -145,6 +146,22 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=compact.nil? ? :LIST : :LIST_COMPACT
 	}
 
+#   -u, --update            Perform update backup, no incremental backups
+#   -r, --run               Run specified profile
+#   -s, --snapshot NAME     Created a snapshot based on most recent backup
+#   -n, --dry-run           Perform a trial run of the backup
+	opts.on('-r', '--run', "Run complete backup for given clients") {
+		$opts[:action]=:RUN
+	}
+
+	opts.on('-u', '--update', "Update latest complete backup for given clients") {
+		$opts[:action]=:UPDATE
+	}
+
+	opts.on('-n', '--dry-run', "Perform trial run of backup") {
+		$opts[:dryrun]=true
+	}
+ 
 	opts.on('-b', '--bg', "Daemonize and run in background") {
 		$opts[:daemonize]=true
 	}
@@ -154,10 +171,14 @@ $log.debug $opts.inspect
 
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
+Rb2Util.init($opts)
 
 rb2c = Rb2Config.new
 updated = false
 case $opts[:action]
+when :INIT
+	dest=$opts[:dest]
+	rb2c.set_global_option($opts, :dest) if Rb2Util.init_backup_dest(dest)
 when :RECONFIG
 	clen=$opts[:clients].length
 	unless $opts[:address].empty?
@@ -172,7 +193,6 @@ when :RECONFIG
 		rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
 		rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
 	end
-	rb2c.set_global_option($opts, :dest) unless $opts[:dest].nil?
 	rb2c.set_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
 	rb2c.set_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
 	rb2c.set_global_option($opts, :email) unless $opts[:email].empty?
@@ -208,6 +228,10 @@ when :LIST
 	rb2c.list(false)
 when :LIST_COMPACT
 	rb2c.list(true)
+when :UPDATE
+
+when :RUN
+
 when :NADA
 	$log.die "No action options specified"
 else

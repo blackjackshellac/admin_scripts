@@ -244,6 +244,13 @@ class Rb2Globals
 		var
 	end
 
+	def get_option(key)
+		raise Rb2Error, "Unknown global variable: #{key}" unless KEYS_GLOBALS.include?(key)
+		var=instance_variable_get("@#{key}")
+        raise Rb2Error, "Unknown instance variable: #{key}" if var.nil?
+		var
+	end
+
 	def delete_option(key, val)
 		raise Rb2Error, "No value for variable #{key}" if val.nil?
 
@@ -459,6 +466,14 @@ class Rb2Config
 		return val
 	end
 
+	def get_global_option(key)
+		@globals.get_option(key)
+	rescue Rb2Error => e
+		$log.die "Failed to get global option: #{key} [#{e.messsage}]"
+	rescue => e
+		$log.die "Failed to get global option: #{key} [#{e.to_s}]"
+	end
+
 	def delete_global_option(opts, key)
 		val=opts[key]
 		var=@globals.delete_option(key, val)
@@ -595,6 +610,45 @@ class Rb2Config
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+end
+
+class Rb2Util
+	# class variables
+	@@log = Logger.new(STDERR)
+
+	def self.init(opts)
+		@@log = opts[:logger] if opts.key?(:logger)
+	end
+
+	def self.init_backup_dest(dest)
+		$log.die "Destination is not a directory: #{dest}" if File.exist?(dest) && !File.directory?(dest)
+
+		create_backup_destination(dest)
+		initialize_backup_destination(dest)
+	end
+
+	def self.create_backup_destination(dest)
+		FileUtils.mkdir_p(dest)
+	rescue => e
+		@@log.die "Failed to create backup destination #{dest} [#{e.to_s}]"
+	end
+
+	def self.initialize_backup_destination(dest)
+		mask=File.umask(0066)
+		init = File.join(dest, "rb2.init")
+		FileUtils.touch(init)
+		FileUtils.chmod(0600, init)
+	rescue Errno::EACCES => e
+		@@log.die "access denied, initializing destination #{dest}"
+	rescue Errno::EEXIST => e
+		@@log.warn "backup destination #{dest} is already initialized"
+	rescue => e
+		@@log.die "Failed initializing destination #{dest}: #{e.to_s}"
+	ensure
+		File.umask(mask)
+	end
+	true
 
 end
 
