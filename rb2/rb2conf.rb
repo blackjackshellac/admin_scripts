@@ -69,18 +69,24 @@ end
 class Rb2Version
 	KEYS_VERSION=[:major, :minor, :revision]
 
-	RB2V_MAJOR=0
+	RB2V_MAJOR=2
 	RB2V_MINOR=0
-	RB2V_REVISION=0
+	RB2V_REV=0
 
 	attr_accessor :major, :minor, :revision
 
 	def self.from_hash(h)
 		h={} if h.nil?
 		rb2v = Rb2Version.new
-		rb2v.major = h[:major]||RB2V_MAJOR
-		rb2v.minor = h[:minor]||RB2V_MINOR
-		rb2v.revision = h[:revision]||RB2V_REVISION
+		rb2v.major = h[:major].to_i||RB2V_MAJOR
+		rb2v.minor = h[:minor].to_i||RB2V_MINOR
+		rb2v.revision = h[:revision]||RB2V_REV
+		if RB2V_MAJOR != h[:major].to_i
+			# TODO can detect config version changes here
+			rb2v.major=RB2V_MAJOR
+			rb2v.minor=RB2V_MINOR
+			rb2v.revision=RB2V_REV
+		end
 		rb2v
 	end
 
@@ -105,6 +111,10 @@ class Rb2Version
 				puts "#{indent}#{key}: #{var}"
 			end
 		}
+	end
+
+	def to_s
+		"%s %s.%s.%s" % [ Rb2Config::CONF_NAME, @major, @minor, @revision ]
 	end
 end
 
@@ -369,8 +379,9 @@ class Rb2Client
 end
 
 class Rb2Config
-	CONF_ROOT="/etc/rb2/rb2.json"
-	CONF_USER="#{ENV['HOME']}/.config/rb2/rb2.json"
+	CONF_NAME="rb2"
+	CONF_ROOT="/etc/rb2/#{CONF_NAME}.json"
+	CONF_USER="#{ENV['HOME']}/.config/rb2/#{CONF_NAME}.json"
 
 	# class variables
 	@@log = Logger.new(STDERR)
@@ -486,6 +497,10 @@ class Rb2Config
 		var=nil
 	ensure
 		return var
+	end
+
+	def get_version
+		@globals.get_option(:version)
 	end
 
 	def delete_client_conf_array(clist, ilist, key)

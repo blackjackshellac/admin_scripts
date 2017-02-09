@@ -165,6 +165,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-b', '--bg', "Daemonize and run in background") {
 		$opts[:daemonize]=true
 	}
+
+	opts.on('-V', '--version', "Display the version") {
+		$opts[:action]=:VERSION
+	}
 }
 
 $log.debug $opts.inspect
@@ -232,6 +236,8 @@ when :UPDATE
 
 when :RUN
 
+when :VERSION
+	puts rb2c.get_version.to_s
 when :NADA
 	$log.die "No action options specified"
 else
