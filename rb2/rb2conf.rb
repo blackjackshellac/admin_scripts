@@ -251,6 +251,7 @@ class Rb2Globals
 		else
 			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
 		end
+		instance_variable_set("@#{key}", val)
 		var
 	end
 
@@ -401,7 +402,7 @@ class Rb2Config
 		conf
 	end
 
-	attr_reader :config_file, :config, :globals, :clients
+	attr_reader :config_file, :config, :globals, :clients, :updated
 	def initialize(conf=nil)
 		conf=Rb2Config::get_conf(conf)
 		@config_file = conf
@@ -410,6 +411,8 @@ class Rb2Config
 		@clients = @config[:clients]
 		@@log.debug "globals=#{@globals.inspect}"
 		@@log.debug "clients=#{@clients.inspect}"
+
+		@updated = false
 	end
 
 	def set_client_address(clist, alist)
@@ -470,6 +473,7 @@ class Rb2Config
 		val=opts[key]
 		val=@globals.set_option(key, val)
 		@@log.info "Set global option #{key}=#{val.inspect}"
+		@updated = true
 	rescue => e
 		@@log.error "Failed to set global option #{key}=#{val}: #{e.message}"
 		val=nil
@@ -489,6 +493,7 @@ class Rb2Config
 		val=opts[key]
 		var=@globals.delete_option(key, val)
 		@@log.info "Deleted global option #{key}=#{val.inspect}"
+		@updated = true
 	rescue Rb2Error => e
 		@@log.error "Failed to delete global option #{key}=#{val}: #{e.message}"
 		var=nil
@@ -515,6 +520,7 @@ class Rb2Config
 			end
 			begin
 				@clients[client].delete_conf_key_array(key, ilist)
+				@updated = true 
 			rescue Rb2Error => e
 				@@log.error "#{client}: "+e.to_s
 			end
@@ -534,7 +540,11 @@ class Rb2Config
 		clist.each { |client|
 			client = client.to_sym
 			@@log.debug "Deleting client #{client}: #{@clients[client].inspect}"
-			@@log.warn "Client not found #{client}" if @clients.delete(client).nil?
+			if @clients.delete(client).nil?
+				@@log.warn "Client not found #{client}"
+				next
+			end
+			@updated = true
 		}
 	end
 
@@ -609,9 +619,11 @@ class Rb2Config
 		raise "save_config_json: Unexpected exception: #{e.to_s}"
 	end
 
-	def save_config(conf=nil)
+	def save_config(opts={:force=>false})
+		conf=opts[:conf]
 		@config_file = conf unless conf.nil?
 		create_config_dir
+		return unless @updated == true
 		save_config_json
 	end
 
@@ -636,34 +648,38 @@ class Rb2Util
 		@@log = opts[:logger] if opts.key?(:logger)
 	end
 
-	def self.init_backup_dest(dest)
-		$log.die "Destination is not a directory: #{dest}" if File.exist?(dest) && !File.directory?(dest)
-
+	def self.init_backup_dest(rb2c)
+		dest=rb2c.get_global_option(:dest)
+		raise Rb2Error, "Destination is not a directory: #{dest}" if File.exist?(dest) && !File.directory?(dest)
 		create_backup_destination(dest)
 		initialize_backup_destination(dest)
+	rescue Rb2Error => e
+		@@log.die "Failed to initialize backup dest=#{dest}: #{e.message}"
+	rescue => e
+		@@log.die "Failed to initialize backup dest=#{dest} unknown: #{e.to_s}"
 	end
 
 	def self.create_backup_destination(dest)
 		FileUtils.mkdir_p(dest)
 	rescue => e
-		@@log.die "Failed to create backup destination #{dest} [#{e.to_s}]"
+		raise Rb2Error, "Failed to create backup destination #{dest} [#{e.to_s}]"
 	end
 
 	def self.initialize_backup_destination(dest)
 		mask=File.umask(0066)
 		init = File.join(dest, "rb2.init")
+		raise Errno::EEXIST, "file #{init} already exists" if File.exist?(init)
 		FileUtils.touch(init)
 		FileUtils.chmod(0600, init)
 	rescue Errno::EACCES => e
-		@@log.die "access denied, initializing destination #{dest}"
+		raise Rb2Error, "access denied, initializing destination #{dest}"
 	rescue Errno::EEXIST => e
-		@@log.warn "backup destination #{dest} is already initialized"
+		@@log.warn "backup destination #{dest} is already initialized: #{e.message}"
 	rescue => e
-		@@log.die "Failed initializing destination #{dest}: #{e.to_s}"
+		raise Rb2Error, "Failed initializing destination #{dest}: #{e.to_s}"
 	ensure
 		File.umask(mask)
 	end
 	true
-
 end
 
