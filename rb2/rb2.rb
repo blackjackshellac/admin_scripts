@@ -22,6 +22,7 @@ HELP=File.join(MD, ME+".help")
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "rb2conf")
+require_relative File.join(MD, "rsync")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
@@ -177,6 +178,7 @@ $log.debug $opts.inspect
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
 Rb2Util.init($opts)
+Rsync.init($opts)
 
 rb2c = Rb2Config.new
 case $opts[:action]
@@ -226,9 +228,11 @@ when :LIST
 when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
-
+	rsync=Rsync.new(rb2c)
+	rsync.update($opts[:clients])
 when :RUN
-
+	rsync=Rsync.new(rb2c)
+	rsync.run($opts[:clients])
 when :VERSION
 	puts rb2c.get_version.to_s
 when :NADA

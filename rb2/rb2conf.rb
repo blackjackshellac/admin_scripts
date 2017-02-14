@@ -124,7 +124,6 @@ class Rb2Conf
 	RB2CONF_COMPRESS=false
 
 	attr_accessor :opts, :includes, :excludes, :nincrementals, :compress
-
 	def initialize
 		@opts=""
 		@includes=[]
@@ -502,6 +501,18 @@ class Rb2Config
 		var=nil
 	ensure
 		return var
+	end
+
+	def get_client_conf(client)
+		puts "client=#{client}"
+		client=client.to_sym
+		puts "clients="+@clients.inspect
+		raise Rb2Error, "Client #{client} config not found" unless @clients.key?(client)
+		@clients[client]
+	rescue Rb2Error => e
+		$log.die "Failed to get #{client} config: #{key} [#{e.messsage}]"
+	rescue => e
+		$log.die "Failed to get #{client} config: #{key} [#{e.to_s}]"
 	end
 
 	def get_version
