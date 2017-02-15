@@ -27,7 +27,7 @@ hc.from_file(CFG_PATH)
 
 $opts={
 	:action=>:MOUNT,
-	:scripts=>["ls -l"],
+	:scripts=>["ls -l","df -h"],
 	:default=>"default",
 	:name=>nil,
 	:host=>HOSTNAME
