@@ -67,18 +67,26 @@ class Rb2Error < StandardError
 end
 
 class Rb2Version
-	RB2V_MAJOR=0
+	KEYS_VERSION=[:major, :minor, :revision]
+
+	RB2V_MAJOR=2
 	RB2V_MINOR=0
-	RB2V_REVISION=0
+	RB2V_REV=0
 
 	attr_accessor :major, :minor, :revision
 
 	def self.from_hash(h)
 		h={} if h.nil?
 		rb2v = Rb2Version.new
-		rb2v.major = h[:major]||RB2V_MAJOR
-		rb2v.minor = h[:minor]||RB2V_MINOR
-		rb2v.revision = h[:revision]||RB2V_REVISION
+		rb2v.major = h[:major].to_i||RB2V_MAJOR
+		rb2v.minor = h[:minor].to_i||RB2V_MINOR
+		rb2v.revision = h[:revision]||RB2V_REV
+		if RB2V_MAJOR != h[:major].to_i
+			# TODO can detect config version changes here
+			rb2v.major=RB2V_MAJOR
+			rb2v.minor=RB2V_MINOR
+			rb2v.revision=RB2V_REV
+		end
 		rb2v
 	end
 
@@ -93,15 +101,29 @@ class Rb2Version
 	def to_json(*a)
 		to_hash.to_json(*a)
 	end
+
+	def list(compact, indent="\t")
+		KEYS_VERSION.each { |key|
+			var=instance_variable_get("@#{key}")
+			if var.class.method_defined? :list
+				var.list(compact, "\t"+indent)
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
+		}
+	end
+
+	def to_s
+		"%s %s.%s.%s" % [ Rb2Config::CONF_NAME, @major, @minor, @revision ]
+	end
 end
 
 class Rb2Conf
-	KEYS=[:opts, :includes, :excludes, :nincrementals, :compress]
+	KEYS_CONF=[:opts, :includes, :excludes, :nincrementals, :compress]
 	RB2CONF_NINCREMENTALS=5
 	RB2CONF_COMPRESS=false
 
 	attr_accessor :opts, :includes, :excludes, :nincrementals, :compress
-
 	def initialize
 		@opts=""
 		@includes=[]
@@ -163,15 +185,19 @@ class Rb2Conf
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_CONF.each { |key|
 			var=instance_variable_get("@#{key}")
-			puts "#{indent}#{key}: #{var}"
+			if var.class.method_defined? :list
+				var.list(compact, "\t"+indent)
+			else
+				puts "#{indent}#{key}: #{var}"
+			end
 		}
 	end
 end
 
 class Rb2Globals
-	KEYS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
+	KEYS_GLOBALS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
 
 	@@rb2g={
 		:dest => "/mnt/backup",
@@ -224,6 +250,14 @@ class Rb2Globals
 		else
 			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
 		end
+		instance_variable_set("@#{key}", val)
+		var
+	end
+
+	def get_option(key)
+		raise Rb2Error, "Unknown global variable: #{key}" unless KEYS_GLOBALS.include?(key)
+		var=instance_variable_get("@#{key}")
+        raise Rb2Error, "Unknown instance variable: #{key}" if var.nil?
 		var
 	end
 
@@ -269,11 +303,12 @@ class Rb2Globals
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_GLOBALS.each { |key|
 			var=instance_variable_get("@#{key}")
 			raise Rb2Error, "Variable not defined for key=#{key.inspect}: #{self.to_json}" if var.nil?
 			if var.class.method_defined? :list
-				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+				puts "#{indent}#{key}:"
+				var.list(compact, "\t"+indent)
 			else
 				puts "#{indent}#{key}: #{var}"
 			end
@@ -282,7 +317,7 @@ class Rb2Globals
 end
 
 class Rb2Client
-	KEYS=[:client, :address, :conf]
+	KEYS_CLIENT=[:client, :address, :conf]
 
 	attr_accessor :client, :address, :conf
 
@@ -331,10 +366,11 @@ class Rb2Client
 	end
 
 	def list(compact, indent="\t")
-		KEYS.each { |key|
+		KEYS_CLIENT.each { |key|
 			var=instance_variable_get("@#{key}")
 			if var.class.method_defined? :list
-				puts "#{indent}#{key}: #{var.list(compact, "\t"+indent)}"
+				puts "#{indent}#{key}:"
+				var.list(compact, "\t"+indent)
 			else
 				puts "#{indent}#{key}: #{var}"
 			end
@@ -343,8 +379,9 @@ class Rb2Client
 end
 
 class Rb2Config
-	CONF_ROOT="/etc/rb2/rb2.json"
-	CONF_USER="#{ENV['HOME']}/.config/rb2/rb2.json"
+	CONF_NAME="rb2"
+	CONF_ROOT="/etc/rb2/#{CONF_NAME}.json"
+	CONF_USER="#{ENV['HOME']}/.config/rb2/#{CONF_NAME}.json"
 
 	# class variables
 	@@log = Logger.new(STDERR)
@@ -364,7 +401,7 @@ class Rb2Config
 		conf
 	end
 
-	attr_reader :config_file, :config, :globals, :clients
+	attr_reader :config_file, :config, :globals, :clients, :updated
 	def initialize(conf=nil)
 		conf=Rb2Config::get_conf(conf)
 		@config_file = conf
@@ -373,6 +410,8 @@ class Rb2Config
 		@clients = @config[:clients]
 		@@log.debug "globals=#{@globals.inspect}"
 		@@log.debug "clients=#{@clients.inspect}"
+
+		@updated = false
 	end
 
 	def set_client_address(clist, alist)
@@ -433,6 +472,7 @@ class Rb2Config
 		val=opts[key]
 		val=@globals.set_option(key, val)
 		@@log.info "Set global option #{key}=#{val.inspect}"
+		@updated = true
 	rescue => e
 		@@log.error "Failed to set global option #{key}=#{val}: #{e.message}"
 		val=nil
@@ -440,10 +480,19 @@ class Rb2Config
 		return val
 	end
 
+	def get_global_option(key)
+		@globals.get_option(key)
+	rescue Rb2Error => e
+		$log.die "Failed to get global option: #{key} [#{e.messsage}]"
+	rescue => e
+		$log.die "Failed to get global option: #{key} [#{e.to_s}]"
+	end
+
 	def delete_global_option(opts, key)
 		val=opts[key]
 		var=@globals.delete_option(key, val)
 		@@log.info "Deleted global option #{key}=#{val.inspect}"
+		@updated = true
 	rescue Rb2Error => e
 		@@log.error "Failed to delete global option #{key}=#{val}: #{e.message}"
 		var=nil
@@ -452,6 +501,22 @@ class Rb2Config
 		var=nil
 	ensure
 		return var
+	end
+
+	def get_client_conf(client)
+		puts "client=#{client}"
+		client=client.to_sym
+		puts "clients="+@clients.inspect
+		raise Rb2Error, "Client #{client} config not found" unless @clients.key?(client)
+		@clients[client]
+	rescue Rb2Error => e
+		$log.die "Failed to get #{client} config: #{key} [#{e.messsage}]"
+	rescue => e
+		$log.die "Failed to get #{client} config: #{key} [#{e.to_s}]"
+	end
+
+	def get_version
+		@globals.get_option(:version)
 	end
 
 	def delete_client_conf_array(clist, ilist, key)
@@ -466,6 +531,7 @@ class Rb2Config
 			end
 			begin
 				@clients[client].delete_conf_key_array(key, ilist)
+				@updated = true 
 			rescue Rb2Error => e
 				@@log.error "#{client}: "+e.to_s
 			end
@@ -485,17 +551,23 @@ class Rb2Config
 		clist.each { |client|
 			client = client.to_sym
 			@@log.debug "Deleting client #{client}: #{@clients[client].inspect}"
-			@@log.warn "Client not found #{client}" if @clients.delete(client).nil?
+			if @clients.delete(client).nil?
+				@@log.warn "Client not found #{client}"
+				next
+			end
+			@updated = true
 		}
 	end
 
-	def list(compact)
+	def list(compact, indent="")
 		# TODO make compact a little more readable
 		if compact
-			@globals.list(compact,"")
+			puts "#{indent}Globals"
+			@globals.list(compact,"\t"+indent)
+			puts "#{indent}Clients"
 			@clients.each_pair { |client,conf|
-				puts conf.class
-				puts "#{client}: #{conf.list(compact, "\t")}"
+				puts "#{indent}#{client}:"
+				conf.list(compact, "\t"+indent)
 			}
 		else
 			puts JSON.pretty_generate(self)
@@ -558,9 +630,11 @@ class Rb2Config
 		raise "save_config_json: Unexpected exception: #{e.to_s}"
 	end
 
-	def save_config(conf=nil)
+	def save_config(opts={:force=>false})
+		conf=opts[:conf]
 		@config_file = conf unless conf.nil?
 		create_config_dir
+		return unless @updated == true
 		save_config_json
 	end
 
@@ -575,5 +649,48 @@ class Rb2Config
 		to_hash.to_json(*a)
 	end
 
+end
+
+class Rb2Util
+	# class variables
+	@@log = Logger.new(STDERR)
+
+	def self.init(opts)
+		@@log = opts[:logger] if opts.key?(:logger)
+	end
+
+	def self.init_backup_dest(rb2c)
+		dest=rb2c.get_global_option(:dest)
+		raise Rb2Error, "Destination is not a directory: #{dest}" if File.exist?(dest) && !File.directory?(dest)
+		create_backup_destination(dest)
+		initialize_backup_destination(dest)
+	rescue Rb2Error => e
+		@@log.die "Failed to initialize backup dest=#{dest}: #{e.message}"
+	rescue => e
+		@@log.die "Failed to initialize backup dest=#{dest} unknown: #{e.to_s}"
+	end
+
+	def self.create_backup_destination(dest)
+		FileUtils.mkdir_p(dest)
+	rescue => e
+		raise Rb2Error, "Failed to create backup destination #{dest} [#{e.to_s}]"
+	end
+
+	def self.initialize_backup_destination(dest)
+		mask=File.umask(0066)
+		init = File.join(dest, "rb2.init")
+		raise Errno::EEXIST, "file #{init} already exists" if File.exist?(init)
+		FileUtils.touch(init)
+		FileUtils.chmod(0600, init)
+	rescue Errno::EACCES => e
+		raise Rb2Error, "access denied, initializing destination #{dest}"
+	rescue Errno::EEXIST => e
+		@@log.warn "backup destination #{dest} is already initialized: #{e.message}"
+	rescue => e
+		raise Rb2Error, "Failed initializing destination #{dest}: #{e.to_s}"
+	ensure
+		File.umask(mask)
+	end
+	true
 end
 

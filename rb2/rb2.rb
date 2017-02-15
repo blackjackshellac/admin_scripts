@@ -22,6 +22,7 @@ HELP=File.join(MD, ME+".help")
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "rb2conf")
+require_relative File.join(MD, "rsync")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
@@ -43,6 +44,7 @@ DEF_EMAIL=[]
 
 $opts={
 	:global => false,
+	:dryrun => false,
 	:clients => [],
 	:address => [],
 	:includes => [],
@@ -53,6 +55,7 @@ $opts={
 	:email => DEF_EMAIL,
 	:smtp => DEF_SMTP,
 	:logformat => DEF_LOG_FORMAT,
+	:conf => nil,
 	:syslog => false,
 	:action => :NADA,
 	:daemonize => false,
@@ -102,9 +105,9 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=:RECONFIG
 	}
 
-	opts.on('-d', "--dest PATH", String, "Backup path") { |path|
-		$opts[:dest]=path
-		$opts[:action]=:RECONFIG
+	opts.on('-d', "--init [PATH]", String, "Set and initialize backup destination path") { |path|
+		$opts[:dest]=path unless path.nil?
+		$opts[:action]=:INIT
 	}
 
 	opts.on('-L', "--logdir PATH", String, "Directory for logging, default #{DEF_LOG_DIR}") { |path|
@@ -145,8 +148,28 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=compact.nil? ? :LIST : :LIST_COMPACT
 	}
 
+#   -u, --update            Perform update backup, no incremental backups
+#   -r, --run               Run specified profile
+#   -s, --snapshot NAME     Created a snapshot based on most recent backup
+#   -n, --dry-run           Perform a trial run of the backup
+	opts.on('-r', '--run', "Run complete backup for given clients") {
+		$opts[:action]=:RUN
+	}
+
+	opts.on('-u', '--update', "Update latest complete backup for given clients") {
+		$opts[:action]=:UPDATE
+	}
+
+	opts.on('-n', '--dry-run', "Perform trial run of backup") {
+		$opts[:dryrun]=true
+	}
+ 
 	opts.on('-b', '--bg', "Daemonize and run in background") {
 		$opts[:daemonize]=true
+	}
+
+	opts.on('-V', '--version', "Display the version") {
+		$opts[:action]=:VERSION
 	}
 }
 
@@ -154,10 +177,16 @@ $log.debug $opts.inspect
 
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
+Rb2Util.init($opts)
+Rsync.init($opts)
 
 rb2c = Rb2Config.new
-updated = false
 case $opts[:action]
+when :INIT
+	dest=$opts[:dest]
+	rb2c.set_global_option($opts, :dest)
+	puts "rb2c="+rb2c.inspect
+	Rb2Util.init_backup_dest(rb2c)
 when :RECONFIG
 	clen=$opts[:clients].length
 	unless $opts[:address].empty?
@@ -172,47 +201,45 @@ when :RECONFIG
 		rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
 		rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
 	end
-	rb2c.set_global_option($opts, :dest) unless $opts[:dest].nil?
 	rb2c.set_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
 	rb2c.set_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
 	rb2c.set_global_option($opts, :email) unless $opts[:email].empty?
 	rb2c.set_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
-
-	updated=true
-
 when :DELETE
 
 	unless $opts[:clients].empty?
 		rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
 		rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
 		rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
-		updated=true
 	end
-	res=nil
-	res||=rb2c.delete_global_option($opts, :dest) unless $opts[:dest].eql?(DEF_DEST)
-	res||=rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
-	res||=rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
-	res||=rb2c.delete_global_option($opts, :email) unless $opts[:email].empty?
-	res||=rb2c.delete_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
-	updated=!res.nil?
+	rb2c.delete_global_option($opts, :dest) unless $opts[:dest].eql?(DEF_DEST)
+	rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
+	rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
+	rb2c.delete_global_option($opts, :email) unless $opts[:email].empty?
+	rb2c.delete_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
 
 when :DELETE_CLIENT
 
 	$log.die "Must specify client to delete" if $opts[:clients].empty?
 	$log.debug "Deleting clients: #{$opts[:clients].inspect}"
 	rb2c.delete_clients($opts[:clients])
-
-	updated=true
-
 when :LIST
 	rb2c.list(false)
 when :LIST_COMPACT
 	rb2c.list(true)
+when :UPDATE
+	rsync=Rsync.new(rb2c)
+	rsync.update($opts[:clients])
+when :RUN
+	rsync=Rsync.new(rb2c)
+	rsync.run($opts[:clients])
+when :VERSION
+	puts rb2c.get_version.to_s
 when :NADA
 	$log.die "No action options specified"
 else
 	raise "Shouldn't get here"
 end
 
-rb2c.save_config if updated #(Rb2Config::CONF_ROOT)
+rb2c.save_config #(Rb2Config::CONF_ROOT)
 
