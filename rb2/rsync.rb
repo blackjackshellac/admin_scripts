@@ -13,9 +13,17 @@ class Rsync
 		@@tmp = opts[:tmp] if opts.key?(:tmp)
 	end
 
-	attr_reader :conf, :client, :client_config, :sshopts, :excludes, :includes
-	def initialize(conf)
-		@conf=conf
+	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes
+	def initialize(rb2conf)
+		@rb2conf=rb2conf
+
+		globals=@rb2conf.globals #:dest, :logdir, :logformat, :syslog, :email, :smtp
+		@dest=globals.dest
+		@logdir=globals.logdir
+		@logformat=globals.logformat
+		@syslog=globals.syslog
+		@email=globals.email
+		@smtp=globals.smtp
 
 		@sshopts = {}
 		if ENV['RUBAC_SSHOPTS']
@@ -71,11 +79,20 @@ class Rsync
 	end
 
 	def go(action)
+		#puts @client_config.inspect
+		addr=@client_config.address
+		conf=@client_config.conf
+		# :opts, :includes, :excludes, :nincrementals, :compress
+		opts=conf.opts
+		includes=conf.includes
+		excludes=conf.excludes
+		nincrementals=conf.nincrementals
+
 		case action
 		when :run
-			@@log.info "Run backup #{@client}"
+			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{includes.inspect} excludes=#{excludes.inspect}"
 		when :update
-			@@log.info "Update backup #{@client}"
+			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{includes.inspect} excludes=#{excludes.inspect}"
 		else
 			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
@@ -83,34 +100,34 @@ class Rsync
 
 	def test_clients(clients, action)
 		return unless clients.empty?
-		c=@conf.clients.keys
-		msg=c.empty? ? "No clients configured" : "No clients specified, use --all to #{action.to_s} backup #{@conf.clients.keys.inspect}"
+		c=@rb2conf.clients.keys
+		msg=c.empty? ? "No clients configured" : "No clients specified, use --all to #{action.to_s} backup #{@rb2conf.clients.keys.inspect}"
 		$log.die msg
 	end
 
 	def run(clients, opts={:all=>false})
 		action=__method__.to_sym
-		clients = @conf.clients.keys if clients.empty? && opts[:all]
+		clients = @rb2conf.clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
-			next unless setup(@conf.clients, client)
+			next unless setup(@rb2conf.clients, client)
 			go(action)
 		}
 	end
 
 	def update(clients, opts={:all=>false})
 		action=__method__.to_sym
-		clients = @conf.clients.keys if clients.empty? && opts[:all]
+		clients = @rb2conf.clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
-			next unless setup(@conf.clients, client)
+			next unless setup(@rb2conf.clients, client)
 			go(action)
 		}
 	end
 
 	def create_excludes
 		excludes=Array.new(@client_config.conf.excludes)
-		excludes.concat(@conf.globals.conf.excludes)
+		excludes.concat(@rb2conf.globals.conf.excludes)
 		excludes.uniq!
 		@@log.debug "excludes="+excludes.join(",")
 		@excludes=excludes
@@ -118,7 +135,7 @@ class Rsync
 
 	def create_includes
 		includes=Array.new(@client_config.conf.includes)
-		includes.concat(@conf.globals.conf.includes)
+		includes.concat(@rb2conf.globals.conf.includes)
 		includes.uniq!
 		@@log.debug "includes="+includes.join(",")
 		@includes=includes

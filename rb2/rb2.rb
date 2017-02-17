@@ -48,9 +48,9 @@ $opts={
 	:all => false,
 	:clients => [],
 	:address => [],
-	:includes => [],
-	:excludes => [],
-	:nincrementals => nil,
+	:includes => Rb2Conf.get_default(:includes),
+	:excludes => Rb2Conf.get_default(:excludes),
+	:nincrementals => Rb2Conf.get_default(:nincrementals),
 	:dest => DEF_DEST,
 	:logdir => DEF_LOG_DIR,
 	:email => DEF_EMAIL,
@@ -193,6 +193,7 @@ when :INIT
 	puts "rb2c="+rb2c.inspect
 	Rb2Util.init_backup_dest(rb2c)
 when :RECONFIG
+	# TODO this is ugly
 	clen=$opts[:clients].length
 	unless $opts[:address].empty?
 		alen=$opts[:address].length
@@ -201,7 +202,12 @@ when :RECONFIG
 		rb2c.set_client_address($opts[:clients], $opts[:address])
 	end
 
-	unless $opts[:clients].empty?
+	if $opts[:global]
+		$log.debug "Setting global opts: "+$opts.inspect
+		rb2c.set_global_config($opts, :includes) unless Rb2Conf::is_default($opts, :includes)
+		rb2c.set_global_config($opts, :excludes) unless Rb2Conf::is_default($opts, :excludes)
+		rb2c.set_global_config($opts, :nincrementals) unless Rb2Conf::is_default($opts, :nincrementals)
+	elsif !$opts[:clients].empty?
 		rb2c.set_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
 		rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
 		rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
@@ -212,11 +218,16 @@ when :RECONFIG
 	rb2c.set_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
 when :DELETE
 
-	unless $opts[:clients].empty?
+	if $opts[:global]
+		rb2c.delete_global_config($opts, :includes)
+		rb2c.delete_global_config($opts, :excludes)
+		rb2c.delete_global_config($opts, :nincrementals)
+	elsif !$opts[:clients].empty?
 		rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
 		rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
 		rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
 	end
+
 	rb2c.delete_global_option($opts, :dest) unless $opts[:dest].eql?(DEF_DEST)
 	rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
 	rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)

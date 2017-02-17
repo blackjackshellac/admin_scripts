@@ -29,41 +29,107 @@ require 'fileutils'
 #    compress: false
 #    incrementals:
 
-sample={
-	:globals=> {
-		:dest => "/mnt/backup",
-		:logdir => "/var/tmp/rb2",
-		:email => "",
-		:smtp  => "localhost",
-		:version => {
-			:major => 0,
-			:minor => 0,
-			:revision => 0
-		},
-		:conf => {
-			:opts=> "",
-			:includes => [],
-			:excludes => [],
-			:nincrementals => 5,
-			:compress => false
-		}
-	},
-	:clients => {
-		:linguini => {
-			:address => "localhost",
-			:conf => {
-				:opts=> "",
-				:includes => [],
-				:excludes => [],
-				:nincrementals => 5,
-				:compress => false
-
-			}
-		}
-	}
-}
 
 class Rb2Error < StandardError
+end
+
+module Rb2Defs
+	def self.included(base)
+		base.extend(ClassMethods)
+	end
+
+	module ClassMethods
+		@@rb2defs = {}
+
+		def set_default(key, val)
+			raise Rb2Error, "Default value already set" if @@rb2defs.key?(key)
+			@@rb2defs[key]=val
+		end
+
+		def get_default(key)
+			raise Rb2Error, "No default value for key #{key}" unless @@rb2defs.key?(key)
+			@@rb2defs[key]
+		end
+
+		def is_default(opts, key)
+			val=opts[key]
+			var=@@rb2defs[key]
+			puts @@rb2defs.inspect
+			raise Rb2Error, "No default value for variable #{key}" unless @@rb2defs.key?(key)
+
+			clazz=var.class
+			raise Rb2Error, "Incompatible default value var=#{clazz} val=#{val.class}" if clazz != val.class
+
+			case var
+			when NilClass, String, Array, TrueClass, FalseClass, Fixnum
+				val == var
+			else
+				raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
+			end
+		end
+	end
+end
+
+#
+# Rb2KeyVal
+#
+# include this module in class to share methods with class instance
+# extend this module in class to share methods with class itself
+#
+module Rb2KeyVal
+	def init_option(key, val)
+		instance_variable_set("@#{key}", val)
+	end
+
+	def set_option(key, val)
+		raise Rb2Error, "No value for variable #{key}" if val.nil?
+		var=instance_variable_get("@#{key}")
+		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
+		clazz=var.class
+		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
+		case var
+		when String,TrueClass,FalseClass
+			var = val
+		when Array
+			var.concat(val)
+			var.uniq!
+		else
+			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
+		end
+		instance_variable_set("@#{key}", val)
+		var
+	end
+
+	def get_option(key)
+		raise Rb2Error, "Unknown global variable: #{key}" unless KEYS_GLOBALS.include?(key)
+		var=instance_variable_get("@#{key}")
+        raise Rb2Error, "Unknown instance variable: #{key}" if var.nil?
+		var
+	end
+
+	def delete_option(key, val, default)
+		raise Rb2Error, "No value for variable #{key}" if val.nil?
+
+		var=instance_variable_get("@#{key}")
+		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
+
+		raise Rb2Error, "No default value found for key=#{key}" if default.nil?
+
+		clazz=var.class
+		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
+		case var
+		when String,TrueClass,FalseClass
+			var = default
+		when Array
+			val.each { |v|
+				var.delete(v)
+			}
+			var = default if var.empty?
+		else
+			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
+		end
+		var
+	end
 end
 
 class Rb2Version
@@ -119,17 +185,24 @@ class Rb2Version
 end
 
 class Rb2Conf
+	include Rb2KeyVal
+	include Rb2Defs
+
 	KEYS_CONF=[:opts, :includes, :excludes, :nincrementals, :compress]
 	RB2CONF_NINCREMENTALS=5
 	RB2CONF_COMPRESS=false
 
+	Rb2Conf.set_default(:opts, "")
+	Rb2Conf.set_default(:includes, [])
+	Rb2Conf.set_default(:excludes, [])
+	Rb2Conf.set_default(:nincrementals, RB2CONF_NINCREMENTALS)
+	Rb2Conf.set_default(:compress, RB2CONF_COMPRESS)
+
 	attr_accessor :opts, :includes, :excludes, :nincrementals, :compress
 	def initialize
-		@opts=""
-		@includes=[]
-		@excludes=[]
-		@nincrementals=RB2CONF_NINCREMENTALS
-		@compress=RB2CONF_COMPRESS
+		KEYS_CONF.each { |key|
+			init_option(key, Rb2Conf::get_default(key))
+		}
 	end
 
 	def append_key_array(key, ilist)
@@ -138,7 +211,7 @@ class Rb2Conf
 		ilist.each { |item|
 			item.strip!
 			next if var.include?(item)
-			var << item 
+			var << item
 		}
 		var.uniq!
 	end
@@ -197,93 +270,41 @@ class Rb2Conf
 end
 
 class Rb2Globals
+	include Rb2KeyVal
+	include Rb2Defs
+
 	KEYS_GLOBALS=[:dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf]
 
-	@@rb2g={
-		:dest => "/mnt/backup",
-		:logdir => "/var/tmp/rb2",
-		:logformat => "rb2_%Y-%m-%d.log",
-		:email => [],
-		:smtp => "localhost",
-		:syslog => false
-	}
+	Rb2Globals::set_default(:dest, "/mnt/backup")
+	Rb2Globals::set_default(:logdir, "/var/tmp/rb2")
+	Rb2Globals::set_default(:logformat, "rb2_%Y-%m-%d.log")
+	Rb2Globals::set_default(:email, [])
+	Rb2Globals::set_default(:smtp, "localhost")
+	Rb2Globals::set_default(:syslog, false)
 
-	@@rb2g_email = ""
-	@@rb2g_smtp = "localhost"
 	attr_accessor :dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf
 
 	def self.init(opts)
-		[:dest, :logdir, :logformat, :syslog, :email, :smtp].each { |key|
-			next unless opts.key?(key)
-			raise Rb2Error, "Option value is null for #{key.inspect}" if opts[key].nil?
-			@@rb2g[key]=opts[key]
-		}
+		#[:dest, :logdir, :logformat, :syslog, :email, :smtp].each { |key|
+		#	next unless opts.key?(key)
+		#	raise Rb2Error, "Option value is null for #{key.inspect}" if opts[key].nil?
+		#	@@rb2defs[key]=opts[key]
+		#}
 	end
 
 	def self.from_hash(h)
 		h={} if h.nil?
 
 		rb2g           = Rb2Globals.new
-		rb2g.dest      = h[:dest]   ||@@rb2g[:dest]
-		rb2g.logdir    = h[:logdir] ||@@rb2g[:logdir]
-		rb2g.logformat = h[:logformat] || @@rb2g[:logformat]
-		rb2g.syslog    = h[:syslog] ||@@rb2g[:syslog]
-		rb2g.email     = h[:email]  ||@@rb2g[:email]
-		rb2g.smtp      = h[:smtp]   ||@@rb2g[:smtp]
+		rb2g.dest      = h[:dest]   ||Rb2Globals::get_default(:dest)
+		rb2g.logdir    = h[:logdir] ||Rb2Globals::get_default(:logdir)
+		rb2g.logformat = h[:logformat] || Rb2Globals::get_default(:logformat)
+		rb2g.syslog    = h[:syslog] ||Rb2Globals::get_default(:syslog)
+		rb2g.email     = h[:email]  ||Rb2Globals::get_default(:email)
+		rb2g.smtp      = h[:smtp]   ||Rb2Globals::get_default(:smtp)
 		rb2g.conf      = Rb2Conf.from_hash(h[:conf])
 		rb2g.version   = Rb2Version.from_hash(h[:version])
 		rb2g
-	end
-
-	def set_option(key, val)
-		raise Rb2Error, "No value for variable #{key}" if val.nil?
-		var=instance_variable_get("@#{key}")	
-		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
-		clazz=var.class
-		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
-		case var
-		when String,TrueClass,FalseClass
-			var = val
-		when Array
-			var.concat(val)
-			var.uniq!
-		else
-			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
-		end
-		instance_variable_set("@#{key}", val)
-		var
-	end
-
-	def get_option(key)
-		raise Rb2Error, "Unknown global variable: #{key}" unless KEYS_GLOBALS.include?(key)
-		var=instance_variable_get("@#{key}")
-        raise Rb2Error, "Unknown instance variable: #{key}" if var.nil?
-		var
-	end
-
-	def delete_option(key, val)
-		raise Rb2Error, "No value for variable #{key}" if val.nil?
-
-		var=instance_variable_get("@#{key}")	
-		raise Rb2Error, "Unknown instance variable: #{key}=#{val}" if var.nil?
-
-		default=@@rb2g[key]
-		raise Rb2Error, "No default value found for key=#{key}" if default.nil?
-
-		clazz=var.class
-		raise Rb2Error, "Incompatible instance var=#{clazz} val=#{val.class}" if clazz != val.class
-		case var
-		when String,TrueClass,FalseClass
-			var = default
-		when Array
-			val.each { |v|
-				var.delete(v)
-			}
-			var = default if var.empty?
-		else
-			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
-		end
-		var
 	end
 
 	def to_hash
@@ -317,6 +338,8 @@ class Rb2Globals
 end
 
 class Rb2Client
+	include Rb2KeyVal
+
 	KEYS_CLIENT=[:client, :address, :conf]
 
 	attr_accessor :client, :address, :conf
@@ -467,6 +490,33 @@ class Rb2Config
 		}
 	end
 
+	def set_global_config(opts, key)
+		val=opts[key]
+		val=@globals.conf.set_option(key, val)
+		@@log.info "Set global config #{key}=#{val.inspect}"
+		@updated = true
+	rescue => e
+		@@log.error "Failed to set global config #{key}=#{val}: #{e.message}"
+		val=nil
+	ensure
+		return val
+	end
+
+	def delete_global_config(opts, key)
+		val=opts[key]
+		var=@globals.conf.delete_option(key, val, Rb2Conf::get_default(key))
+		@@log.info "Deleted global config #{key}=#{val.inspect}"
+		@@updated = true
+	rescue Rb2Error => e
+		@@log.error "Failed to delte global config #{key}=#{val}: #{e.message}"
+		var=nil
+	rescue => e
+		@@log.error "Unexpected exception: #{e.to_s}"
+		var=nil
+	ensure
+		return var
+	end
+
 	# return val == nil if it failed
 	def set_global_option(opts, key)
 		val=opts[key]
@@ -490,7 +540,7 @@ class Rb2Config
 
 	def delete_global_option(opts, key)
 		val=opts[key]
-		var=@globals.delete_option(key, val)
+		var=@globals.delete_option(key, val, Rb2Globals::get_default(key))
 		@@log.info "Deleted global option #{key}=#{val.inspect}"
 		@updated = true
 	rescue Rb2Error => e
@@ -531,7 +581,7 @@ class Rb2Config
 			end
 			begin
 				@clients[client].delete_conf_key_array(key, ilist)
-				@updated = true 
+				@updated = true
 			rescue Rb2Error => e
 				@@log.error "#{client}: "+e.to_s
 			end
