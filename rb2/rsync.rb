@@ -1,6 +1,9 @@
 
 require 'logger'
 
+class RsyncError < StandardError
+end
+
 class Rsync
 	@@log = Logger.new(STDERR)
 	@@tmp = "/"
@@ -27,18 +30,17 @@ class Rsync
 		@sshopts[:global] << " --xattrs"
 	end
 
-	def setup(clients, client, client_conf)
-		unless clients.include?(client.to_s)
-			@@log.debug "Ignoring client #{client}"
-			return false
+	def setup(conf_clients, client)
+		@client_config=conf_clients[client]
+		if @client_config.nil?
+			@@log.warn "Client not found in config #{client}"
+			@@log.debug "Clients: #{conf_clients.keys}"
+		else
+			@client=client
+			create_excludes
+			create_includes
 		end
-
-		@client=client
-		@client_config=client_conf
-		create_excludes
-		create_includes
-
-		return true
+		return @client_config.nil? ? false : true
 	end
 
 	def get_cmd(src, ldest, bdest, host)
@@ -70,26 +72,39 @@ class Rsync
 
 	def go(action)
 		case action
-		when :RUN
+		when :run
 			@@log.info "Run backup #{@client}"
-		when :UPDATE
+		when :update
 			@@log.info "Update backup #{@client}"
 		else
-			@@log.die "Unknown action in Rsync.go: #{action}"
+			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
 	end
 
-	def run(clients)
-		@conf.clients.each_pair { |client,client_conf|
-			next unless setup(clients, client, client_conf)
-			go(:RUN)
+	def test_clients(clients, action)
+		return unless clients.empty?
+		c=@conf.clients.keys
+		msg=c.empty? ? "No clients configured" : "No clients specified, use --all to #{action.to_s} backup #{@conf.clients.keys.inspect}"
+		$log.die msg
+	end
+
+	def run(clients, opts={:all=>false})
+		action=__method__.to_sym
+		clients = @conf.clients.keys if clients.empty? && opts[:all]
+		test_clients(clients, action)
+		clients.each { |client|
+			next unless setup(@conf.clients, client)
+			go(action)
 		}
 	end
 
-	def update(clients)
-		@conf.clients.each_pair { |client,client_conf|
-			next unless setup(clients, client, client_conf)
-			go(:UPDATE)
+	def update(clients, opts={:all=>false})
+		action=__method__.to_sym
+		clients = @conf.clients.keys if clients.empty? && opts[:all]
+		test_clients(clients, action)
+		clients.each { |client|
+			next unless setup(@conf.clients, client)
+			go(action)
 		}
 	end
 

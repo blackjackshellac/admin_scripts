@@ -45,6 +45,7 @@ DEF_EMAIL=[]
 $opts={
 	:global => false,
 	:dryrun => false,
+	:all => false,
 	:clients => [],
 	:address => [],
 	:includes => [],
@@ -81,6 +82,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-c', '--clients LIST', Array, "List of clients to act on") { |clients|
 		$opts[:clients].concat(clients)
 		$opts[:clients].uniq!
+	}
+
+	opts.on('--all', "Backup all configured clients") {
+		$opts[:all]=true
 	}
 
 	opts.on('-a', '--address HOSTS', Array, "Network address for specified client, should match client list") { |addrs|
@@ -229,10 +234,10 @@ when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
 	rsync=Rsync.new(rb2c)
-	rsync.update($opts[:clients])
+	rsync.update($opts[:clients], $opts)
 when :RUN
 	rsync=Rsync.new(rb2c)
-	rsync.run($opts[:clients])
+	rsync.run($opts[:clients], $opts)
 when :VERSION
 	puts rb2c.get_version.to_s
 when :NADA
