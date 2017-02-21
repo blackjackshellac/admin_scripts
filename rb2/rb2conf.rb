@@ -47,22 +47,25 @@ module Rb2Defs
 		end
 
 		def get_default(key)
+			puts "rb2defs.object_id=#{@@rb2defs.object_id}"
+			puts "rb2defs=#{@@rb2defs.inspect}"
 			raise Rb2Error, "No default value for key #{key}" unless @@rb2defs.key?(key)
 			@@rb2defs[key]
 		end
 
 		def is_default(opts, key)
 			val=opts[key]
-			var=@@rb2defs[key]
-			puts @@rb2defs.inspect
-			raise Rb2Error, "No default value for variable #{key}" unless @@rb2defs.key?(key)
+			var=get_default(key)
+			puts "defaults="+@@rb2defs.inspect
+			puts "var=#{var} key=#{key}"
+			puts "rb2defs.object_id="+@@rb2defs.object_id.to_s
 
 			clazz=var.class
 			raise Rb2Error, "Incompatible default value var=#{clazz} val=#{val.class}" if clazz != val.class
 
-			case var
+			case val
 			when NilClass, String, Array, TrueClass, FalseClass, Fixnum
-				val == var
+				(val == var)
 			else
 				raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
 			end

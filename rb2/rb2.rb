@@ -204,6 +204,7 @@ when :RECONFIG
 
 	if $opts[:global]
 		$log.debug "Setting global opts: "+$opts.inspect
+		puts "rb2c="+rb2c.to_json
 		rb2c.set_global_config($opts, :includes) unless Rb2Conf::is_default($opts, :includes)
 		rb2c.set_global_config($opts, :excludes) unless Rb2Conf::is_default($opts, :excludes)
 		rb2c.set_global_config($opts, :nincrementals) unless Rb2Conf::is_default($opts, :nincrementals)
