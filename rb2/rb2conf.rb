@@ -34,6 +34,14 @@ class Rb2Error < StandardError
 end
 
 module Rb2Defs
+	# http://www.railstips.org/blog/archives/2009/05/15/include-vs-extend-in-ruby/
+	#
+	# Even though include is for adding instance methods, a common idiom you’ll see in
+	# Ruby is to use include to append both class and instance methods. The reason for
+	# this is that include has a self.included hook you can use to modify the class that
+	# is including a module and, to my knowledge, extend does not have a hook. It’s
+	# highly debatable, but often used so I figured I would mention it. Let’s look at
+	# an example.
 	def self.included(base)
 		base.extend(ClassMethods)
 	end
@@ -41,24 +49,37 @@ module Rb2Defs
 	module ClassMethods
 		@@rb2defs = {}
 
+		def dump_defaults(prefix)
+			puts "+++++"
+			puts "#{prefix} rb2defs.object_id=#{@@rb2defs.object_id}"
+			puts "#{prefix} rb2defs=#{@@rb2defs.inspect}"
+			puts "+++++"
+		end
+
 		def set_default(key, val)
 			raise Rb2Error, "Default value already set" if @@rb2defs.key?(key)
+			#puts "Setting default #{key}=#{val}"
 			@@rb2defs[key]=val
 		end
 
-		def get_default(key)
-			puts "rb2defs.object_id=#{@@rb2defs.object_id}"
-			puts "rb2defs=#{@@rb2defs.inspect}"
+		def get_default(key, dup=true)
 			raise Rb2Error, "No default value for key #{key}" unless @@rb2defs.key?(key)
+			#dump_defaults("get_default")
+			if dup
+				begin
+					return @@rb2defs[key].clone
+				rescue => e
+					# ugly not clonable hack for Fixnum, Fixnum strangely can't be cloned even though it has method_defined?(:clone)
+				end
+			end
 			@@rb2defs[key]
 		end
 
 		def is_default(opts, key)
 			val=opts[key]
-			var=get_default(key)
-			puts "defaults="+@@rb2defs.inspect
-			puts "var=#{var} key=#{key}"
-			puts "rb2defs.object_id="+@@rb2defs.object_id.to_s
+			var=get_default(key, false)
+			#puts "is_default default=#{var} key=#{key} val=#{val}"
+			#dump_defaults("is_default")
 
 			clazz=var.class
 			raise Rb2Error, "Incompatible default value var=#{clazz} val=#{val.class}" if clazz != val.class
@@ -99,7 +120,7 @@ module Rb2KeyVal
 		else
 			raise Rb2Error, "Class not handled in Rb2Globals.set_option: #{clazz}"
 		end
-		instance_variable_set("@#{key}", val)
+		instance_variable_set("@#{key}", var)
 		var
 	end
 
@@ -286,13 +307,20 @@ class Rb2Globals
 	Rb2Globals::set_default(:syslog, false)
 
 	attr_accessor :dest, :logdir, :logformat, :syslog, :email, :smtp, :version, :conf
+	def initialize
+		KEYS_GLOBALS.each { |key|
+			case key
+			when :conf, :version
+				# do nothing
+			else
+				init_option(key, Rb2Globals::get_default(key))
+			end
+		}
+	end
 
 	def self.init(opts)
-		#[:dest, :logdir, :logformat, :syslog, :email, :smtp].each { |key|
-		#	next unless opts.key?(key)
-		#	raise Rb2Error, "Option value is null for #{key.inspect}" if opts[key].nil?
-		#	@@rb2defs[key]=opts[key]
-		#}
+		# init @@log from opts[:logger] if necessary
+		@@log = opts[:logger] if opts.key?(:logger)
 	end
 
 	def self.from_hash(h)
@@ -645,12 +673,18 @@ class Rb2Config
 	end
 
 	def read_config(conf)
+
+		#Rb2Globals.dump_defaults("Rb2Globals")
+
 		json=load_config(conf)
-		@@log.debug "json=#{json}"
+		#@@log.debug "json=#{json}"
 		config=parse_config(json)
 		config[:globals]=Rb2Globals.from_hash(config[:globals])
 		clients = config[:clients]||{}
 		cc = {}
+
+		#Rb2Conf.dump_defaults("Rb2Conf")
+
 		clients.each_pair { |client,conf|
 			@@log.debug "client=#{client} conf=#{conf.inspect}"
 			cc[client.to_sym]=Rb2Client.from_hash(client, conf)

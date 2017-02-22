@@ -168,7 +168,7 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-n', '--dry-run', "Perform trial run of backup") {
 		$opts[:dryrun]=true
 	}
- 
+
 	opts.on('-b', '--bg', "Daemonize and run in background") {
 		$opts[:daemonize]=true
 	}
@@ -178,7 +178,9 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	}
 }
 
-$log.debug $opts.inspect
+#Rb2Globals.dump_defaults("Rb2Globals")
+
+$log.debug "opts="+$opts.inspect
 
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
@@ -186,6 +188,8 @@ Rb2Util.init($opts)
 Rsync.init($opts)
 
 rb2c = Rb2Config.new
+#puts "rb2c="+rb2c.to_json
+
 case $opts[:action]
 when :INIT
 	dest=$opts[:dest]
@@ -204,7 +208,6 @@ when :RECONFIG
 
 	if $opts[:global]
 		$log.debug "Setting global opts: "+$opts.inspect
-		puts "rb2c="+rb2c.to_json
 		rb2c.set_global_config($opts, :includes) unless Rb2Conf::is_default($opts, :includes)
 		rb2c.set_global_config($opts, :excludes) unless Rb2Conf::is_default($opts, :excludes)
 		rb2c.set_global_config($opts, :nincrementals) unless Rb2Conf::is_default($opts, :nincrementals)
