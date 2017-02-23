@@ -6,24 +6,29 @@ end
 
 class Rsync
 	@@log = Logger.new(STDERR)
-	@@tmp = "/"
+	@@tmp = "/var/tmp"
 
 	def self.init(opts)
 		@@log = opts[:logger] if opts.key?(:logger)
 		@@tmp = opts[:tmp] if opts.key?(:tmp)
 	end
 
-	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes
+	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes, :conf
 	def initialize(rb2conf)
 		@rb2conf=rb2conf
 
 		globals=@rb2conf.globals #:dest, :logdir, :logformat, :syslog, :email, :smtp
+		@globals=globals
 		@dest=globals.dest
 		@logdir=globals.logdir
 		@logformat=globals.logformat
 		@syslog=globals.syslog
 		@email=globals.email
 		@smtp=globals.smtp
+		@conf=globals.conf
+
+		# rubac.20170221.pidora.excl
+		@bdest=Time.new.strftime(@logformat)
 
 		@sshopts = {}
 		if ENV['RUBAC_SSHOPTS']
@@ -45,28 +50,35 @@ class Rsync
 			@@log.debug "Clients: #{conf_clients.keys}"
 		else
 			@client=client
-			create_excludes
-			create_includes
+			@excludes=create_excludes
+			@includes=create_includes
 		end
 		return @client_config.nil? ? false : true
 	end
 
-	def get_cmd(src, ldest, bdest, host)
+	# rsync
+	#    -r -a -v -v --relative --delete-excluded --ignore-errors --one-file-system --xattrs --acls --xattrs
+	#    --exclude-from="/tmp/rubac.20170221.pidora.excl"
+	#    pidora:/home/pi
+	#    pidora:/etc
+	#    pidora:/root
+	#
+	#    /mnt/backup/rubac/pidora/rubac.20170221
+	#
+	#
+	#$ ls -lrt
+	#total 4
+	#drwxr-xr-x 1 root root 50 Jan 31 13:34 rubac.20170131
+	#drwxr-xr-x 1 root root 50 Feb 21 11:17 rubac.20170221
+	#lrwxrwxrwx 1 root root 39 Feb 22 16:18 latest -> /mnt/backup/rubac/pidora/rubac.20170221
+
+	def get_cmd(action, src, ldest, host)
 		cmd =  "rsync -r #{@sshopts[:global]} #{@sshopts["#{host}"]}"
-		cmd << " --delete" if not @options.update
+		cmd << " --delete" if action == :run
 		cmd << " --link-dest=#{ldest}" if ldest
 
 		# write the excludes to a file and use --exclude-from
-		if @excludes.length > 0
-			excl = nil
-			excl = File.join(@@tmp, File.basename(bdest) + ".#{host}.excl")
-			File.open( excl, "w" ) { |exclf|
-				@excludes.each { |x|
-					exclf.puts( x )
-				}
-			}
-			cmd << " --exclude-from=\"#{excl}\""
-		end
+		cmd << create_excludes_from
 
 		# with files-from we use "/" as the src (or host:/ for remote)
 		#src = "/"
@@ -74,28 +86,27 @@ class Rsync
 		# cmd << " --files-from=\"#{incl}\""
 
 		cmd << " #{src}"
-		cmd << " #{bdest}"
+		cmd << " #{@bdest}"
 		cmd
 	end
 
 	def go(action)
 		#puts @client_config.inspect
-		addr=@client_config.address
 		conf=@client_config.conf
 		# :opts, :includes, :excludes, :nincrementals, :compress
 		opts=conf.opts
-		includes=conf.includes
-		excludes=conf.excludes
-		nincrementals=conf.nincrementals
+
+		@nincrementals=conf.nincrementals
 
 		case action
 		when :run
-			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{includes.inspect} excludes=#{excludes.inspect}"
+			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
 		when :update
-			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{includes.inspect} excludes=#{excludes.inspect}"
+			@@log.info "#{action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
 		else
 			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
+		@@log.info "cmd="+get_cmd(action, "src", "latest", @client)
 	end
 
 	def test_clients(clients, action)
@@ -125,20 +136,48 @@ class Rsync
 		}
 	end
 
-	def create_excludes
-		excludes=Array.new(@client_config.conf.excludes)
-		excludes.concat(@rb2conf.globals.conf.excludes)
-		excludes.uniq!
-		@@log.debug "excludes="+excludes.join(",")
-		@excludes=excludes
+	def create_includes
+		addr=@client_config.address
+		cc=@client_config.conf
+
+		# prefix is empty for localhost, otherwise it is hostname:
+		prefix=(addr.nil? || addr.eql?("localhost") || addr.eql?("127.0.0.1")) ? "" : "#{addr}:"
+
+		includes=[]
+		# global includes
+		@conf.includes.each { |inc|
+			includes << prefix+inc
+		}
+		# client includes
+		cc.includes.each { |inc|
+			includes << prefix+inc
+		}
+		includes.uniq!
+		includes
 	end
 
-	def create_includes
-		includes=Array.new(@client_config.conf.includes)
-		includes.concat(@rb2conf.globals.conf.includes)
-		includes.uniq!
-		@@log.debug "includes="+includes.join(",")
-		@includes=includes
+	def create_excludes
+		cc=@client_config.conf
+		excludes=[]
+		# global excludes
+		excludes.concat(@conf.excludes)
+		# client excludes
+		excludes.concat(cc.excludes)
+		excludes.uniq!
+		excludes
 	end
+
+	def create_excludes_from
+		return "" if @excludes.empty?
+		# /tmp/rb.20170221.pidora.excl
+		excl = File.join(@@tmp, File.basename(@bdest) + ".#{@client}.excl")
+		File.open( excl, "w" ) { |fd|
+			@excludes.each { |x|
+				fd.puts( x )
+			}
+		}
+		" --exclude-from=\"#{excl}\" "
+	end
+
 end
 
