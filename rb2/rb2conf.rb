@@ -504,21 +504,21 @@ class Rb2Config
 		}
 	end
 
-	def set_client_includes(clist, ilist)
-		set_client_conf_array(clist, ilist, :includes)
-	end
-
-	def set_client_excludes(clist, ilist)
-		set_client_conf_array(clist, ilist, :excludes)
-	end
-
-	def set_client_incrementals(clist, nincrementals)
+	def set_client_config(opts, option)
+		clist = opts[:clients]
 		clist.each { |client|
-			client = client.to_sym
-			@@log.die "Client config not found #{client}" if @clients[client].nil?
-			@@log.debug "Set client #{client} nincrementals=#{nincrementals}"
-			@clients[client].set_incrementals(nincrementals)
+			cc=@clients[client.to_sym]
+			puts "client="+cc.inspect
+			conf=cc.conf
+			val=conf.set_option(option, opts[option])
+			@@log.info "Set client #{client} option #{option}=#{val.inspect}"
+			@updated = true
 		}
+	rescue => e
+		@@log.error "Failed to set client config #{option}: clients=#{clist.inspect} [#{e.to_s}]"
+		val=nil
+	ensure
+		return val
 	end
 
 	def set_global_config(opts, key)
@@ -738,46 +738,4 @@ class Rb2Config
 
 end
 
-class Rb2Util
-	# class variables
-	@@log = Logger.new(STDERR)
-
-	def self.init(opts)
-		@@log = opts[:logger] if opts.key?(:logger)
-	end
-
-	def self.init_backup_dest(rb2c)
-		dest=rb2c.get_global_option(:dest)
-		raise Rb2Error, "Destination is not a directory: #{dest}" if File.exist?(dest) && !File.directory?(dest)
-		create_backup_destination(dest)
-		initialize_backup_destination(dest)
-	rescue Rb2Error => e
-		@@log.die "Failed to initialize backup dest=#{dest}: #{e.message}"
-	rescue => e
-		@@log.die "Failed to initialize backup dest=#{dest} unknown: #{e.to_s}"
-	end
-
-	def self.create_backup_destination(dest)
-		FileUtils.mkdir_p(dest)
-	rescue => e
-		raise Rb2Error, "Failed to create backup destination #{dest} [#{e.to_s}]"
-	end
-
-	def self.initialize_backup_destination(dest)
-		mask=File.umask(0066)
-		init = File.join(dest, "rb2.init")
-		raise Errno::EEXIST, "file #{init} already exists" if File.exist?(init)
-		FileUtils.touch(init)
-		FileUtils.chmod(0600, init)
-	rescue Errno::EACCES => e
-		raise Rb2Error, "access denied, initializing destination #{dest}"
-	rescue Errno::EEXIST => e
-		@@log.warn "backup destination #{dest} is already initialized: #{e.message}"
-	rescue => e
-		raise Rb2Error, "Failed initializing destination #{dest}: #{e.to_s}"
-	ensure
-		File.umask(mask)
-	end
-	true
-end
 

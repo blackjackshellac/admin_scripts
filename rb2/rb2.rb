@@ -22,6 +22,7 @@ HELP=File.join(MD, ME+".help")
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "rb2conf")
+require_relative File.join(MD, "rb2util")
 require_relative File.join(MD, "rsync")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
@@ -30,7 +31,7 @@ TMP=File.join("/var/tmp", ME)
 FileUtils.mkdir_p(TMP)
 YMD=Time.now.strftime('%Y%m')
 
-DEF_LOG_FORMAT="#{ME}.%Y-%m-%d.log"
+DEF_LOG_FORMAT=Rb2Globals.get_default(:logformat) # "#{ME}.%Y-%m-%d.log"
 LOG_FILE=Time.now.strftime(DEF_LOG_FORMAT)
 
 UINDEX=Process.uid == 0 ? 0 : 1
@@ -39,8 +40,8 @@ LOG_DIR_ARRAY=[ File.join("/var/log", ME), TMP ]
 DEF_DEST="/mnt/backup"
 DEF_LOG_DIR=LOG_DIR_ARRAY[UINDEX]
 DEF_LOG_PATH=File.join(DEF_LOG_DIR, LOG_FILE)
-DEF_SMTP="localhost"
-DEF_EMAIL=[]
+DEF_SMTP=Rb2Globals.get_default(:smtp)
+DEF_EMAIL=Rb2Globals.get_default(:email)
 
 $opts={
 	:global => false,
@@ -208,18 +209,25 @@ when :RECONFIG
 
 	if $opts[:global]
 		$log.debug "Setting global opts: "+$opts.inspect
-		rb2c.set_global_config($opts, :includes) unless Rb2Conf::is_default($opts, :includes)
-		rb2c.set_global_config($opts, :excludes) unless Rb2Conf::is_default($opts, :excludes)
-		rb2c.set_global_config($opts, :nincrementals) unless Rb2Conf::is_default($opts, :nincrementals)
+		[ :includes, :excludes, :nincrementals ].each { |key|
+			next if Rb2Conf::is_default($opts, key)
+			rb2c.set_global_config($opts, key)
+		}
 	elsif !$opts[:clients].empty?
-		rb2c.set_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
-		rb2c.set_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
-		rb2c.set_client_incrementals($opts[:clients], $opts[:nincrementals]) unless $opts[:nincrementals].nil?
+		$log.debug "Setting client opts: "+$opts.inspect
+		[ :includes, :excludes, :nincrementals ].each { |key|
+			next if Rb2Conf::is_default($opts, key)
+			rb2c.set_client_config($opts, key)
+		}
 	end
-	rb2c.set_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
-	rb2c.set_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
-	rb2c.set_global_option($opts, :email) unless $opts[:email].empty?
-	rb2c.set_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
+	[ :logdir, :logformat, :email, :syslog ].each { |option|
+		next if Rb2Globals::is_default($opts, option)
+		rb2c.set_global_option($opts, option)
+	}
+	#rb2c.set_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
+	#rb2c.set_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
+	#rb2c.set_global_option($opts, :email) unless $opts[:email].empty?
+	#rb2c.set_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
 when :DELETE
 
 	if $opts[:global]
