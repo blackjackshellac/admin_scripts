@@ -23,7 +23,7 @@ require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "rb2conf")
 require_relative File.join(MD, "rb2util")
-require_relative File.join(MD, "rsync")
+require_relative File.join(MD, "rb2rsync")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 

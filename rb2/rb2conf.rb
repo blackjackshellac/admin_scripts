@@ -479,6 +479,7 @@ class Rb2Config
 			@clients[client]||=Rb2Client.from_hash(client)
 			@@log.info "Set client #{client} address #{address}"
 			@clients[client].set_address(address)
+			@updated = true
 		}
 	end
 
@@ -489,6 +490,7 @@ class Rb2Config
 			client = client.to_sym
 			@@log.die "Client config not found #{client}" if @clients[client].nil?
 			@@log.warn "Client address not changed for #{client}: #{address}" unless @clients[client].delete_address(address)
+			@updated = true
 		}
 	end
 

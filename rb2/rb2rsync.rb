@@ -16,6 +16,7 @@ class Rsync
 	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes, :conf
 	def initialize(rb2conf)
 		@rb2conf=rb2conf
+		@rb2conf_clients=@rb2conf.clients
 
 		globals=@rb2conf.globals #:dest, :logdir, :logformat, :syslog, :email, :smtp
 		@globals=globals
@@ -28,7 +29,10 @@ class Rsync
 		@conf=globals.conf
 
 		# rubac.20170221.pidora.excl
-		@bdest=Time.new.strftime(@logformat)
+		#
+		#
+		# /mnt/backup/rubac/pidora/rubac.20170221
+		@filestamp=Time.new.strftime("rb2.%Y%m%d")
 
 		@sshopts = {}
 		if ENV['RUBAC_SSHOPTS']
@@ -43,11 +47,45 @@ class Rsync
 		@sshopts[:global] << " --xattrs"
 	end
 
-	def setup(conf_clients, client)
-		@client_config=conf_clients[client]
+	def list_bdest
+		dirs=[]
+		FileUtils.chdir(@bdir) {
+			puts "looking in "+@bdir
+			Dir.glob("*") { |dir|
+				puts "glob=#{dir}"
+				next unless File.directory?(dir)
+				next if dir[/rb2.\d+/].nil?
+				dirs << dir
+			}
+		}
+		dirs.sort.reverse
+	end
+
+	def find_latest
+		dirs=list_bdest
+		return nil if dirs.empty?
+		puts dirs.inspect
+		latest=File.join(@bdir, dirs[0])
+		raise RsyncError, "Latest is not a directory: #{latest}" unless File.directory?(latest)
+		latest
+	end
+
+	def setup(client)
+		@@log.debug "client="+client.inspect
+		@@log.debug "client_config="+@rb2conf_clients.inspect
+		# rubac.20170221.pidora
+		@client=client.to_s
+		@bdir=File.join(@dest, @client)
+		@bdest=File.join(@bdir, @filestamp)
+
+		@latest = find_latest
+
+		puts FileUtils.mkdir_p(@bdest, {:noop=>false, :verbose=>true})
+
+		@client_config=@rb2conf_clients[client.to_sym]
 		if @client_config.nil?
 			@@log.warn "Client not found in config #{client}"
-			@@log.debug "Clients: #{conf_clients.keys}"
+			@@log.debug "Clients: #{@rb2conf_clients.keys}"
 		else
 			@client=client
 			@excludes=create_excludes
@@ -72,10 +110,10 @@ class Rsync
 	#drwxr-xr-x 1 root root 50 Feb 21 11:17 rubac.20170221
 	#lrwxrwxrwx 1 root root 39 Feb 22 16:18 latest -> /mnt/backup/rubac/pidora/rubac.20170221
 
-	def get_cmd(action, src, ldest, host)
+	def get_cmd(action, src, host)
 		cmd =  "rsync -r #{@sshopts[:global]} #{@sshopts["#{host}"]}"
 		cmd << " --delete" if action == :run
-		cmd << " --link-dest=#{ldest}" if ldest
+		cmd << " --link-dest=#{@latest}" if @latest
 
 		# write the excludes to a file and use --exclude-from
 		cmd << create_excludes_from
@@ -85,7 +123,7 @@ class Rsync
 		#src = " #{@address}:#{src}" if @address != "localhost" and @address != "127.0.0.1"
 		# cmd << " --files-from=\"#{incl}\""
 
-		cmd << " #{src}"
+		cmd << create_includes_str
 		cmd << " #{@bdest}"
 		cmd
 	end
@@ -106,32 +144,33 @@ class Rsync
 		else
 			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
-		@@log.info "cmd="+get_cmd(action, "src", "latest", @client)
+		@@log.info "cmd="+get_cmd(action, @includes, @client)
+		puts FileUtils.rmdir(@bdest, {:verbose=>true})
 	end
 
 	def test_clients(clients, action)
 		return unless clients.empty?
-		c=@rb2conf.clients.keys
+		c=@rb2conf_clients.keys
 		msg=c.empty? ? "No clients configured" : "No clients specified, use --all to #{action.to_s} backup #{@rb2conf.clients.keys.inspect}"
 		$log.die msg
 	end
 
 	def run(clients, opts={:all=>false})
 		action=__method__.to_sym
-		clients = @rb2conf.clients.keys if clients.empty? && opts[:all]
+		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
-			next unless setup(@rb2conf.clients, client)
+			next unless setup(client)
 			go(action)
 		}
 	end
 
 	def update(clients, opts={:all=>false})
 		action=__method__.to_sym
-		clients = @rb2conf.clients.keys if clients.empty? && opts[:all]
+		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
-			next unless setup(@rb2conf.clients, client)
+			next unless setup(client)
 			go(action)
 		}
 	end
@@ -146,11 +185,13 @@ class Rsync
 		includes=[]
 		# global includes
 		@conf.includes.each { |inc|
-			includes << prefix+inc
+			inc="\"#{inc}\"" unless inc[/\s/].nil?
+			includes << (prefix+inc)
 		}
 		# client includes
 		cc.includes.each { |inc|
-			includes << prefix+inc
+			inc="\"#{inc}\"" unless inc[/\s/].nil?
+			includes << (prefix+inc)
 		}
 		includes.uniq!
 		includes
@@ -167,10 +208,20 @@ class Rsync
 		excludes
 	end
 
+	def create_includes_str
+		raise RsyncError, "Nothing to backup, includes is empty" if @includes.empty?
+
+		s=""
+		@includes.each { |inc|
+			s << " #{inc} "
+		}
+		" #{s} "
+	end
+
 	def create_excludes_from
 		return "" if @excludes.empty?
 		# /tmp/rb.20170221.pidora.excl
-		excl = File.join(@@tmp, File.basename(@bdest) + ".#{@client}.excl")
+		excl = File.join(@@tmp, File.basename(@filestamp) + ".#{@client}.excl")
 		File.open( excl, "w" ) { |fd|
 			@excludes.each { |x|
 				fd.puts( x )
