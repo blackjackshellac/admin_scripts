@@ -538,8 +538,8 @@ class Rb2Config
 	def delete_global_config(opts, key)
 		val=opts[key]
 		var=@globals.conf.delete_option(key, val, Rb2Conf::get_default(key))
-		@@log.info "Deleted global config #{key}=#{val.inspect}"
-		@@updated = true
+		@@log.info "Deleted global config #{key}=#{var.inspect}"
+		@updated = true
 	rescue Rb2Error => e
 		@@log.error "Failed to delte global config #{key}=#{val}: #{e.message}"
 		var=nil
@@ -709,7 +709,7 @@ class Rb2Config
 	def save_config_json(pretty = true)
 		json = pretty ? JSON.pretty_generate(self) : self.to_json
 		File.open(@config_file, "wt") { |fd|
-			@@log.debug "Write json config to #{@config_file}"
+			@@log.info "Write json config to #{@config_file}"
 			fd.puts(json)
 		}
 	rescue => e

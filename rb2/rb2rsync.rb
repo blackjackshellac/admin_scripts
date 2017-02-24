@@ -110,8 +110,8 @@ class Rsync
 	#drwxr-xr-x 1 root root 50 Feb 21 11:17 rubac.20170221
 	#lrwxrwxrwx 1 root root 39 Feb 22 16:18 latest -> /mnt/backup/rubac/pidora/rubac.20170221
 
-	def get_cmd(action, src, host)
-		cmd =  "rsync -r #{@sshopts[:global]} #{@sshopts["#{host}"]}"
+	def get_cmd(action)
+		cmd =  "rsync -r #{@sshopts[:global]} " # #{@sshopts["#{host}"]}"
 		cmd << " --delete" if action == :run
 		cmd << " --link-dest=#{@latest}" if @latest
 
@@ -144,7 +144,7 @@ class Rsync
 		else
 			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
-		@@log.info "cmd="+get_cmd(action, @includes, @client)
+		@@log.info "cmd=[%s]" % get_cmd(action)
 		puts FileUtils.rmdir(@bdest, {:verbose=>true})
 	end
 

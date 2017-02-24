@@ -231,20 +231,20 @@ when :RECONFIG
 when :DELETE
 
 	if $opts[:global]
-		rb2c.delete_global_config($opts, :includes)
-		rb2c.delete_global_config($opts, :excludes)
-		rb2c.delete_global_config($opts, :nincrementals)
+		[ :includes, :excludes, :nincrementals ].each { |key|
+            next if Rb2Conf::is_default($opts, key)
+			rb2c.delete_global_config($opts, key)
+		}
 	elsif !$opts[:clients].empty?
 		rb2c.delete_client_address($opts[:clients], $opts[:address]) unless $opts[:address].empty?
 		rb2c.delete_client_includes($opts[:clients], $opts[:includes]) unless $opts[:includes].empty?
 		rb2c.delete_client_excludes($opts[:clients], $opts[:excludes]) unless $opts[:excludes].empty?
 	end
 
-	rb2c.delete_global_option($opts, :dest) unless $opts[:dest].eql?(DEF_DEST)
-	rb2c.delete_global_option($opts, :logdir) unless $opts[:logdir].eql?(DEF_LOG_DIR)
-	rb2c.delete_global_option($opts, :logformat) unless $opts[:logformat].eql?(DEF_LOG_FORMAT)
-	rb2c.delete_global_option($opts, :email) unless $opts[:email].empty?
-	rb2c.delete_global_option($opts, :syslog) unless $opts[:syslog] == rb2c.globals.syslog
+	[ :logdir, :logformat, :email, :syslog ].each { |option|
+        next if Rb2Globals::is_default($opts, option)
+		rb2c.delete_global_option($opts, option)
+	}
 
 when :DELETE_CLIENT
 
