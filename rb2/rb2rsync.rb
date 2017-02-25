@@ -14,7 +14,7 @@ class Rsync
 	end
 
 	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes, :conf
-	def initialize(rb2conf)
+	def initialize(rb2conf,opts)
 		@rb2conf=rb2conf
 		@rb2conf_clients=@rb2conf.clients
 
@@ -32,7 +32,8 @@ class Rsync
 		#
 		#
 		# /mnt/backup/rubac/pidora/rubac.20170221
-		@filestamp=Time.new.strftime("rb2.%Y%m%d")
+		@runtime=opts[:runtime]||Time.now
+		@filestamp=@runtime.strftime("rb2.%Y%m%d")
 
 		@sshopts = {}
 		if ENV['RUBAC_SSHOPTS']
@@ -76,6 +77,7 @@ class Rsync
 		# rubac.20170221.pidora
 		@client=client.to_s
 		@bdir=File.join(@dest, @client)
+		FileUtils.mkdir_p(@bdir)
 		@bdest=File.join(@bdir, @filestamp)
 
 		@latest = find_latest

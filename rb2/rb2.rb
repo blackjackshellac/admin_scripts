@@ -63,7 +63,8 @@ $opts={
 	:daemonize => false,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
-	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json")
+	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json"),
+	:runtime => Time.now
 }
 
 $opts = OParser.parse($opts, HELP) { |opts|
@@ -256,10 +257,10 @@ when :LIST
 when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
-	rsync=Rsync.new(rb2c)
+	rsync=Rsync.new(rb2c, $opts)
 	rsync.update($opts[:clients], $opts)
 when :RUN
-	rsync=Rsync.new(rb2c)
+	rsync=Rsync.new(rb2c, $opts)
 	rsync.run($opts[:clients], $opts)
 when :VERSION
 	puts rb2c.get_version.to_s
