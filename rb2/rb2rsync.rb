@@ -130,11 +130,11 @@ class Rsync
 		cmd
 	end
 
-	def go(action)
+	def go(action, opts)
 		#puts @client_config.inspect
 		conf=@client_config.conf
 		# :opts, :includes, :excludes, :nincrementals, :compress
-		opts=conf.opts
+		#opts=conf.opts
 
 		@nincrementals=conf.nincrementals
 
@@ -146,8 +146,14 @@ class Rsync
 		else
 			raise RsyncError, "Unknown action in Rsync.go: #{action}"
 		end
+		cmd = get_cmd(action)
 		@@log.info "cmd=[%s]" % get_cmd(action)
-		puts FileUtils.rmdir(@bdest, {:verbose=>true})
+		opts[:strip]=true
+		opts[:lines]=[]
+		opts[:out]=$stdout
+		opts[:log]=Logger.new("/var/tmp/rb2rsync.log")
+		exit_status = Runner::run3!(cmd, opts)
+		puts FileUtils.rmdir(@bdest, {:verbose=>true}) unless exit_status == 0
 	end
 
 	def test_clients(clients, action)
@@ -157,23 +163,30 @@ class Rsync
 		$log.die msg
 	end
 
-	def run(clients, opts={:all=>false})
+	DEF_OPTS={
+		:all=>false,
+		:strip=>true,
+		:lines=>[],
+		:out=>$stdout,
+		:log=>nil
+	}
+	def run(clients, opts=DEF_OPTS)
 		action=__method__.to_sym
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
 			next unless setup(client)
-			go(action)
+			go(action, opts)
 		}
 	end
 
-	def update(clients, opts={:all=>false})
+	def update(clients, opts=DEF_OPTS)
 		action=__method__.to_sym
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients, action)
 		clients.each { |client|
 			next unless setup(client)
-			go(action)
+			go(action, opts)
 		}
 	end
 

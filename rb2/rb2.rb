@@ -21,6 +21,7 @@ HELP=File.join(MD, ME+".help")
 
 require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
+require_relative File.join(LIB, "runner")
 require_relative File.join(MD, "rb2conf")
 require_relative File.join(MD, "rb2util")
 require_relative File.join(MD, "rb2rsync")
