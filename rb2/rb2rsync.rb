@@ -60,7 +60,7 @@ class Rsync
 
 	BACKUP_DIR_RE=/(?<rb2>rb2|rubac).(?<date>\d+)(\.(?<num>\d+))?/
 	def sort_dirs(dirs)
-		puts "Dirs before sort"+dirs.inspect
+		@@log.info "Dirs before sort"+dirs.inspect
 		dirs.sort! { |d1,d2|
 			m1=d1.match(BACKUP_DIR_RE)
 			raise "Regular expression match failed for directory d1=#{d1}" if m1.nil?
@@ -88,7 +88,7 @@ class Rsync
 				date2 <=> date1
 			end
 		}
-		puts "Dirs after sort"+dirs.inspect
+		@@log.info "Dirs after sort"+dirs.inspect
 		dirs
 	end
 
@@ -97,7 +97,7 @@ class Rsync
 		FileUtils.chdir(bdir) {
 			@@log.debug "Scanning backup destination directory: "+bdir
 			Dir.glob("*") { |dir|
-				puts "glob=#{dir}"
+				#puts "glob=#{dir}"
 				next unless File.directory?(dir)
 				next if dir[BACKUP_DIR_RE].nil?
 				dirs << dir
@@ -173,10 +173,10 @@ class Rsync
 		#src = " #{@address}:#{src}" if @address != "localhost" and @address != "127.0.0.1"
 		# cmd << " --files-from=\"#{incl}\""
 
-		cmd << " --link-dest=#{@latest}" if @latest
+		cmd << " --link-dest=\"#{@latest}\"" if @latest
 
 		cmd << create_includes_str
-		cmd << " #{@bdest}"
+		cmd << " \"#{@bdest}\" "
 		cmd
 	end
 
@@ -291,7 +291,7 @@ class Rsync
 
 		s=""
 		@includes.each { |inc|
-			s << " #{inc} "
+			s << " \"#{inc}\" "
 		}
 		" #{s} "
 	end
