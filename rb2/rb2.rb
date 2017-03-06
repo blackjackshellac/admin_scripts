@@ -45,6 +45,7 @@ DEF_SMTP=Rb2Globals.get_default(:smtp)
 DEF_EMAIL=Rb2Globals.get_default(:email)
 
 $opts={
+	:config => nil,
 	:global => false,
 	:dryrun => false,
 	:all => false,
@@ -77,6 +78,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 # --delete            Delete any specified includes, excludes, opts
 # --delete [client]   Delete the specified client configuration (does not purge the backups)
 # -d, --dest DEST         Local destination path (eg., /mnt/backup)
+
+	opts.on('-C', '--config CONF', String, "Use a different config file") { |conf|
+		$opts[:config]=conf
+	}
 
 	opts.on('-g', '--global', "Apply changes globally") {
 		$opts[:global]=true
@@ -190,7 +195,7 @@ Rb2Globals.init($opts)
 Rb2Util.init($opts)
 Rsync.init($opts)
 
-rb2c = Rb2Config.new
+rb2c = Rb2Config.new($opts[:config])
 #puts "rb2c="+rb2c.to_json
 
 case $opts[:action]

@@ -32,7 +32,6 @@ module Runner
 
 	def self.run3!(cmd, opts={})
 		@@log.debug "#{Dir.pwd}/ $ #{cmd}"
-		return 0 if gov(opts, :dryrun)
 
 		exit_status = 0
 
@@ -41,6 +40,7 @@ module Runner
 		strip = gov(opts, :strip)
 		out = gov(opts, :out)
 		log = gov(opts, :log)
+		echo = gov(opts, :echo)
 
 		Open3.popen3(cmd) do |stdin, stdout, stderr, wait_thr|
 
@@ -72,43 +72,33 @@ module Runner
 							begin
 								#data = f.read_nonblock(BLOCK_SIZE)
 								#data = f.read_nonblock(32*1024)
-								data = f.readline
-								puts "fileno: #{fileno}, data: #{data}"
+								line = f.readline
+								line.strip! if strip
+								lines.push(line) unless lines.nil?
+								if echo && out
+									out.puts line
+									out.flush
+								end
+								unless log.nil?
+									case fileno
+									when fnout
+										log.info(line)
+									when fnerr
+										log.error(line)
+									else
+										raise "Unknown fileno for output: #{line}"
+									end
+								end
+
+								#puts "fileno: #{fileno}, data: #{line}"
 							rescue EOFError => e
-								puts "fileno: #{fileno} EOF"
+								#puts "fileno: #{fileno} EOF"
+								raise "Encountered unexpected EOF"
+							rescue => e
+								raise "Encountered unexpected exception: #{e.to_s}"
 							end
 						}
 					end
-
-			#		if exit_status != 0
-			#			stderr.each { |line|
-			#				line.strip! if strip
-			#				lines.push(line) unless lines.nil?
-			#				unless out.nil?
-			#					out.puts line
-			#					out.flush
-			#				end
-			#				unless log.nil?
-			#					log.error(line)
-			#					log.flush
-			#				end
-			#			}
-			#			return exit_status
-			#		end
-			#		stdout.each { |line|
-			#			line.strip! if strip
-			#			lines.push(line) unless lines.nil?
-			#			if gov(opts, :echo)
-			#				unless out.nil?
-			#					out.puts line
-			#					out.flush
-			#				end
-			#				unless log.nil?
-			#					log.info(line)
-			#					log.flush
-			#				end
-			#			end
-			#		}
 				end
 			rescue IOError => e
 				puts "IOError: #{e}"
