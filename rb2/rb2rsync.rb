@@ -138,8 +138,8 @@ class Rsync
 			@@log.debug "Clients: #{@rb2conf_clients.keys}"
 		else
 			@client=client
-			@excludes=create_excludes
-			@includes=create_includes
+			@excludes=create_excludes_arr
+			@includes=create_includes_arr
 		end
 		return @client_config.nil? ? false : true
 	end
@@ -160,6 +160,12 @@ class Rsync
 	#drwxr-xr-x 1 root root 50 Feb 21 11:17 rubac.20170221
 	#lrwxrwxrwx 1 root root 39 Feb 22 16:18 latest -> /mnt/backup/rubac/pidora/rubac.20170221
 
+	def quote_str(str, pad=false)
+		q=str[/\s/].nil? ? "" : "\""
+		p=pad ? " " : ""
+		"#{p}#{q}#{str}#{q}#{p}"
+	end
+
 	def get_cmd(opts)
 		cmd =  "rsync -r #{@sshopts[:global]} " # #{@sshopts["#{host}"]}"
 		cmd << " --dry-run " if opts[:dryrun]
@@ -173,10 +179,10 @@ class Rsync
 		#src = " #{@address}:#{src}" if @address != "localhost" and @address != "127.0.0.1"
 		# cmd << " --files-from=\"#{incl}\""
 
-		cmd << " --link-dest=\"#{@latest}\"" if @latest
+		cmd << " --link-dest=#{quote_str(@latest)}" unless @latest.nil?
 
 		cmd << create_includes_str
-		cmd << " \"#{@bdest}\" "
+		cmd << quote_str(@bdest, true)
 		cmd
 	end
 
@@ -253,7 +259,7 @@ class Rsync
 		}
 	end
 
-	def create_includes
+	def create_includes_arr
 		addr=@client_config.address
 		cc=@client_config.conf
 
@@ -263,19 +269,17 @@ class Rsync
 		includes=[]
 		# global includes
 		@conf.includes.each { |inc|
-			inc="\"#{inc}\"" unless inc[/\s/].nil?
-			includes << (prefix+inc)
+			includes << (prefix+quote_str(inc))
 		}
 		# client includes
 		cc.includes.each { |inc|
-			inc="\"#{inc}\"" unless inc[/\s/].nil?
-			includes << (prefix+inc)
+			includes << (prefix+quote_str(inc))
 		}
 		includes.uniq!
 		includes
 	end
 
-	def create_excludes
+	def create_excludes_arr
 		cc=@client_config.conf
 		excludes=[]
 		# global excludes
@@ -291,7 +295,7 @@ class Rsync
 
 		s=""
 		@includes.each { |inc|
-			s << " \"#{inc}\" "
+			s << " #{inc} "
 		}
 		" #{s} "
 	end
@@ -305,7 +309,7 @@ class Rsync
 				fd.puts( x )
 			}
 		}
-		" --exclude-from=\"#{excl}\" "
+		" --exclude-from=#{quote_str(excl)} "
 	end
 
 end
