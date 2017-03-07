@@ -41,6 +41,8 @@ module Runner
 		out = gov(opts, :out)
 		log = gov(opts, :log)
 		echo = gov(opts, :echo)
+		maillog = gov(opts, :maillog)
+		filter = gov(opts, :filter)
 
 		Open3.popen3(cmd) do |stdin, stdout, stderr, wait_thr|
 
@@ -68,26 +70,31 @@ module Runner
 							next if f.eof
 
 							fileno = f.fileno
+							line=""
 
 							begin
 								#data = f.read_nonblock(BLOCK_SIZE)
 								#data = f.read_nonblock(32*1024)
 								line = f.readline
 								line.strip! if strip
+								unless filter.nil?
+									# skip logging output lines that match the filter
+									next unless line[filter].nil?
+								end
 								lines.push(line) unless lines.nil?
 								if echo && out
 									out.puts line
 									out.flush
 								end
-								unless log.nil?
-									case fileno
-									when fnout
-										log.info(line)
-									when fnerr
-										log.error(line)
-									else
-										raise "Unknown fileno for output: #{line}"
-									end
+								case fileno
+								when fnout
+									log.info(line) unless log.nil?
+									maillog.info(line) unless maillog.nil?
+								when fnerr
+									log.error(line) unless log.nil?
+									maillog.error(line) unless maillog.nil?
+								else
+									raise "Unknown fileno for output: #{line}"
 								end
 
 								#puts "fileno: #{fileno}, data: #{line}"

@@ -1,16 +1,72 @@
 
-class RsyncError < StandardError
+require 'mail'
+
+class Rb2RsyncError < StandardError
 end
 
-class Rsync
+class Rb2Maillog
+	RB2MAILLOGFMT="rb2_%Y%m%d_%H%M%S.txt"
+
+	attr_reader :file
+	def initialize(opts)
+		@tmp = opts[:tmp]
+		@runtime=opts[:runtime]
+		@file = File.join(@tmp, @runtime.strftime(RB2MAILLOGFMT))
+	end
+
+	def open(opts, &block)
+		puts "Opening #{@file}"
+		@fd = File.open(@file, "w+")
+		opts[:maillog]=self
+		return @fd unless block_given?
+		puts "Yeilding #{@fd}"
+		yield(@fd)
+	ensure
+		puts "Closing #{@file}"
+		@fd.close
+	end
+
+	def fmt(type, msg)
+		ts=Time.now.strftime("%Y%m%d_%H%M%S")
+		@fd.puts "#{type} #{ts}: #{msg}"
+	end
+
+	def info(msg)
+		fmt("I", msg)
+	end
+
+	def error(msg)
+		fmt("E", msg)
+	end
+
+	def mail(opts={ :subject=> "rb2 log file output" } )
+		body=File.read(@file)
+		mailer = Mail.new do
+			from     "steeve.mccauley@gmail.com"
+			to       "steeve.mccauley@gmail.com"
+			subject  opts[:subject]
+			body     body
+			#add_file :filename => File.basename(@file), :content => File.read(@file)
+		end
+
+		mailer.deliver
+		#puts mailer.to_s
+	end
+end
+
+class Rb2Rsync
 	@@log = Logger.new(STDERR)
-	@@tmp = "/var/tmp"
+	@@tmp = "/var/tmp/rb2"
 
 	def self.init(opts)
 		@@log = opts[:logger] if opts.key?(:logger)
 		@@tmp = opts[:tmp] if opts.key?(:tmp)
+		opts[:tmp]=@@tmp
 
-		@@runtime=opts[:runtime]||Time.now
+		FileUtils.mkdir_p(@@tmp)
+
+		raise "opts :runtime not set" if opts[:runtime].nil?
+		@@runtime=opts[:runtime]
 
 		@@logdir=opts[:logdir]
 		raise "Logdir not set" if @@logdir.nil?
@@ -18,8 +74,11 @@ class Rsync
 		raise "Logformat not set" if @@logformat.nil?
 
 		@@log.info FileUtils.mkdir_p(@@logdir)
-		@@logfile=File.join(@@logdir, @@runtime.strftime(@@logformat))
+		@@logname=@@runtime.strftime(@@logformat)
+		@@logfile=File.join(@@logdir, @@logname)
 		@@log = Logger.set_logger(@@logfile, Logger::INFO)
+
+		@@maillog = Rb2Maillog.new(opts)
 	end
 
 	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes, :conf
@@ -28,14 +87,19 @@ class Rsync
 		@rb2conf_clients=@rb2conf.clients
 
 		globals=@rb2conf.globals #:dest, :logdir, :logformat, :syslog, :email, :smtp
+		puts "globals="+globals.inspect
 		@globals=globals
 		@dest=globals.dest
 		#@logdir=globals.logdir
 		#@logformat=globals.logformat
 		@syslog=globals.syslog
-		@email=globals.email
+		@email=globals.email.join(",")
 		@smtp=globals.smtp
 		@conf=globals.conf
+
+		#Mail.defaults do
+		#	delivery_method :smtp, address: @smtp
+		#end
 
 		@verbose = opts[:verbose]
 
@@ -111,7 +175,7 @@ class Rsync
 		unless dirs.empty?
 			idx=@filestamp.eql?(dirs[0]) ? 1 : 0
 			latest=dirs[idx].nil? ? nil : File.join(@bdir, dirs[idx])
-			raise RsyncError, "Latest is not a directory: #{latest}" unless latest.nil? || File.directory?(latest)
+			raise Rb2RsyncError, "Latest is not a directory: #{latest}" unless latest.nil? || File.directory?(latest)
 		end
 		latest
 	end
@@ -200,7 +264,7 @@ class Rsync
 		when :update
 			@@log.info "#{@action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
 		else
-			raise RsyncError, "Unknown action in Rsync.go: #{@action}"
+			raise Rb2RsyncError, "Unknown action in Rb2Rsync.go: #{@action}"
 		end
 		cmd = get_cmd(opts)
 		@@log.info "cmd=[%s]" % get_cmd(opts)
@@ -208,21 +272,23 @@ class Rsync
 		opts[:lines]=nil
 		opts[:out]=@verbose ? $stdout : nil
 		opts[:log]=@@log
+		opts[:filter]=@verbose ? nil : /\sis\suptodate$/
 
 		exit_status = Runner::run3!(cmd, opts)
 		case exit_status
 		when 23,24
-			@@log.info "Rsync command success exit_status = #{exit_status}: [#{cmd}]"
+			@@log.info "Rb2Rsync command success exit_status = #{exit_status}: [#{cmd}]"
 		when 0
-			@@log.info "Rsync command success: [#{cmd}]"
+			@@log.info "Rb2Rsync command success: [#{cmd}]"
 		else
-			@@log.error "Rsync failed, exit_status == #{exit_status}"
+			@@log.error "Rb2Rsync failed, exit_status == #{exit_status}"
 			if @action == :run
 				es=Runner::run3!("rm -rvf #{@bdest}/", opts)
 				@@log.error "Failed to remove failed backup in #{@bdest}" unless es == 0
 			end
 		end
-		puts FileUtils.rmdir(@bdest, {:verbose=>true})
+		FileUtils.rmdir(@bdest, {:verbose=>true})
+		exit_status
 	end
 
 	def test_clients(clients)
@@ -243,20 +309,26 @@ class Rsync
 		@action=__method__.to_sym
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients)
-		clients.each { |client|
-			next unless setup(client)
-			go(opts)
+		@@maillog.open(opts) { |maillog|
+			clients.each { |client|
+				next unless setup(client)
+				go(opts)
+			}
 		}
+		@@maillog.mail
 	end
 
 	def update(clients, opts=DEF_OPTS)
 		@action=__method__.to_sym
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		test_clients(clients)
-		clients.each { |client|
-			next unless setup(client)
-			go(opts)
+		@@maillog.open(opts) { |maillog|
+			clients.each { |client|
+				next unless setup(client)
+				go(opts)
+			}
 		}
+		@@maillog.mail
 	end
 
 	def create_includes_arr
@@ -291,7 +363,7 @@ class Rsync
 	end
 
 	def create_includes_str
-		raise RsyncError, "Nothing to backup, includes is empty" if @includes.empty?
+		raise Rb2RsyncError, "Nothing to backup, includes is empty" if @includes.empty?
 
 		s=""
 		@includes.each { |inc|

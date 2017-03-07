@@ -193,7 +193,7 @@ $log.debug "opts="+$opts.inspect
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
 Rb2Util.init($opts)
-Rsync.init($opts)
+Rb2Rsync.init($opts)
 
 rb2c = Rb2Config.new($opts[:config])
 #puts "rb2c="+rb2c.to_json
@@ -263,10 +263,10 @@ when :LIST
 when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
-	rsync=Rsync.new(rb2c, $opts)
+	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.update($opts[:clients], $opts)
 when :RUN
-	rsync=Rsync.new(rb2c, $opts)
+	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.run($opts[:clients], $opts)
 when :VERSION
 	puts rb2c.get_version.to_s
