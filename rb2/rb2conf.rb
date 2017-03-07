@@ -385,6 +385,10 @@ class Rb2Client
 		rb2client
 	end
 
+	def get_ssh_address
+		@address.eql?("localhost") ? nil : @address
+	end
+
 	def set_address(addr)
 		@address=addr
 	end

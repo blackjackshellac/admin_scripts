@@ -181,6 +181,8 @@ class Rb2Rsync
 	end
 
 	def setup(client)
+		Rb2Rsync.info "Setup client #{client}"
+
 		@@log.debug "client="+client.inspect
 		@@log.debug "client_config="+@rb2conf_clients.inspect
 		# rubac.20170221.pidora
@@ -270,9 +272,9 @@ class Rb2Rsync
 
 		case @action
 		when :run
-			@@log.info "#{@action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
+			Rb2Rsync.info "#{@action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
 		when :update
-			@@log.info "#{@action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
+			Rb2Rsync.info "#{@action.to_s.capitalize} backup #{@client}: includes=#{@includes.inspect} excludes=#{@excludes.inspect}"
 		else
 			raise Rb2RsyncError, "Unknown action in Rb2Rsync.go: #{@action}"
 		end
@@ -284,6 +286,7 @@ class Rb2Rsync
 		opts[:log]=@@log
 		opts[:filter]=@verbose ? nil : /\sis\suptodate$/
 
+		Rb2Rsync.info "Running #{cmd}"
 		exit_status = Runner::run3!(cmd, opts)
 		case exit_status
 		when 23,24
@@ -302,10 +305,29 @@ class Rb2Rsync
 	end
 
 	def test_clients(clients)
-		return unless clients.empty?
-		c=@rb2conf_clients.keys
-		msg=c.empty? ? "No clients configured" : "No clients specified, use --all to #{@action.to_s} backup #{@rb2conf.clients.keys.inspect}"
-		$log.die msg
+		if clients.empty?
+			c=@rb2conf_clients.keys
+			error c.empty? ? "No clients configured" : "No clients specified, use --all to #{@action.to_s} backup #{@rb2conf.clients.keys.inspect}"
+		else
+			failed = false
+			#ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "$c" exit
+			clients.each { |client|
+				Rb2Rsync.info "Testing client #{client}"
+				c=client.to_s
+				puts @rb2conf_clients.inspect
+				cc=@rb2conf_clients[client.to_sym]
+				a=cc.get_ssh_address
+				next if a.nil?
+				cmd = %Q[ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "#{a}" exit]
+				es = Runner::run3!(cmd, opts)
+				if es != 0
+					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}"
+					failed = true
+				end
+			}
+			clients.clear if failed
+		end
+		clients
 	end
 
 	DEF_OPTS={
@@ -316,11 +338,10 @@ class Rb2Rsync
 		:log=>nil
 	}
 	def run(clients, opts=DEF_OPTS)
-		@action=__method__.to_sym
-		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
-		test_clients(clients)
 		@@maillog.open(opts) { |maillog|
-			clients.each { |client|
+			@action=__method__.to_sym
+			clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
+			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
 			}
@@ -329,11 +350,10 @@ class Rb2Rsync
 	end
 
 	def update(clients, opts=DEF_OPTS)
-		@action=__method__.to_sym
-		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
-		test_clients(clients)
 		@@maillog.open(opts) { |maillog|
-			clients.each { |client|
+			@action=__method__.to_sym
+			clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
+			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
 			}
