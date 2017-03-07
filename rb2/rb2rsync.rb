@@ -250,6 +250,16 @@ class Rb2Rsync
 		cmd
 	end
 
+	def self.info(msg)
+		@@log.info msg unless @@log.nil?
+		@@maillog.info msg unless @@maillog.nil?
+	end
+
+	def self.error(msg)
+		@@log.error msg unless @@log.nil?
+		@@maillog.error msg unless @@maillog.nil?
+	end
+
 	def go(opts)
 		#puts @client_config.inspect
 		conf=@client_config.conf
@@ -277,14 +287,14 @@ class Rb2Rsync
 		exit_status = Runner::run3!(cmd, opts)
 		case exit_status
 		when 23,24
-			@@log.info "Rb2Rsync command success exit_status = #{exit_status}: [#{cmd}]"
+			Rb2Rsync.info "Rb2Rsync command success exit_status = #{exit_status}: [#{cmd}]"
 		when 0
-			@@log.info "Rb2Rsync command success: [#{cmd}]"
+			Rb2Rsync.info "Rb2Rsync command success: [#{cmd}]"
 		else
-			@@log.error "Rb2Rsync failed, exit_status == #{exit_status}"
+			Rb2Rsync.error "Rb2Rsync failed, exit_status == #{exit_status}"
 			if @action == :run
 				es=Runner::run3!("rm -rvf #{@bdest}/", opts)
-				@@log.error "Failed to remove failed backup in #{@bdest}" unless es == 0
+				Rb2Rsync.error "Failed to remove failed backup in #{@bdest}" unless es == 0
 			end
 		end
 		FileUtils.rmdir(@bdest, {:verbose=>true})
