@@ -177,11 +177,11 @@ end
 hcc=hc.getHostConfig()
 
 nc=hcc.getNameConfig()
-#puts nc.getName
-#puts nc.getMountPoint
-#puts nc.getDevices
-#puts nc.getMapper
-#puts nc.getOptions
+$log.debug "name="+nc.getName.inspect
+$log.debug "mountPoint="+nc.getMountPoint.inspect
+$log.debug "devices="+nc.getDevices.inspect
+$log.debug "mapper="+nc.getMapper.inspect
+$log.debug "options="+nc.getOptions.inspect
 
 mp = nc.getMountPoint()
 

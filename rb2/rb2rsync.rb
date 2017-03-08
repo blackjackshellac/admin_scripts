@@ -6,29 +6,50 @@ end
 
 class Rb2Maillog
 	RB2MAILLOGFMT="rb2_%Y%m%d_%H%M%S.txt"
+	@@log = Logger.new(STDERR)
+	@@tmp = "/var/tmp/rb2"
+
+	def self.init(opts)
+		@@log = opts[:logger] if opts.key?(:logger)
+		@@tmp = opts[:tmp]
+	end
 
 	attr_reader :file
 	def initialize(opts)
-		@tmp = opts[:tmp]
 		@runtime=opts[:runtime]
-		@file = File.join(@tmp, @runtime.strftime(RB2MAILLOGFMT))
+		@file = File.join(@@tmp, @runtime.strftime(RB2MAILLOGFMT))
 	end
 
 	def open(opts, &block)
-		puts "Opening #{@file}"
+		@@log.debug "Opening #{@file}"
 		@fd = File.open(@file, "w+")
 		opts[:maillog]=self
 		return @fd unless block_given?
-		puts "Yeilding #{@fd}"
+		@@log.debug "Yeilding #{@fd}"
 		yield(@fd)
 	ensure
-		puts "Closing #{@file}"
+		@@log.debug "Closing #{@file}"
 		@fd.close
 	end
 
 	def fmt(type, msg)
 		ts=Time.now.strftime("%Y%m%d_%H%M%S")
 		@fd.puts "#{type} #{ts}: #{msg}"
+	end
+
+	SEP_LENGTH=50
+	SEP="+"*SEP_LENGTH
+	def separator(msg=nil)
+		sep=""+SEP
+		unless msg.nil?
+			msg.strip!
+			msg=" #{msg} "
+			ml=msg.length
+			sl=sep.length
+			o=(sl-ml)/2.floor
+			sep[o, ml]=msg if o > 0
+		end
+		@fd.puts sep
 	end
 
 	def info(msg)
@@ -39,18 +60,23 @@ class Rb2Maillog
 		fmt("E", msg)
 	end
 
-	def mail(opts={ :subject=> "rb2 log file output" } )
-		body=File.read(@file)
+	def mail(opts)
+		subj = opts[:subject]
+		from = opts[:email_from]
+		to   = opts[:email_to]
+		body = File.read(@file)
 		mailer = Mail.new do
-			from     "steeve.mccauley@gmail.com"
-			to       "steeve.mccauley@gmail.com"
-			subject  opts[:subject]
+			from     from
+			to       to
+			subject  subj
 			body     body
 			#add_file :filename => File.basename(@file), :content => File.read(@file)
 		end
 
+		@@log.debug mailer.to_s
 		mailer.deliver
-		#puts mailer.to_s
+	rescue => e
+		raise "Failed to mail result: #{opts.inspect} [#{e.to_s}]"
 	end
 end
 
@@ -78,6 +104,7 @@ class Rb2Rsync
 		@@logfile=File.join(@@logdir, @@logname)
 		@@log = Logger.set_logger(@@logfile, Logger::INFO)
 
+		Rb2Maillog.init(opts)
 		@@maillog = Rb2Maillog.new(opts)
 	end
 
@@ -106,8 +133,9 @@ class Rb2Rsync
 		# rubac.20170221.pidora.excl
 		#
 		#
-		# /mnt/backup/rubac/pidora/rubac.20170221
-		@filestamp=@@runtime.strftime("rb2.%Y%m%d")
+		# /mnt/backup/rubac/pidora/
+		# rubac.20170221
+		@dirstamp=@@runtime.strftime("rb2.%Y%m%d")
 
 		@sshopts = {}
 		if ENV['RUBAC_SSHOPTS']
@@ -173,7 +201,8 @@ class Rb2Rsync
 	def find_latest(dirs)
 		latest=nil
 		unless dirs.empty?
-			idx=@filestamp.eql?(dirs[0]) ? 1 : 0
+			# don't use current backup directory for latest from list of dirs
+			idx=@dirstamp.eql?(dirs[0]) ? 1 : 0
 			latest=dirs[idx].nil? ? nil : File.join(@bdir, dirs[idx])
 			raise Rb2RsyncError, "Latest is not a directory: #{latest}" unless latest.nil? || File.directory?(latest)
 		end
@@ -181,7 +210,7 @@ class Rb2Rsync
 	end
 
 	def setup(client)
-		Rb2Rsync.info "Setup client #{client}"
+		Rb2Rsync.info("Setup client #{client}", true)
 
 		@@log.debug "client="+client.inspect
 		@@log.debug "client_config="+@rb2conf_clients.inspect
@@ -189,14 +218,13 @@ class Rb2Rsync
 		@client=client.to_s
 		@bdir=File.join(@dest, @client)
 		FileUtils.mkdir_p(@bdir)
-		@bdest=File.join(@bdir, @filestamp)
+		@bdest=File.join(@bdir, @dirstamp)
 
 		@dirs=list_bdest(@bdir)
 		@latest = find_latest(@dirs)
 
-		puts "latest=#{@latest}"
-
-		puts FileUtils.mkdir_p(@bdest, {:noop=>false, :verbose=>true})
+		Rb2Rsync.info "latest=#{@latest}"
+		Rb2Rsync.info FileUtils.mkdir_p(@bdest, {:noop=>false, :verbose=>true})
 
 		@client_config=@rb2conf_clients[client.to_sym]
 		if @client_config.nil?
@@ -252,9 +280,11 @@ class Rb2Rsync
 		cmd
 	end
 
-	def self.info(msg)
+	def self.info(msg, sep=false)
 		@@log.info msg unless @@log.nil?
-		@@maillog.info msg unless @@maillog.nil?
+		unless @@maillog.nil?
+			sep ? @@maillog.separator(msg) : @@maillog.info(msg)
+		end
 	end
 
 	def self.error(msg)
@@ -312,7 +342,7 @@ class Rb2Rsync
 			failed = false
 			#ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "$c" exit
 			clients.each { |client|
-				Rb2Rsync.info "Testing client #{client}"
+				Rb2Rsync.info("Testing client #{client}", true)
 				c=client.to_s
 				puts @rb2conf_clients.inspect
 				cc=@rb2conf_clients[client.to_sym]
@@ -338,27 +368,39 @@ class Rb2Rsync
 		:log=>nil
 	}
 	def run(clients, opts=DEF_OPTS)
+		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
-			clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 			test_clients(clients).each { |client|
+				@@maillog.separator(client.to_s)
 				next unless setup(client)
 				go(opts)
 			}
 		}
-		@@maillog.mail
+		mopts = {
+			:subject => "Run backup finished: #{clients.join(',')}",
+			:email_from => @email,
+			:email_to   => @email
+		}
+		@@maillog.mail(mopts)
 	end
 
 	def update(clients, opts=DEF_OPTS)
+		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
-			clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 			test_clients(clients).each { |client|
+				@@maillog.separator(client.to_s)
 				next unless setup(client)
 				go(opts)
 			}
 		}
-		@@maillog.mail
+		mopts = {
+			:subject => "Update backup finished: #{clients.join(',')}",
+			:email_from => @email,
+			:email_to   => @email
+		}
+		@@maillog.mail(mopts)
 	end
 
 	def create_includes_arr
@@ -405,7 +447,7 @@ class Rb2Rsync
 	def create_excludes_from
 		return "" if @excludes.empty?
 		# /tmp/rb.20170221.pidora.excl
-		excl = File.join(@@tmp, File.basename(@filestamp) + ".#{@client}.excl")
+		excl = File.join(@@tmp, File.basename(@dirstamp) + ".#{@client}.excl")
 		File.open( excl, "w" ) { |fd|
 			@excludes.each { |x|
 				fd.puts( x )
