@@ -349,7 +349,7 @@ class Rb2Rsync
 				a=cc.get_ssh_address
 				next if a.nil?
 				cmd = %Q[ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "#{a}" exit]
-				es = Runner::run3!(cmd, opts)
+				es = Runner::run3!(cmd, {:strip=>true, :out=>$stdout, :log=>@@log})
 				if es != 0
 					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}"
 					failed = true

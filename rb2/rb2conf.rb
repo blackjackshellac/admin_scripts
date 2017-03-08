@@ -380,7 +380,7 @@ class Rb2Client
 
 		rb2client = Rb2Client.new
 		rb2client.client = client.to_s
-		rb2client.address = h[:address]||"localhost"
+		rb2client.address = h[:address]||client.to_s
 		rb2client.conf = Rb2Conf.from_hash(h[:conf])
 		rb2client
 	end
@@ -513,8 +513,7 @@ class Rb2Config
 	def set_client_config(opts, option)
 		clist = opts[:clients]
 		clist.each { |client|
-			cc=@clients[client.to_sym]
-			puts "client="+cc.inspect
+			cc=get_client_conf(client, true)
 			conf=cc.conf
 			val=conf.set_option(option, opts[option])
 			@@log.info "Set client #{client} option #{option}=#{val.inspect}"
@@ -590,11 +589,14 @@ class Rb2Config
 		return var
 	end
 
-	def get_client_conf(client)
+	def get_client_conf(client, create=false)
 		puts "client=#{client}"
 		client=client.to_sym
 		puts "clients="+@clients.inspect
-		raise Rb2Error, "Client #{client} config not found" unless @clients.key?(client)
+		if @clients[client].nil?
+			raise Rb2Error, "Client #{client} config not found" unless create
+			@clients[client]=Rb2Client.from_hash(client)
+		end
 		@clients[client]
 	rescue Rb2Error => e
 		$log.die "Failed to get #{client} config: #{key} [#{e.messsage}]"
