@@ -46,6 +46,7 @@ class RFOutlet
 				files = [stdout, stderr]
 
 				until all_eof(files) do
+					puts "Select from #{files}"
 					ready = IO.select(files)
 					if ready
 						readable = ready[0]
@@ -53,7 +54,7 @@ class RFOutlet
 						# exceptions = ready[2]
 
 						readable.each { |f|
-							next if f.eof
+							#next if f.eof
 
 							fileno = f.fileno
 							line=""
@@ -62,12 +63,13 @@ class RFOutlet
 								#data = f.read_nonblock(BLOCK_SIZE)
 								#data = f.read_nonblock(32*1024)
 								line=f.readline
+								puts "line=#{line}"
 								if fileno == fnout
-									puts f.readline
+									puts line
 								elsif fileno == fnerr
-									puts "Error: #{f.readline}"
+									puts "Error: #{line}"
 								end
-								#puts "fileno: #{fileno}, data: #{line}"
+								puts "fileno: #{fileno}, data: #{line}"
 							rescue EOFError => e
 								#puts "fileno: #{fileno} EOF"
 								raise "Encountered unexpected EOF"
