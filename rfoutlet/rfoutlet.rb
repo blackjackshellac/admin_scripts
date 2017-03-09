@@ -44,6 +44,7 @@ $opts={
 	:long=>nil,
 	:log => nil,
 	:list => false,
+	:sniff => false,
 	:daemonize => false,
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
@@ -119,6 +120,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:list]=true
 	}
 
+	opts.on('-s', '--sniff', "Sniff RF codes") {
+		$opts[:sniff]=true
+	}
+
 	opts.on('-L', '--log FILE', String, "Log file name, default to logging to console") { |log|
 		$opts[:log]=log
 	}
@@ -136,6 +141,10 @@ rfoc = RFOutletConfig.new($opts[:json])
 if $opts[:list]
 	rfoc.list
 	exit 0
+end
+
+if $opts[:sniff]
+	exit RFOutlet.sniffer
 end
 
 rfoc.set_outlet($opts[:outlet])
