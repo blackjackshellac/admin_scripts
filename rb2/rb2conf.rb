@@ -212,17 +212,17 @@ class Rb2Conf
 	include Rb2KeyVal
 	include Rb2Defs
 
-	KEYS_CONF=[:opts, :includes, :excludes, :nincrementals, :compress]
+	KEYS_CONF=[:sshopts, :includes, :excludes, :nincrementals, :compress]
 	RB2CONF_NINCREMENTALS=5
 	RB2CONF_COMPRESS=false
 
-	Rb2Conf.set_default(:opts, "")
+	Rb2Conf.set_default(:sshopts, "")
 	Rb2Conf.set_default(:includes, [])
 	Rb2Conf.set_default(:excludes, [])
 	Rb2Conf.set_default(:nincrementals, RB2CONF_NINCREMENTALS)
 	Rb2Conf.set_default(:compress, RB2CONF_COMPRESS)
 
-	attr_accessor :opts, :includes, :excludes, :nincrementals, :compress
+	attr_accessor :sshopts, :includes, :excludes, :nincrementals, :compress
 	def initialize
 		KEYS_CONF.each { |key|
 			init_option(key, Rb2Conf::get_default(key))
@@ -259,7 +259,7 @@ class Rb2Conf
 	def self.from_hash(h)
 		h={} if h.nil?
 		rb2conf = Rb2Conf.new
-		rb2conf.opts = h[:opts]||""
+		rb2conf.sshopts = h[:sshopts]||"-a -v -v --relative --delete-excluded --ignore-errors --one-file-system --xattrs"
 		rb2conf.includes = h[:includes]||[]
 		rb2conf.excludes = h[:excludes]||[]
 		rb2conf.nincrementals = h[:nincrementals]||RB2CONF_NINCREMENTALS
@@ -269,7 +269,7 @@ class Rb2Conf
 
 	def to_hash
 		{
-			:opts=>@opts,
+			:sshopts=>@sshopts,
 			:includes => @includes,
 			:excludes => @excludes,
 			:nincrementals => @nincrementals,

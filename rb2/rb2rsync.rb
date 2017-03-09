@@ -124,6 +124,8 @@ class Rb2Rsync
 		@smtp=globals.smtp
 		@conf=globals.conf
 
+		@sshopts=@conf.sshopts
+
 		#Mail.defaults do
 		#	delivery_method :smtp, address: @smtp
 		#end
@@ -137,17 +139,21 @@ class Rb2Rsync
 		# rubac.20170221
 		@dirstamp=@@runtime.strftime("rb2.%Y%m%d")
 
-		@sshopts = {}
-		if ENV['RUBAC_SSHOPTS']
-			@sshopts[:global] = ENV['RUBAC_SSHOPTS']
-		else
-			@sshopts[:global] = "-a -v -v"
-			@sshopts[:restore] = "-a -r -v -v"
-		end
-		# don't --delete on update command, add this on run only
-		@sshopts[:global] << " --relative --delete-excluded --ignore-errors --one-file-system"
-		@sshopts[:restore] << " --relative --one-file-system"
-		@sshopts[:global] << " --xattrs"
+		#@sshopts = {
+		#	:global  => "-a -v -v",
+		#	:restore => "-a -r -v -v"
+		#}
+		#if ENV['RUBAC_SSHOPTS']
+		#	@sshopts[:global] = ENV['RUBAC_SSHOPTS']
+		#else
+		#	@sshopts[:global] = "-a -v -v"
+		#end
+		#@sshopts[:restore] = "-a -r -v -v"
+		## don't --delete on update command, add this on run only
+		#@sshopts[:global] << " --relative --delete-excluded --ignore-errors --one-file-system"
+		#@sshopts[:restore] << " --relative --one-file-system"
+		#@sshopts[:global] << " --xattrs"
+		#"-a -v -v --relative --delete-excluded --ignore-errors --one-file-system --xattrs"
 	end
 
 	BACKUP_DIR_RE=/(?<rb2>rb2|rubac).(?<date>\d+)(\.(?<num>\d+))?/
@@ -210,7 +216,7 @@ class Rb2Rsync
 	end
 
 	def setup(client)
-		Rb2Rsync.info("Setup client #{client}", true)
+		Rb2Rsync.info("Setup client #{client}", {:sep=>true})
 
 		@@log.debug "client="+client.inspect
 		@@log.debug "client_config="+@rb2conf_clients.inspect
@@ -261,7 +267,7 @@ class Rb2Rsync
 	end
 
 	def get_cmd(opts)
-		cmd =  "rsync -r #{@sshopts[:global]} " # #{@sshopts["#{host}"]}"
+		cmd =  "rsync -r #{@sshopts} " # #{@sshopts["#{host}"]}"
 		cmd << " --dry-run " if opts[:dryrun]
 		cmd << " --delete" if @action == :run
 
@@ -280,23 +286,42 @@ class Rb2Rsync
 		cmd
 	end
 
-	def self.info(msg, sep=false)
-		@@log.info msg unless @@log.nil?
-		unless @@maillog.nil?
-			sep ? @@maillog.separator(msg) : @@maillog.info(msg)
-		end
+	DEF_OUT_OPTS={:sep=>false, :echo=>false}
+	def self.info(msgs, opts=DEF_OUT_OPTS)
+		opts=DEF_OUT_OPTS.merge(opts)
+		msgs = msgs.join("\n") if msgs.class == Array
+		msgs.chomp
+		msgs.split(/\n/).each { |msg|
+			@@log.info msg unless @@log.nil?
+			unless @@maillog.nil?
+				opts[:sep] ? @@maillog.separator(msg) : @@maillog.info(msg)
+			end
+			puts msg if opts[:echo]
+		}
 	end
 
-	def self.error(msg)
-		@@log.error msg unless @@log.nil?
-		@@maillog.error msg unless @@maillog.nil?
+	def self.error(msgs, opts={:sep=>false, :echo=>false})
+		msgs = msgs.join("\n") if msgs.class == Array
+		msgs.chomp
+		msgs.split(/\n/).each { |msg|
+			@@log.error msg unless @@log.nil?
+			@@maillog.error msg unless @@maillog.nil?
+			puts msg if opts[:echo]
+		}
+	end
+
+	def link_latest
+		base=File.dirname(@bdest)
+		FileUtils.chdir(base) {
+			FileUtils.rm_f "latest" if File.symlink?("latest")
+			FileUtils.ln_s @bdest, "latest"
+		}
 	end
 
 	def go(opts)
 		#puts @client_config.inspect
 		conf=@client_config.conf
-		# :opts, :includes, :excludes, :nincrementals, :compress
-		#opts=conf.opts
+		# :sshopts, :includes, :excludes, :nincrementals, :compress
 
 		@nincrementals=conf.nincrementals
 
@@ -321,8 +346,10 @@ class Rb2Rsync
 		case exit_status
 		when 23,24
 			Rb2Rsync.info "Rb2Rsync command success exit_status = #{exit_status}: [#{cmd}]"
+			link_latest
 		when 0
 			Rb2Rsync.info "Rb2Rsync command success: [#{cmd}]"
+			link_latest
 		else
 			Rb2Rsync.error "Rb2Rsync failed, exit_status == #{exit_status}"
 			if @action == :run
@@ -342,7 +369,7 @@ class Rb2Rsync
 			failed = false
 			#ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "$c" exit
 			clients.each { |client|
-				Rb2Rsync.info("Testing client #{client}", true)
+				Rb2Rsync.info("Testing client #{client}", {:sep=>true})
 				c=client.to_s
 				puts @rb2conf_clients.inspect
 				cc=@rb2conf_clients[client.to_sym]
@@ -358,6 +385,10 @@ class Rb2Rsync
 			clients.clear if failed
 		end
 		clients
+	end
+
+	def df_h
+		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true})
 	end
 
 	DEF_OPTS={
@@ -376,6 +407,7 @@ class Rb2Rsync
 				next unless setup(client)
 				go(opts)
 			}
+			df_h
 		}
 		mopts = {
 			:subject => "Run backup finished: #{clients.join(',')}",
@@ -394,6 +426,7 @@ class Rb2Rsync
 				next unless setup(client)
 				go(opts)
 			}
+			df_h
 		}
 		mopts = {
 			:subject => "Update backup finished: #{clients.join(',')}",

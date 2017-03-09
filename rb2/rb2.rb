@@ -263,9 +263,11 @@ when :LIST
 when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
+	$log.die "#{rb2c.globals.dest} is not initialized" unless Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.update($opts[:clients], $opts)
 when :RUN
+	$log.die "#{rb2c.globals.dest} is not initialized" unless Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.run($opts[:clients], $opts)
 when :VERSION
