@@ -6,7 +6,7 @@ require 'wemote'
 
 ME=File.basename($0, ".rb")
 MD=File.dirname(File.expand_path($0))
-WEMO_ADDRESS=ENV["WEMO_ADDRESS"]||"wemo.home"
+WEMO_ADDRESS=ENV["WEMO_ADDRESS"]||"wemo"
 
 class Logger
 	def die(msg)
@@ -114,5 +114,5 @@ else
 	$log.die "Unknown switch action: #{action}"
 end
 
-printState(switch) if action.eql?(:toggle)
+printState(switch) if action.eql?(:toggle) || action.eql?(:state)
 
