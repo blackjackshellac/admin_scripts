@@ -35,6 +35,7 @@ $log=set_logger(STDOUT)
 $o={
 	:host => WEMO_ADDRESS,
 	:action => :state,
+	:name => nil,
 	:delay => 0
 }
 optparser = OptionParser.new do |opts|
@@ -42,6 +43,10 @@ optparser = OptionParser.new do |opts|
 
 	opts.on('-a', '--host NAME', String, "hostname of wemo switch, default=#{$o[:host]}") { |host|
 		$o[:host]=host
+	}
+
+	opts.on('-n', '--name NAME', String, "find nemo by name") { |name|
+		$o[:name]=name
 	}
 
 	opts.on('-s', '--state', "Get switch state") {
@@ -88,9 +93,14 @@ if $o[:delay] > 0
 	sleep($o[:delay])
 end
 
-$log.info "Connecting to #{$o[:host]}"
-switch = Wemote::Switch.new($o[:host])
-$log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
+if $o[:name].nil?
+	$log.info "Connecting to #{$o[:host]}"
+	switch = Wemote::Switch.new($o[:host])
+	$log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
+else
+	switch = Wemote::Switch.find($o[:name])
+	$log.die "failed to connect to switch #{$o[:name]}" if switch.nil?
+end
 
 def printState(switch)
 	state=switch.on? ? "on" : "off"
