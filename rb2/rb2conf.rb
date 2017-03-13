@@ -154,9 +154,31 @@ module Rb2KeyVal
 		end
 		var
 	end
+
+	def list_key(compact, indent, key)
+		var=instance_variable_get("@#{key}")
+		clz=var.class
+		if clz.method_defined? :list
+			var.list(compact, "\t"+indent)
+		elsif clz == Array
+			puts "#{indent}#{key}: '#{var.join(",")}'"
+		elsif clz == String
+			puts "#{indent}#{key}: '#{var}'"
+		else
+			puts "#{indent}#{key}: #{var}"
+		end
+	end
+
+	def list_keys(compact, indent, keys)
+		keys.each { |key|
+			list_key(compact, indent, key)
+		}
+	end
 end
 
 class Rb2Version
+	include Rb2KeyVal
+
 	KEYS_VERSION=[:major, :minor, :revision]
 
 	RB2V_MAJOR=2
@@ -193,14 +215,15 @@ class Rb2Version
 	end
 
 	def list(compact, indent="\t")
-		KEYS_VERSION.each { |key|
-			var=instance_variable_get("@#{key}")
-			if var.class.method_defined? :list
-				var.list(compact, "\t"+indent)
-			else
-				puts "#{indent}#{key}: #{var}"
-			end
-		}
+		list_keys(compact, indent, KEYS_VERSION)
+		#KEYS_VERSION.each { |key|
+		#	var=instance_variable_get("@#{key}")
+		#	if var.class.method_defined? :list
+		#		var.list(compact, "\t"+indent)
+		#	else
+		#		puts "#{indent}#{key}: #{var}"
+		#	end
+		#}
 	end
 
 	def to_s
@@ -282,14 +305,7 @@ class Rb2Conf
 	end
 
 	def list(compact, indent="\t")
-		KEYS_CONF.each { |key|
-			var=instance_variable_get("@#{key}")
-			if var.class.method_defined? :list
-				var.list(compact, "\t"+indent)
-			else
-				puts "#{indent}#{key}: #{var}"
-			end
-		}
+		list_keys(compact, indent, KEYS_CONF)
 	end
 end
 
@@ -355,16 +371,15 @@ class Rb2Globals
 	end
 
 	def list(compact, indent="\t")
-		KEYS_GLOBALS.each { |key|
-			var=instance_variable_get("@#{key}")
-			raise Rb2Error, "Variable not defined for key=#{key.inspect}: #{self.to_json}" if var.nil?
-			if var.class.method_defined? :list
-				puts "#{indent}#{key}:"
-				var.list(compact, "\t"+indent)
-			else
-				puts "#{indent}#{key}: #{var}"
-			end
-		}
+		list_keys(compact, indent, KEYS_GLOBALS)
+			#var=instance_variable_get("@#{key}")
+			#raise Rb2Error, "Variable not defined for key=#{key.inspect}: #{self.to_json}" if var.nil?
+			#if var.class.method_defined? :list
+			#	puts "#{indent}#{key}:"
+			#	var.list(compact, "\t"+indent)
+			#else
+			#	puts "#{indent}#{key}: #{var}"
+			#end
 	end
 end
 
@@ -424,15 +439,16 @@ class Rb2Client
 	end
 
 	def list(compact, indent="\t")
-		KEYS_CLIENT.each { |key|
-			var=instance_variable_get("@#{key}")
-			if var.class.method_defined? :list
-				puts "#{indent}#{key}:"
-				var.list(compact, "\t"+indent)
-			else
-				puts "#{indent}#{key}: #{var}"
-			end
-		}
+		list_keys(compact, indent, KEYS_CLIENT)
+		#KEYS_CLIENT.each { |key|
+		#	var=instance_variable_get("@#{key}")
+		#	if var.class.method_defined? :list
+		#		puts "#{indent}#{key}:"
+		#		var.list(compact, "\t"+indent)
+		#	else
+		#		puts "#{indent}#{key}: #{var}"
+		#	end
+		#}
 	end
 end
 
@@ -604,8 +620,8 @@ class Rb2Config
 		$log.die "Failed to get #{client} config: #{key} [#{e.to_s}]"
 	end
 
-	def get_version
-		@globals.get_option(:version)
+	def print_version
+		puts @globals.get_option(:version).to_s
 	end
 
 	def delete_client_conf_array(clist, ilist, key)

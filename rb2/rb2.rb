@@ -202,7 +202,7 @@ case $opts[:action]
 when :INIT
 	dest=$opts[:dest]
 	rb2c.set_global_option($opts, :dest)
-	puts "rb2c="+rb2c.inspect
+	#puts "rb2c="+rb2c.inspect
 	Rb2Util.init_backup_dest(rb2c)
 when :RECONFIG
 	# TODO this is ugly
@@ -263,15 +263,15 @@ when :LIST
 when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
-	$log.die "#{rb2c.globals.dest} is not initialized" unless Rb2Util.is_initialized(rb2c)
+	Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.update($opts[:clients], $opts)
 when :RUN
-	$log.die "#{rb2c.globals.dest} is not initialized" unless Rb2Util.is_initialized(rb2c)
+	Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.run($opts[:clients], $opts)
 when :VERSION
-	puts rb2c.get_version.to_s
+	rb2c.print_version
 when :NADA
 	$log.die "No action options specified"
 else

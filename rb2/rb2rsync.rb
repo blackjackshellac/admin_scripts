@@ -18,6 +18,7 @@ class Rb2Maillog
 	def initialize(opts)
 		@runtime=opts[:runtime]
 		@file = File.join(@@tmp, @runtime.strftime(RB2MAILLOGFMT))
+		@client = nil
 	end
 
 	def open(opts, &block)
@@ -32,14 +33,17 @@ class Rb2Maillog
 		@fd.close
 	end
 
-	def fmt(type, msg)
-		ts=Time.now.strftime("%Y%m%d_%H%M%S")
-		@fd.puts "#{type} #{ts}: #{msg}"
+	def set_client(c)
+		@client=c
 	end
 
-	SEP_LENGTH=50
-	SEP="+"*SEP_LENGTH
-	def separator(msg=nil)
+	def fmt(type, msg)
+		ts=Time.now.strftime("%Y%m%d_%H%M%S")
+		c=@client.nil? ? " " : " [#{@client}] "
+		"#{type}#{c}#{ts}: #{msg}"
+	end
+
+	def self.get_separator(msg)
 		sep=""+SEP
 		unless msg.nil?
 			msg.strip!
@@ -49,15 +53,33 @@ class Rb2Maillog
 			o=(sl-ml)/2.floor
 			sep[o, ml]=msg if o > 0
 		end
-		@fd.puts sep
+		sep
 	end
 
-	def info(msg)
-		fmt("I", msg)
+	SEP_LENGTH=50
+	SEP="+"*SEP_LENGTH
+	def separator(msg=nil, opts={})
+		fmsg = fmt("I", Rb2Maillog.get_separator(msg))
+		mputs fmsg, opts
 	end
 
-	def error(msg)
-		fmt("E", msg)
+	def mputs(fmsg, opts={})
+		puts fmsg if opts[:echo]
+		@fd.puts fmsg unless @fd.nil?
+	end
+
+	def info(msg, opts={})
+		opts[:logger].info msg unless opts[:logger].nil?
+
+		fmsg = fmt("I", msg)
+		mputs fmsg, opts
+	end
+
+	def error(msg, opts={})
+		opts[:logger].error msg unless opts[:logger].nil?
+
+		fmsg = fmt("E", msg)
+		mputs fmsg, opts
 	end
 
 	def mail(opts)
@@ -89,7 +111,7 @@ class Rb2Rsync
 		@@tmp = opts[:tmp] if opts.key?(:tmp)
 		opts[:tmp]=@@tmp
 
-		FileUtils.mkdir_p(@@tmp)
+		@@log.info FileUtils.mkdir_p(@@tmp)
 
 		raise "opts :runtime not set" if opts[:runtime].nil?
 		@@runtime=opts[:runtime]
@@ -99,13 +121,14 @@ class Rb2Rsync
 		@@logformat=opts[:logformat]
 		raise "Logformat not set" if @@logformat.nil?
 
-		@@log.info FileUtils.mkdir_p(@@logdir)
 		@@logname=@@runtime.strftime(@@logformat)
 		@@logfile=File.join(@@logdir, @@logname)
 		@@log = Logger.set_logger(@@logfile, Logger::INFO)
 
 		Rb2Maillog.init(opts)
 		@@maillog = Rb2Maillog.new(opts)
+
+		Rb2Rsync.info(FileUtils.mkdir_p(@@logdir), { :echo => true, :logger=>@@log })
 	end
 
 	attr_reader :rb2conf, :client, :client_config, :sshopts, :excludes, :includes, :conf
@@ -114,7 +137,6 @@ class Rb2Rsync
 		@rb2conf_clients=@rb2conf.clients
 
 		globals=@rb2conf.globals #:dest, :logdir, :logformat, :syslog, :email, :smtp
-		puts "globals="+globals.inspect
 		@globals=globals
 		@dest=globals.dest
 		#@logdir=globals.logdir
@@ -174,10 +196,10 @@ class Rb2Rsync
 				if num1.nil? && num2.nil?
 					raise "this shouldn't happen" # date2 <=> date1
 				elsif num1.nil?
-					puts "date1=#{date1.inspect} num1=#{num1.inspect} date2=#{date2.inspect} num2=#{num2.inspect}"
+					@@log.debug "date1=#{date1.inspect} num1=#{num1.inspect} date2=#{date2.inspect} num2=#{num2.inspect}"
 					+1
 				elsif num2.nil?
-					puts "date1=#{date1.inspect} num1=#{num1.inspect} date2=#{date2.inspect} num2=#{num2.inspect}"
+					@@log.debug "date1=#{date1.inspect} num1=#{num1.inspect} date2=#{date2.inspect} num2=#{num2.inspect}"
 					-1
 				else
 					num2.to_i <=> num1.to_i
@@ -195,7 +217,7 @@ class Rb2Rsync
 		FileUtils.chdir(bdir) {
 			@@log.debug "Scanning backup destination directory: "+bdir
 			Dir.glob("*") { |dir|
-				#puts "glob=#{dir}"
+				#@@log.debug "glob=#{dir}"
 				next unless File.directory?(dir)
 				next if dir[BACKUP_DIR_RE].nil?
 				dirs << dir
@@ -216,21 +238,26 @@ class Rb2Rsync
 	end
 
 	def setup(client)
-		Rb2Rsync.info("Setup client #{client}", {:sep=>true})
+		@client=client.to_s
+
+		# maillog adds client string to output
+		@@maillog.set_client(@client)
+		Rb2Rsync.separator("Setup #{@client}", {:echo => true})
 
 		@@log.debug "client="+client.inspect
 		@@log.debug "client_config="+@rb2conf_clients.inspect
 		# rubac.20170221.pidora
-		@client=client.to_s
+
 		@bdir=File.join(@dest, @client)
-		FileUtils.mkdir_p(@bdir)
+		Rb2Rsync.info(FileUtils.mkdir_p(@bdir), { :echo => true, :logger=>@@log } ) unless File.exists?(@bdir)
+
 		@bdest=File.join(@bdir, @dirstamp)
+		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
 		@dirs=list_bdest(@bdir)
 		@latest = find_latest(@dirs)
 
-		Rb2Rsync.info "latest=#{@latest}"
-		Rb2Rsync.info FileUtils.mkdir_p(@bdest, {:noop=>false, :verbose=>true})
+		Rb2Rsync.info("latest #{@latest}", { :echo => true })
 
 		@client_config=@rb2conf_clients[client.to_sym]
 		if @client_config.nil?
@@ -286,28 +313,31 @@ class Rb2Rsync
 		cmd
 	end
 
-	DEF_OUT_OPTS={:sep=>false, :echo=>false}
+	DEF_OUT_OPTS={:echo=>false, :logger=>nil}
 	def self.info(msgs, opts=DEF_OUT_OPTS)
 		opts=DEF_OUT_OPTS.merge(opts)
 		msgs = msgs.join("\n") if msgs.class == Array
 		msgs.chomp
+		opts[:logger]=@@log
 		msgs.split(/\n/).each { |msg|
-			@@log.info msg unless @@log.nil?
-			unless @@maillog.nil?
-				opts[:sep] ? @@maillog.separator(msg) : @@maillog.info(msg)
-			end
-			puts msg if opts[:echo]
+			@@maillog.info(msg, opts)
 		}
 	end
 
-	def self.error(msgs, opts={:sep=>false, :echo=>false})
+	def self.error(msgs, opts=DEF_OUT_OPTS)
+		opts=DEF_OUT_OPTS.merge(opts)
 		msgs = msgs.join("\n") if msgs.class == Array
 		msgs.chomp
+		opts[:logger]=@@log
 		msgs.split(/\n/).each { |msg|
-			@@log.error msg unless @@log.nil?
-			@@maillog.error msg unless @@maillog.nil?
-			puts msg if opts[:echo]
+			@@maillog.error(msg, opts)
 		}
+	end
+
+	def self.separator(msg, opts=DEF_OUT_OPTS)
+		opts=DEF_OUT_OPTS.merge(opts)
+		opts[:logger]=@@log
+		@@maillog.separator(msg, opts)
 	end
 
 	def link_latest
@@ -319,7 +349,7 @@ class Rb2Rsync
 	end
 
 	def go(opts)
-		#puts @client_config.inspect
+		#@@log.debug @client_config.inspect
 		conf=@client_config.conf
 		# :sshopts, :includes, :excludes, :nincrementals, :compress
 
@@ -333,15 +363,15 @@ class Rb2Rsync
 		else
 			raise Rb2RsyncError, "Unknown action in Rb2Rsync.go: #{@action}"
 		end
+
 		cmd = get_cmd(opts)
-		@@log.info "cmd=[%s]" % get_cmd(opts)
 		opts[:strip]=true
 		opts[:lines]=nil
 		opts[:out]=@verbose ? $stdout : nil
 		opts[:log]=@@log
 		opts[:filter]=@verbose ? nil : /\sis\suptodate$/
 
-		Rb2Rsync.info "Running #{cmd}"
+		Rb2Rsync.info("Running #{cmd}", {:echo => true})
 		exit_status = Runner::run3!(cmd, opts)
 		case exit_status
 		when 23,24
@@ -356,8 +386,9 @@ class Rb2Rsync
 				es=Runner::run3!("rm -rvf #{@bdest}/", opts)
 				Rb2Rsync.error "Failed to remove failed backup in #{@bdest}" unless es == 0
 			end
+			# TODO
 		end
-		FileUtils.rmdir(@bdest, {:verbose=>true})
+		FileUtils.rmdir(@bdest)
 		exit_status
 	end
 
@@ -369,13 +400,14 @@ class Rb2Rsync
 			failed = false
 			#ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "$c" exit
 			clients.each { |client|
-				Rb2Rsync.info("Testing client #{client}", {:sep=>true})
+				Rb2Rsync.separator("Testing client #{client}")
 				c=client.to_s
-				puts @rb2conf_clients.inspect
+				#@@log.debug @rb2conf_clients.inspect
 				cc=@rb2conf_clients[client.to_sym]
 				a=cc.get_ssh_address
 				next if a.nil?
 				cmd = %Q[ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "#{a}" exit]
+				Rb2Rsync.info cmd
 				es = Runner::run3!(cmd, {:strip=>true, :out=>$stdout, :log=>@@log})
 				if es != 0
 					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}"
@@ -388,6 +420,7 @@ class Rb2Rsync
 	end
 
 	def df_h
+		@@maillog.set_client(nil)
 		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true})
 	end
 
@@ -403,7 +436,6 @@ class Rb2Rsync
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
 			test_clients(clients).each { |client|
-				@@maillog.separator(client.to_s)
 				next unless setup(client)
 				go(opts)
 			}
@@ -422,7 +454,6 @@ class Rb2Rsync
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
 			test_clients(clients).each { |client|
-				@@maillog.separator(client.to_s)
 				next unless setup(client)
 				go(opts)
 			}

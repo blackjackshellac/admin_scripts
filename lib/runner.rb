@@ -31,8 +31,6 @@ module Runner
 	end
 
 	def self.run3!(cmd, opts={})
-		@@log.debug "#{Dir.pwd}/ $ #{cmd}"
-
 		exit_status = 0
 
 		# if :lines option is array, record output to lines array
@@ -44,6 +42,8 @@ module Runner
 		maillog = gov(opts, :maillog)
 		filter = gov(opts, :filter)
 
+		log.debug "#{Dir.pwd}/ $ #{cmd}" unless log.nil?
+
 		Open3.popen3(cmd) do |stdin, stdout, stderr, wait_thr|
 
 			# or, if you have to do something with the output
@@ -52,7 +52,7 @@ module Runner
 			fnout=stdout.fileno
 			fnerr=stderr.fileno
 
-			puts "fnout=#{fnout} fnerr=#{fnerr}"
+			log.debug "fnout=#{fnout} fnerr=#{fnerr}" unless log.nil?
 
 			# https://gist.github.com/chrisn/7450808
 			stdin.close_write
@@ -96,11 +96,8 @@ module Runner
 								else
 									raise "Unknown fileno for output: #{line}"
 								end
-
-								#puts "fileno: #{fileno}, data: #{line}"
 							rescue EOFError => e
-								#puts "fileno: #{fileno} EOF"
-								raise "Encountered unexpected EOF"
+								raise "Encountered unexpected EOF: #{e.to_s}"
 							rescue => e
 								raise "Encountered unexpected exception: #{e.to_s}"
 							end
@@ -108,10 +105,11 @@ module Runner
 					end
 				end
 			rescue IOError => e
-				puts "IOError: #{e}"
+				msg="IOError: #{e}"
+				log.error(msg) unless log.nil?
+				maillog.error(msg) unless maillog.nil?
 			end
 			exit_status = wait_thr.value.exitstatus
-			puts "exit_status = [#{exit_status}]"
 		end
 
 		return exit_status

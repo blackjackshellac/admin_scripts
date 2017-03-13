@@ -12,8 +12,11 @@ class Rb2Util
 	end
 
 	def self.get_init(dest)
-		@@log.die "Backup destination not found: #{dest}" unless File.exists?(dest)
-		@@log.die "Backup destination is not a directory: #{dest}" unless File.directory?(dest)
+		if File.exists?(dest)
+			@@log.error "Backup destination is not a directory: #{dest}" unless File.directory?(dest)
+		else
+			@@log.error "Backup destination not found: #{dest}"
+		end
 		File.join(dest, RB2_INIT)
 	end
 
@@ -22,9 +25,9 @@ class Rb2Util
 		init=get_init(dest)
 		unless File.exists?(init)
 			@@log.error "Backup destination is not initialized: #{dest}"
-			return false
+			@@log.error "\trun --init #{dest}, to initialize"
+			@@log.die "Quitting"
 		end
-		true
 	end
 
 	def self.init_backup_dest(rb2c)
