@@ -424,6 +424,18 @@ class Rb2Rsync
 		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true})
 	end
 
+	# initialize if start==true
+	def log_runtime(start=false)
+		if start
+			@starttime=Time.now
+			Rb2Rsync.info(">> Starting run at #{@starttime}")
+		else
+			@@maillog.set_client(nil)
+			runtime=Time.now.to_i-@starttime.to_i
+			Rb2Rsync.info(">> Run time = %.1f seconds" % runtime, {:echo=>true})
+		end
+	end
+
 	DEF_OPTS={
 		:all=>false,
 		:strip=>true,
@@ -435,11 +447,13 @@ class Rb2Rsync
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
+			log_runtime(true)
 			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
 			}
 			df_h
+			log_runtime
 		}
 		mopts = {
 			:subject => "Run backup finished: #{clients.join(',')}",
@@ -453,11 +467,13 @@ class Rb2Rsync
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
+			log_runtime(true)
 			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
 			}
 			df_h
+			log_runtime
 		}
 		mopts = {
 			:subject => "Update backup finished: #{clients.join(',')}",
