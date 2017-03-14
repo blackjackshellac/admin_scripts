@@ -348,6 +348,12 @@ class Rb2Rsync
 		}
 	end
 
+	def remove_backup(dest, opts)
+		rm_opts=@verbose ? "-rvf" : "-rf"
+		es=Runner::run3!("rm #{rm_opts} #{bdest}/", opts)
+		raise Rb2RsyncError, "Failed to remove backup: #{bdest}" unless es == 0
+	end
+
 	def go(opts)
 		#@@log.debug @client_config.inspect
 		conf=@client_config.conf
@@ -382,11 +388,7 @@ class Rb2Rsync
 			link_latest
 		else
 			Rb2Rsync.error "Rb2Rsync failed, exit_status == #{exit_status}"
-			if @action == :run
-				es=Runner::run3!("rm -rvf #{@bdest}/", opts)
-				Rb2Rsync.error "Failed to remove failed backup in #{@bdest}" unless es == 0
-			end
-			# TODO
+			remove_backup(@bdest, opts) if @action == :run
 		end
 		FileUtils.rmdir(@bdest)
 		exit_status
@@ -451,6 +453,7 @@ class Rb2Rsync
 			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
+				# TODO test incrementals for client
 			}
 			df_h
 			log_runtime
@@ -471,6 +474,7 @@ class Rb2Rsync
 			test_clients(clients).each { |client|
 				next unless setup(client)
 				go(opts)
+				# TODO test incrementals for client
 			}
 			df_h
 			log_runtime
