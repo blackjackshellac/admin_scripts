@@ -2,10 +2,12 @@
 
 require 'socket'
 require 'logger'
+require 'uri'
+require 'net/http'
 
 class WemoDiscover
 	# LOCATION: http://192.168.0.21:49153/setup.xml
-	LOCATION_RE=/LOCATION:\shttp:\/\/(?<addr>\d+\.\d+\.\d+\.\d+):(?<port>\d+)\/(?<path>.*)/
+	LOCATION_RE=/LOCATION:\shttp:\/\/(?<addr>\d+\.\d+\.\d+\.\d+):(?<port>\d+)\/(?<path>.*?)$/
 
 	# Simple Service Discovery Protocol (SSDP)
 	# https://wiki.wireshark.org/SSDP
@@ -32,8 +34,23 @@ class WemoDiscover
 		@@log.level = on ? Logger::DEBUG : Logger::INFO
 	end
 
+	def self.getFriendlyName(url)
+		uri = URI(url)
+		@@log.debug "uri=#{uri.to_s}"
+		res = Net::HTTP.get_response(uri)
+		return nil unless res.code.eql?('200')
+		body=res.body
+		body.split(/\n/).each { |line|
+			# <friendlyName>Gilgamesh</friendlyName>
+			# poor man's xml parser
+			m = line.match(/\<friendlyName\>(?<fname>.*?)\<\/friendlyName\>/)
+			return m[:fname] unless m.nil?
+		}
+		nil
+	end
+
 	def self.search(timeout = 5)
-		addrs = []
+		addrs = {}
 		Socket.open(:INET, :DGRAM) { |sock|
 			sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_BROADCAST, 1)
 			sock.send(SSDP_REQUEST, 0, SSDP_BROADCAST_ADDR)
@@ -60,19 +77,34 @@ class WemoDiscover
 					next if m.nil?
 					# TODO download and parse data from setup.xml, for now we'll just use the addr from LOCATION:
 					@@log.debug "Found wemo: #{m[:addr]} on port #{m[:port]} with path #{m[:path]}"
-					addrs << m[:addr]
+					url="http://#{m[:addr]}:#{m[:port]}/#{m[:path].strip}"
+					addrs[m[:addr]]={
+						:url=>url
+					}
 				}
 			end
 		}
+
+		addrs.each_pair { |addr,val|
+			fn = getFriendlyName(val[:url])
+			@@log.debug "friendlyName=#{fn}"
+			val[:fname]=fn
+		}
+
 	rescue Interrupt => e
 		@@log.info "Caught interrupt"
 	rescue => e
 		@@log.error "Caught exception #{e}"
+		e.backtrace.each { |line|
+			puts line
+		}
 	ensure
 		return addrs
 	end
 end
 
-#WemoDiscover::debug(false)
-WemoDiscover::search(2).each { |addr| puts "Found wemo at #{addr}" }
+WemoDiscover::debug(false)
+WemoDiscover::search(2).each_pair { |addr, val|
+	puts "Found wemo #{val[:fname]} at #{addr}"
+}
 
