@@ -41,7 +41,7 @@ $o={
 optparser = OptionParser.new do |opts|
 	opts.banner = "#{ME}.rb [options]"
 
-	opts.on('-a', '--host NAME', String, "hostname of wemo switch, default=#{$o[:host]}") { |host|
+	opts.on('-a', '--host NAME', String, "hostname of wemo switch, default=#{$o[:host]} ENV=WEMO_ADDRESS") { |host|
 		$o[:host]=host
 	}
 
