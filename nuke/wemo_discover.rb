@@ -19,16 +19,20 @@ class WemoDiscover
 	SSDP_ST = "urn:Belkin:device:controllee:1"
 	SSDP_BROADCAST_ADDR=Addrinfo.udp(SSDP_ADDR, SSDP_PORT)
 
-	SSDP_REQUEST = ""
-	SSDP_REQUEST << "M-SEARCH * HTTP/1.1\r\n"
-	SSDP_REQUEST << "HOST: %s:%d\r\n" % [SSDP_ADDR, SSDP_PORT]
-	SSDP_REQUEST << "MAN: \"ssdp:discover\"\r\n"
-	SSDP_REQUEST << "MX: %d\r\n" % SSDP_MX
-	SSDP_REQUEST << "ST: %s\r\n" % SSDP_ST
-	SSDP_REQUEST << "USER-AGENT: unix/5.1 UPnP/1.1 crash/1.0\r\n\r\n";
-
 	@@log = Logger.new(STDOUT)
 	@@log.level = Logger::INFO
+
+	def self.getSSDPRequest(st=SSDP_ST)
+		ssdp_request = ""
+		ssdp_request << "M-SEARCH * HTTP/1.1\r\n"
+		ssdp_request << "HOST: %s:%d\r\n" % [SSDP_ADDR, SSDP_PORT]
+		ssdp_request << "MAN: \"ssdp:discover\"\r\n"
+		ssdp_request << "MX: %d\r\n" % SSDP_MX
+		ssdp_request << "ST: %s\r\n" % st
+		ssdp_request << "USER-AGENT: unix/5.1 UPnP/1.1 crash/1.0\r\n\r\n";
+		@@log.debug "request=\n#{ssdp_request}"
+		ssdp_request
+	end
 
 	def self.debug(on=true)
 		@@log.level = on ? Logger::DEBUG : Logger::INFO
@@ -53,7 +57,7 @@ class WemoDiscover
 		addrs = {}
 		Socket.open(:INET, :DGRAM) { |sock|
 			sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_BROADCAST, 1)
-			sock.send(SSDP_REQUEST, 0, SSDP_BROADCAST_ADDR)
+			sock.send(getSSDPRequest, 0, SSDP_BROADCAST_ADDR)
 
 			while true
 				ready = IO.select([sock], nil, nil, timeout)
