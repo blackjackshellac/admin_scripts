@@ -55,8 +55,8 @@ $o={
 	:name => nil,
 	:daemonize => false,
 	:delay => 0,
-	:lat => 45.4966780,
-	:long => -73.5039060,
+	:lat => (ENV["WEMO_LAT"]||45.4966780).to_f,
+	:long => (ENV["WEMO_LONG"]||-73.5039060).to_f,
 	:sunrise => nil,
 	:sunset => nil,
 	:log => nil,
@@ -97,6 +97,12 @@ optparser = OptionParser.new do |opts|
 		$o[:delay]=rand(1+delay.to_i)
 	}
 
+	opts.on('-L', '--latlong LATLONG', Array, "Lattitude and Longitude, default=#{$o[:lat]},#{$o[:long]} (see also env var WEMO_LAT and WEMO_LONG)") { |latlong|
+		$log.die "LATLONG is an array of two integers" unless latlong.length == 2
+		$o[:lat]=latlong[0].to_f
+		$o[:long]=latlong[1].to_f
+	}
+
 	opts.on('-S', '--sunset DELAY', Integer, "Run at sunset with random delay") { |delay|
 		$o[:sunset]=get_delay(delay)
 		$o[:daemonize]=true
@@ -127,6 +133,8 @@ optparser = OptionParser.new do |opts|
 end
 optparser.parse!
 
+$log.debug "lat=#{$o[:lat]} long=#{$o[:long]}"
+
 if $o[:daemonize]
 	$o[:log]=LOG_PATH if $o[:log].nil?
 	FileUtils.mkdir_p(File.dirname($o[:log]))
@@ -150,7 +158,7 @@ if $o[:sunset] || $o[:sunset]
 
 	times={}
 	if $o[:sunrise]
-		sunrise = st.rise(now, $o[:lat], $o[:long])
+			sunrise = st.rise(now, $o[:lat], $o[:long])
 		$log.debug "Sunrise = #{sunrise.localtime}"
 
 		if sunrise < now
