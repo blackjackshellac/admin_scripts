@@ -3,10 +3,16 @@
 require 'optparse'
 require 'logger'
 require 'wemote'
+# ruby-sun-times gem
+require 'sun_times'
+require 'daemons'
+require 'fileutils'
 
 ME=File.basename($0, ".rb")
 MD=File.dirname(File.realpath($0))
 WEMO_ADDRESS=ENV["WEMO_ADDRESS"]||"wemo"
+NOW=Time.now.strftime("_%Y%m%d")
+LOG_PATH=File.join("/var/tmp/#{ME}", ME+NOW+".log")
 
 require_relative(File.join(MD, "wemo_discover"))
 
@@ -17,9 +23,9 @@ class Logger
 	end
 end
 
-def set_logger(stream)
+def set_logger(stream, level=Logger::INFO)
 	log = Logger.new(stream)
-	log.level = Logger::INFO
+	log.level = level
 	log.datetime_format = "%Y-%m-%d %H:%M:%S"
 	log.formatter = proc do |severity, datetime, progname, msg|
 		"#{severity} #{datetime}: #{msg}\n"
@@ -34,11 +40,27 @@ $log=set_logger(STDOUT)
 # :off
 # :toggle
 
+def get_delay(delay)
+	delay=delay.to_i
+	sign=(delay<0) ? -1 : +1
+	delay=delay.abs if sign == -1
+	(sign*rand(1+delay))
+rescue => e
+	$log.die "Failed to convert delay to random delay #{delay}: #{e}"
+end
+
 $o={
 	:host => WEMO_ADDRESS,
 	:action => :state,
 	:name => nil,
-	:delay => 0
+	:daemonize => false,
+	:delay => 0,
+	:lat => 45.4966780,
+	:long => -73.5039060,
+	:sunrise => nil,
+	:sunset => nil,
+	:log => nil,
+	:debug => false
 }
 optparser = OptionParser.new do |opts|
 	opts.banner = "#{ME}.rb [options]"
@@ -75,12 +97,27 @@ optparser = OptionParser.new do |opts|
 		$o[:delay]=rand(1+delay.to_i)
 	}
 
+	opts.on('-S', '--sunset DELAY', Integer, "Run at sunset with random delay") { |delay|
+		$o[:sunset]=get_delay(delay)
+		$o[:daemonize]=true
+	}
+
+	opts.on('-R', '--sunrise DELAY', Integer, "Run at sunrise with random delay") { |delay|
+		$o[:sunrise]=get_delay(delay)
+		$o[:daemonize]=true
+	}
+
 	opts.on('-D', '--debug', "Debug") {
+		$o[:debug]=true
 		$log.level = Logger::DEBUG
 	}
 
 	opts.on('-q', '--quiet', "Quiet") {
 		$log.level = Logger::ERROR
+	}
+
+	opts.on('-b', '--[no-]bg', "Explicitly turn daemonize on/off") { |bg|
+		$o[:daemonize]=bg
 	}
 
 	opts.on('-h', '--help', "Help") {
@@ -90,9 +127,75 @@ optparser = OptionParser.new do |opts|
 end
 optparser.parse!
 
-if $o[:delay] > 0
-	$log.info "Waiting %d seconds" % $o[:delay]
-	sleep($o[:delay])
+if $o[:daemonize]
+	$o[:log]=LOG_PATH if $o[:log].nil?
+	FileUtils.mkdir_p(File.dirname($o[:log]))
+	sout=$stdout
+	$log.debug "Daemonizing script, logging to #{$o[:log]}"
+	Daemons.daemonize
+	sout.puts "Kill me with pid #{$$}"
+end
+
+level=$o[:debug] ? Logger::DEBUG : ($o[:quiet] ? Logger::WARN : Logger::INFO)
+$log=set_logger($o[:log], level) unless $o[:log].nil?
+$o[:logger]=$log
+
+$log.info "Kill me with pid #{$$}" if $o[:daemonize]
+
+fires={}
+if $o[:sunset] || $o[:sunset]
+	now   = Time.now
+	st = SunTimes.new
+	tnow=now.to_i
+
+	times={}
+	if $o[:sunrise]
+		sunrise = st.rise(now, $o[:lat], $o[:long])
+		$log.debug "Sunrise = #{sunrise.localtime}"
+
+		if sunrise < now
+			sunrise = sunrise+86400
+			$log.debug "Advancing sunrise to tomorrow: #{sunrise.localtime}"
+		end
+
+		# add delay offset to time of sunrise
+		sunrise=sunrise.to_i+$o[:sunrise]
+		secs2sunrise=(sunrise.to_i-tnow)
+		$log.debug "Secs to sunrise = #{secs2sunrise}"
+
+		times[sunrise]=:on
+		sunrise += (3600*3)
+		times[sunrise]=:off
+	end
+
+	if $o[:sunset]
+		sunset  = st.set(now, $o[:lat], $o[:long])
+
+		$log.debug "Sunset = #{sunset.localtime}"
+		if sunset < now
+			sunset = sunset+86400
+			$log.debug "Advancing sunset to tomorrow: #{sunset.localtime}"
+		end
+
+		# add delay offset to time of sunset
+		sunset =sunset.to_i+$o[:sunset]
+		secs2sunset =(sunset.to_i-tnow)
+
+		$log.debug "Secs to sunset = #{secs2sunset}"
+
+		times[sunset]=:on
+		sunset += (3600*3)
+		times[sunset]=:off
+	end
+
+	$log.debug "times=#{times.keys.inspect} stimes=#{times.keys.sort.inspect}"
+	times.keys.sort.each { |time|
+		action=times[time]
+		$log.debug "time=#{time.inspect} Running at [#{Time.at(time)}] action=#{action.inspect}"
+		fires[time]=action
+	}
+
+	$log.debug "fires=#{fires.inspect}"
 end
 
 unless $o[:name].nil?
@@ -123,22 +226,41 @@ rescue => e
 	$log.error "Caught unhandled exception: #{e}"
 end
 
-name=switch.name
-action=$o[:action]
-case action
-when :state
-when :on
-	$log.info "Turn on #{name}"
-	switch.on!
-when :off
-	$log.info "Turn off #{name}"
-	switch.off!
-when :toggle
-	$log.info "Toggle #{name}"
-	switch.toggle!
-else
-	$log.die "Unknown switch action: #{action}"
+def fire(switch, action, delay)
+	if delay > 0
+		$log.info "Waiting %d seconds" % delay
+		sleep(delay)
+	end
+
+	name=switch.name
+	case action
+	when :state
+	when :on
+		$log.info "Turn on #{name}"
+		switch.on!
+	when :off
+		$log.info "Turn off #{name}"
+		switch.off!
+	when :toggle
+		$log.info "Toggle #{name}"
+		switch.toggle!
+	else
+		$log.die "Unknown switch action: #{action}"
+	end
+
+rescue Interrupt => e
+	$log.warn "Caught interrupt"
+	action=:state
+ensure
+	printState(switch) if action.eql?(:toggle) || action.eql?(:state)
 end
 
-printState(switch) if action.eql?(:toggle) || action.eql?(:state)
+if fires.empty?
+	fire(switch, $o[:action], $o[:delay])
+else
+	fires.each_pair { |time, action|
+		delay=time-Time.now.to_i
+		fire(switch, action, delay)
+	}
+end
 
