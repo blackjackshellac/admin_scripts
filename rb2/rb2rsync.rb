@@ -337,6 +337,7 @@ class Rb2Rsync
 	def self.separator(msg, opts=DEF_OUT_OPTS)
 		opts=DEF_OUT_OPTS.merge(opts)
 		opts[:logger]=@@log
+		opts[:echo]=true
 		@@maillog.separator(msg, opts)
 	end
 
