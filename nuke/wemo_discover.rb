@@ -107,8 +107,8 @@ class WemoDiscover
 	end
 end
 
-WemoDiscover::debug(false)
-WemoDiscover::search(2).each_pair { |addr, val|
-	puts "Found wemo #{val[:fname]} at #{addr}"
-}
+#WemoDiscover::debug(false)
+#WemoDiscover::search(2).each_pair { |addr, val|
+#	puts "Found wemo #{val[:fname]} at #{addr}"
+#}
 

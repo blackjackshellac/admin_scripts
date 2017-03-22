@@ -5,8 +5,10 @@ require 'logger'
 require 'wemote'
 
 ME=File.basename($0, ".rb")
-MD=File.dirname(File.expand_path($0))
+MD=File.dirname(File.realpath($0))
 WEMO_ADDRESS=ENV["WEMO_ADDRESS"]||"wemo"
+
+require_relative(File.join(MD, "wemo_discover"))
 
 class Logger
 	def die(msg)
@@ -93,18 +95,32 @@ if $o[:delay] > 0
 	sleep($o[:delay])
 end
 
-if $o[:name].nil?
-	$log.info "Connecting to #{$o[:host]}"
-	switch = Wemote::Switch.new($o[:host])
-	$log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
-else
-	switch = Wemote::Switch.find($o[:name])
-	$log.die "failed to connect to switch #{$o[:name]}" if switch.nil?
+unless $o[:name].nil?
+	WemoDiscover::debug(true) if $log.level == Logger::DEBUG
+	timeout=2
+	wemos=WemoDiscover::search(timeout)
+	$log.warn "No wemos found" if wemos.empty?
+	wemos.each_pair { |addr, val|
+		$log.info "Found wemo #{val[:fname]} at #{addr}"
+		name=val[:fname]
+		if $o[:name].eql?(name)
+			$o[:host]=addr
+			break
+		end
+	}
 end
+
+$log.info "Connecting to #{$o[:host]}"
+switch = Wemote::Switch.new($o[:host])
+$log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
 
 def printState(switch)
 	state=switch.on? ? "on" : "off"
 	$log.info "%s is %s" % [ switch.name, state ]
+rescue Errno::EHOSTUNREACH => e
+	$log.error "Failed to contact #{switch.name}: #{e}"
+rescue => e
+	$log.error "Caught unhandled exception: #{e}"
 end
 
 name=switch.name
