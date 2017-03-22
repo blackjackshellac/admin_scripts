@@ -2,6 +2,7 @@
 class KeyDataTransaction
 	FROM_TO_RE=/^(From|To)$/i
 	ACCOUNTS_RE=/^(Chequing|Savings|Other\s+\d+\s+\w+)\s+(.*)/i
+	ACCOUNTN_RE=/[-\d]+/
 	KEY_COLON_DATA_RE=/^(?<key>.*?):(?<data>.*)$/
 	IGNORE_RE=/(?<ignore>(Cancel this Payment))/i
 	KNOWN_KEYS_RE=/^(From|To|Amount|Date|Reference#)$/i
@@ -103,19 +104,19 @@ class KeyDataTransaction
 
 		out=@hdata[key]
 
-		return out if key[FROM_TO_RE].nil?
-
-		# key is from or to
-		if out[ACCOUNTS_RE].nil?
-			out.gsub!(/\d/, "*")
-		else
-			acct=$1
-			numb=$2.gsub(/\d/, "*")
-			@@log.debug "Account=#{acct} number=#{$2} numb=#{numb}"
-			out="%s %s" % [ acct, numb ]
+		unless key[FROM_TO_RE].nil?
+			# key is from or to
+			if out[ACCOUNTS_RE].nil?
+				out.gsub!(ACCOUNTN_RE, "")
+			else
+				acct=$1
+				numb=$2.gsub(ACCOUNTN_RE, "")
+				@@log.debug "Account=#{acct} number=#{$2} numb=#{numb}"
+				out="%s %s" % [ acct, numb ]
+			end
 		end
 
-		out
+		out.strip
 	end
 
 	def echo(key)
