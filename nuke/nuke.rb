@@ -221,8 +221,8 @@ unless $o[:name].nil?
 	}
 end
 
-$log.info "Connecting to #{$o[:host]}"
-switch = Wemote::Switch.new($o[:host])
+WemoDiscover.init($o)
+switch = WemoDiscover.connect($o[:host])
 $log.die "failed to connect to switch #{$o[:host]}" if switch.nil?
 
 def printState(switch)

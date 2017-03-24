@@ -22,6 +22,10 @@ class WemoDiscover
 	@@log = Logger.new(STDOUT)
 	@@log.level = Logger::INFO
 
+	def self.init(opts)
+		@@log = opts[:logger] if opts.key?(:logger)
+	end
+
 	def self.getSSDPRequest(st=SSDP_ST)
 		ssdp_request = ""
 		ssdp_request << "M-SEARCH * HTTP/1.1\r\n"
@@ -104,6 +108,19 @@ class WemoDiscover
 		}
 	ensure
 		return addrs
+	end
+
+	def self.connect(host)
+		@@log.info "Connecting to #{host}"
+		switch = Wemote::Switch.new(host)
+	rescue Interrupt => e
+		@@log.info "Caught interrupt"
+		switch = nil
+	rescue => e
+		@@log.error "Caught exception #{e}"
+		switch = nil
+	ensure
+		switch
 	end
 end
 
