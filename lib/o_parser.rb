@@ -5,6 +5,8 @@
 require 'optparse'
 
 class OParser
+	@@log = Logger.new(STDOUT)
+
 	def initialize()
 	end
 

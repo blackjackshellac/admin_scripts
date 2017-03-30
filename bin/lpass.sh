@@ -17,6 +17,6 @@ mkdir -p "$bdir"
 
 cd $bdir/
 echo "Backup to $bdir/lastpass.$(date +%Y%m%d).csv.gpg"
-lpass export --sync=now | gpg -e -o lastpass.$(date +%Y%m%d).csv.gpg
+lpass export | gpg -e -o lastpass.$(date +%Y%m%d).csv.gpg
 lpass logout -f
 

@@ -3,14 +3,51 @@
 
 require 'csv'
 require 'open3'
+require 'fileutils'
 
+ME=File.basename($0, ".rb")
+MD=File.dirname(File.realpath($0))
+
+LIB=File.expand_path(File.join(MD, "../lib"))
+
+require_relative File.join(LIB, "logger")
+require_relative File.join(LIB, "o_parser")
+
+$log=Logger.set_logger(STDOUT, Logger::INFO)
+
+$opts={
+	:lpassfile => nil,
+	:bdir=>ENV['LPASS_BDIR'],
+	:logger => $log
+}
+
+$opts = OParser.parse($opts, "") { |opts|
+	opts.on('-b', '--bdir DIR', String, "Base directory, defaults to env var LPASS_BDIR #{$opts[:bdir]}") { |bdir|
+		$log.die "Directory not found #{bdir}" unless File.exist?(bdir)
+		$log.die "Not a directory #{bdir}" unless File.directory?(bdir)
+
+		$opts[:bdir]=bdir
+	}
+
+	opts.on('-f', '--file FILE', String, "Encrypted lastpass csv data file") { |file|
+		$opts[:lpassfile]=file
+	}
+
+	opts.on('-l', '--list', "List *.csv.gpg files in bdir") {
+		FileUtils.chdir($opts[:bdir], :verbose=>true) {
+			puts %x/ls -lrt *.csv.gpg/
+			$log.die "Failed to list lpass files *.csv.gpg" unless $?.exitstatus == 0
+		}
+		exit
+	}
+}
+
+FileUtils.chdir($opts[:bdir], :verbose=>true)
 #url,username,password,extra,name,grouping,fav
 
-lpassfile=ARGV[0]
-if lpassfile.nil? || lpassfile.empty?
-	$stderr.puts "usage is: #{$0} <lpassfile.csv.gpg>"
-	exit 1
-end
+lpassfile=$opts[:lpassfile]
+$log.die "Must specify a file with the -f option" if lpassfile.nil?
+$log.die "File not found #{lpassfile}" unless File.exist?(lpassfile)
 
 lpdata=%x/gpg -d #{lpassfile}/
 unless $?.exitstatus == 0
@@ -54,7 +91,7 @@ $chrome_csv = CSV.generate(:headers => true, :header_converters => :symbol) { |c
 }
 
 runtime=Time.now
-filename=runtime.strftime("chrome-%Y%m%d_%H%M%S.csv.gpg")
+filename=runtime.strftime("chrome-%Y%m%d.csv.gpg")
 File.umask(0066)
 
 #%x/echo "#{$chrome_csv}" | gpg -e -o "#{filename}"/
@@ -74,9 +111,9 @@ Open3.popen3(cmd) {|stdin, stdout, stderr, wait_thr|
 	puts "+++++\n"+stdout.read+"\n+++++" unless out.empty?
 
 	exit_status = wait_thr.value # Process::Status object returned.
-	if exit_status.exitstatus == 0
-	else
+	unless exit_status.exitstatus == 0
 		puts "====error===="
+		puts "Error running cmd=#{cmd}"
 		puts stderr.read
 		puts exit_status.inspect
 		puts "====error===="
