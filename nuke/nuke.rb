@@ -40,13 +40,19 @@ $log=set_logger(STDOUT)
 # :off
 # :toggle
 
+#
+# random_delay, duration
+#
 def get_delay(delay)
-	delay=delay.to_i
-	sign=(delay<0) ? -1 : +1
-	delay=delay.abs if sign == -1
-	(sign*rand(1+delay))
+	dlen = delay.length
+	iduration = dlen == 2 ? delay[1].to_i : 3*3600
+	idelay=delay[0].to_i
+	sign=(idelay<0) ? -1 : +1
+	idelay=idelay.abs if sign == -1
+	idelay=(sign*rand(1+idelay))
+	{ :delay=>idelay, :duration=>iduration }
 rescue => e
-	$log.die "Failed to convert delay to random delay #{delay}: #{e}"
+	$log.die "Failed to convert delay to random delay #{delay.inspect}: #{e}"
 end
 
 $o={
@@ -103,12 +109,12 @@ optparser = OptionParser.new do |opts|
 		$o[:long]=latlong[1].to_f
 	}
 
-	opts.on('-S', '--sunset DELAY', Integer, "Run at sunset with random delay") { |delay|
+	opts.on('-S', '--sunset DELAY', Array, "Run at sunset with random delay,duration") { |delay|
 		$o[:sunset]=get_delay(delay)
 		$o[:daemonize]=true
 	}
 
-	opts.on('-R', '--sunrise DELAY', Integer, "Run at sunrise with random delay") { |delay|
+	opts.on('-R', '--sunrise DELAY', Array, "Run at sunrise with random delay,duration") { |delay|
 		$o[:sunrise]=get_delay(delay)
 		$o[:daemonize]=true
 	}
@@ -158,7 +164,10 @@ if $o[:sunset] || $o[:sunset]
 
 	times={}
 	if $o[:sunrise]
-			sunrise = st.rise(now, $o[:lat], $o[:long])
+		delay=$o[:sunrise][:delay]
+		duration=$o[:sunrise][:duration]
+
+		sunrise = st.rise(now, $o[:lat], $o[:long])
 		$log.debug "Sunrise = #{sunrise.localtime}"
 
 		if sunrise < now
@@ -167,16 +176,19 @@ if $o[:sunset] || $o[:sunset]
 		end
 
 		# add delay offset to time of sunrise
-		sunrise=sunrise.to_i+$o[:sunrise]
+		sunrise=sunrise.to_i+delay
 		secs2sunrise=(sunrise.to_i-tnow)
 		$log.debug "Secs to sunrise = #{secs2sunrise}"
 
 		times[sunrise]=:on
-		sunrise += (3600*3)
+		sunrise += duration
 		times[sunrise]=:off
 	end
 
 	if $o[:sunset]
+		delay=$o[:sunset][:delay]
+		duration=$o[:sunset][:duration]
+
 		sunset  = st.set(now, $o[:lat], $o[:long])
 
 		$log.debug "Sunset = #{sunset.localtime}"
@@ -186,13 +198,13 @@ if $o[:sunset] || $o[:sunset]
 		end
 
 		# add delay offset to time of sunset
-		sunset =sunset.to_i+$o[:sunset]
+		sunset =sunset.to_i+delay
 		secs2sunset =(sunset.to_i-tnow)
 
 		$log.debug "Secs to sunset = #{secs2sunset}"
 
 		times[sunset]=:on
-		sunset += (3600*3)
+		sunset += duration
 		times[sunset]=:off
 	end
 
