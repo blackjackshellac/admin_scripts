@@ -92,9 +92,10 @@ class Rb2Maillog
 			to       to
 			subject  subj
 			body     body
-			charset "UTF-8"
 			#add_file :filename => File.basename(@file), :content => File.read(@file)
 		end
+
+		mailer.charset = "UTF-8"
 
 		@@log.debug mailer.to_s
 		mailer.deliver
