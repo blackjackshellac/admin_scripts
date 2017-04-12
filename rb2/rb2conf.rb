@@ -33,6 +33,9 @@ require 'fileutils'
 class Rb2Error < StandardError
 end
 
+class Rb2Shutdown < StandardError
+end
+
 module Rb2Defs
 	# http://www.railstips.org/blog/archives/2009/05/15/include-vs-extend-in-ruby/
 	#

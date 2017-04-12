@@ -226,7 +226,8 @@ class Rb2Rsync
 		sort_dirs(dirs)
 	end
 
-	def find_latest(dirs)
+	def find_latest(dirs=nil)
+		dirs = list_bdest(@bdir) if dirs.nil?
 		latest=nil
 		unless dirs.empty?
 			# don't use current backup directory for latest from list of dirs
@@ -254,7 +255,7 @@ class Rb2Rsync
 		@bdest=File.join(@bdir, @dirstamp)
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
-		@dirs=list_bdest(@bdir)
+		@dirs = list_bdest(@bdir)
 		@latest = find_latest(@dirs)
 
 		Rb2Rsync.info("latest #{@latest}", { :echo => true })
@@ -341,17 +342,24 @@ class Rb2Rsync
 		@@maillog.separator(msg, opts)
 	end
 
-	def link_latest
-		base=File.dirname(@bdest)
+	def link_latest(bdest=nil)
+		bdest = find_latest(@dirs) if bdest.nil?
+		return if bdest.nil?
+		base=File.dirname(bdest)
 		FileUtils.chdir(base) {
 			FileUtils.rm_f "latest" if File.symlink?("latest")
-			FileUtils.ln_s @bdest, "latest"
+			FileUtils.ln_s bdest, "latest"
 		}
 	end
 
-	def remove_backup(dest, opts)
+	def remove_backup(bdest, opts)
 		rm_opts=@verbose ? "-rvf" : "-rf"
-		es=Runner::run3!("rm #{rm_opts} #{bdest}/", opts)
+
+		raise Rb2RsyncError, "bdest cannot be empty!" if bdest.empty? || bdest.nil?
+
+		cmd="rm #{rm_opts} #{bdest}/"
+		Rb2Rsync.info "Removing backup: #{cmd}", :echo=>true
+		es=Runner::run3!(cmd, opts)
 		raise Rb2RsyncError, "Failed to remove backup: #{bdest}" unless es == 0
 	end
 
@@ -383,13 +391,14 @@ class Rb2Rsync
 		case exit_status
 		when 23,24
 			Rb2Rsync.info "Rb2Rsync command success exit_status = #{exit_status}: [#{cmd}]"
-			link_latest
+			link_latest(@bdest)
 		when 0
 			Rb2Rsync.info "Rb2Rsync command success: [#{cmd}]"
-			link_latest
+			link_latest(@bdest)
 		else
 			Rb2Rsync.error "Rb2Rsync failed, exit_status == #{exit_status}"
 			remove_backup(@bdest, opts) if @action == :run
+			link_latest
 		end
 		FileUtils.rmdir(@bdest)
 		exit_status
@@ -424,7 +433,7 @@ class Rb2Rsync
 
 	def df_h
 		@@maillog.set_client(nil)
-		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true})
+		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true}) if File.exist?(@bdest)
 	end
 
 	# initialize if start==true

@@ -66,7 +66,8 @@ $opts={
 	:logger => $log,
 	:banner => "#{ME}.rb [options] process1 ...",
 	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json"),
-	:runtime => Time.now
+	:runtime => Time.now,
+	:pid => nil
 }
 
 $opts = OParser.parse($opts, HELP) { |opts|
@@ -185,6 +186,21 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=:VERSION
 	}
 }
+
+shutdown = proc {
+	pid = $opts[:pid]
+	msg="Shutting down"
+	msg="#{msg} rsync pid=#{pid}" unless pid.nil?
+
+	puts "\n\t#{msg}\n"
+
+	Process.kill("INT", pid) unless pid.nil?
+
+	raise Rb2Shutdown, msg
+}
+
+Signal.trap("TERM", shutdown)
+Signal.trap("INT",  shutdown)
 
 #Rb2Globals.dump_defaults("Rb2Globals")
 
