@@ -47,7 +47,7 @@ module Runner
 		Open3.popen3(cmd) do |stdin, stdout, stderr, wait_thr|
 
 			# or, if you have to do something with the output
-			pid = wait_thr.pid
+			opts[:pid] = wait_thr.pid
 
 			fnout=stdout.fileno
 			fnerr=stderr.fileno
@@ -98,8 +98,6 @@ module Runner
 								end
 							rescue EOFError => e
 								raise "Encountered unexpected EOF: #{e.to_s}"
-							rescue => e
-								raise "Encountered unexpected exception: #{e.to_s}"
 							end
 						}
 					end
@@ -112,6 +110,14 @@ module Runner
 			exit_status = wait_thr.value.exitstatus
 		end
 
+	rescue => e
+		msg = "Caught exception: #{e}"
+
+		log.error(msg) unless log.nil?
+		maillog.error(msg) unless maillog.nil?
+
+		exit_status = 1
+	ensure
 		return exit_status
 
 	end
