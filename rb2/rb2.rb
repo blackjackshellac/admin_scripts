@@ -3,6 +3,7 @@
 #
 
 require 'fileutils'
+require 'daemons'
 
 me=$0
 if File.symlink?(me)
@@ -25,6 +26,7 @@ require_relative File.join(LIB, "runner")
 require_relative File.join(MD, "rb2conf")
 require_relative File.join(MD, "rb2util")
 require_relative File.join(MD, "rb2rsync")
+require_relative File.join(MD, "rb2muxlog")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
@@ -59,6 +61,7 @@ $opts={
 	:email => DEF_EMAIL,
 	:smtp => DEF_SMTP,
 	:logformat => DEF_LOG_FORMAT,
+	:tmp => TMP,
 	:conf => nil,
 	:syslog => false,
 	:action => :NADA,
@@ -193,6 +196,7 @@ $log.debug "opts="+$opts.inspect
 Rb2Config.init($opts)
 Rb2Globals.init($opts)
 Rb2Util.init($opts)
+Rb2MuxLog.init($opts)
 Rb2Rsync.init($opts)
 
 rb2c = Rb2Config.new($opts[:config])
@@ -264,10 +268,12 @@ when :LIST_COMPACT
 	rb2c.list(true)
 when :UPDATE
 	Rb2Util.is_initialized(rb2c)
+	Rb2Rsync.test_clients($opts[:clients], rb2c, $opts)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.update($opts[:clients], $opts)
 when :RUN
 	Rb2Util.is_initialized(rb2c)
+	Rb2Rsync.test_clients($opts[:clients], rb2c, $opts)
 	rsync=Rb2Rsync.new(rb2c, $opts)
 	rsync.run($opts[:clients], $opts)
 when :VERSION

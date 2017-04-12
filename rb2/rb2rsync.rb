@@ -1,105 +1,5 @@
 
-require 'mail'
-
 class Rb2RsyncError < StandardError
-end
-
-class Rb2Maillog
-	RB2MAILLOGFMT="rb2_%Y%m%d_%H%M%S.txt"
-	@@log = Logger.new(STDERR)
-	@@tmp = "/var/tmp/rb2"
-
-	def self.init(opts)
-		@@log = opts[:logger] if opts.key?(:logger)
-		@@tmp = opts[:tmp]
-	end
-
-	attr_reader :file
-	def initialize(opts)
-		@runtime=opts[:runtime]
-		@file = File.join(@@tmp, @runtime.strftime(RB2MAILLOGFMT))
-		@client = nil
-	end
-
-	def open(opts, &block)
-		@@log.debug "Opening #{@file}"
-		@fd = File.open(@file, "w+")
-		opts[:maillog]=self
-		return @fd unless block_given?
-		@@log.debug "Yeilding #{@fd}"
-		yield(@fd)
-	ensure
-		@@log.debug "Closing #{@file}"
-		@fd.close
-	end
-
-	def set_client(c)
-		@client=c
-	end
-
-	def fmt(type, msg)
-		ts=Time.now.strftime("%Y%m%d_%H%M%S")
-		c=@client.nil? ? " " : " [#{@client}] "
-		"#{type}#{c}#{ts}: #{msg}"
-	end
-
-	def self.get_separator(msg)
-		sep=""+SEP
-		unless msg.nil?
-			msg.strip!
-			msg=" #{msg} "
-			ml=msg.length
-			sl=sep.length
-			o=(sl-ml)/2.floor
-			sep[o, ml]=msg if o > 0
-		end
-		sep
-	end
-
-	SEP_LENGTH=50
-	SEP="+"*SEP_LENGTH
-	def separator(msg=nil, opts={})
-		fmsg = fmt("I", Rb2Maillog.get_separator(msg))
-		mputs fmsg, opts
-	end
-
-	def mputs(fmsg, opts={})
-		puts fmsg if opts[:echo]
-		@fd.puts fmsg unless @fd.nil?
-	end
-
-	def info(msg, opts={})
-		opts[:logger].info msg unless opts[:logger].nil?
-
-		fmsg = fmt("I", msg)
-		mputs fmsg, opts
-	end
-
-	def error(msg, opts={})
-		opts[:logger].error msg unless opts[:logger].nil?
-
-		fmsg = fmt("E", msg)
-		mputs fmsg, opts
-	end
-
-	def mail(opts)
-		subj = opts[:subject]
-		from = opts[:email_from]
-		to   = opts[:email_to]
-		body = File.read(@file)
-		mailer = Mail.new do
-			from     from
-			to       to
-			subject  subj
-			body     body
-			#add_file :filename => File.basename(@file), :content => File.read(@file)
-		end
-
-		@@log.debug mailer.to_s
-		mailer.deliver
-	rescue => e
-		raise "Failed to mail result: #{opts.inspect} [#{e.to_s}]"
-	end
 end
 
 class Rb2Rsync
@@ -125,8 +25,7 @@ class Rb2Rsync
 		@@logfile=File.join(@@logdir, @@logname)
 		@@log = Logger.set_logger(@@logfile, Logger::INFO)
 
-		Rb2Maillog.init(opts)
-		@@maillog = Rb2Maillog.new(opts)
+		@@maillog = Rb2MuxLog.new(opts)
 
 		Rb2Rsync.info(FileUtils.mkdir_p(@@logdir), { :echo => true, :logger=>@@log })
 	end
@@ -318,7 +217,6 @@ class Rb2Rsync
 		opts=DEF_OUT_OPTS.merge(opts)
 		msgs = msgs.join("\n") if msgs.class == Array
 		msgs.chomp
-		opts[:logger]=@@log
 		msgs.split(/\n/).each { |msg|
 			@@maillog.info(msg, opts)
 		}
@@ -328,7 +226,6 @@ class Rb2Rsync
 		opts=DEF_OUT_OPTS.merge(opts)
 		msgs = msgs.join("\n") if msgs.class == Array
 		msgs.chomp
-		opts[:logger]=@@log
 		msgs.split(/\n/).each { |msg|
 			@@maillog.error(msg, opts)
 		}
@@ -336,7 +233,6 @@ class Rb2Rsync
 
 	def self.separator(msg, opts=DEF_OUT_OPTS)
 		opts=DEF_OUT_OPTS.merge(opts)
-		opts[:logger]=@@log
 		opts[:echo]=true
 		@@maillog.separator(msg, opts)
 	end
@@ -395,10 +291,10 @@ class Rb2Rsync
 		exit_status
 	end
 
-	def test_clients(clients)
+	def self.test_clients(clients, rb2c, opts)
+		clients = rb2c.clients.keys if opts[:all] || clients.empty?
 		if clients.empty?
-			c=@rb2conf_clients.keys
-			error c.empty? ? "No clients configured" : "No clients specified, use --all to #{@action.to_s} backup #{@rb2conf.clients.keys.inspect}"
+			Rb2Rsync.error c.empty? ? "No clients configured" : "No clients specified, use --all to #{@action.to_s} backup #{@rb2conf.clients.keys.inspect}", :echo=>true
 		else
 			failed = false
 			#ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "$c" exit
@@ -406,7 +302,7 @@ class Rb2Rsync
 				Rb2Rsync.separator("Testing client #{client}")
 				c=client.to_s
 				#@@log.debug @rb2conf_clients.inspect
-				cc=@rb2conf_clients[client.to_sym]
+				cc=rb2c.clients[client.to_sym]
 				a=cc.get_ssh_address
 				next if a.nil?
 				cmd = %Q[ssh -q -o "BatchMode=yes" -i ~/.ssh/id_rsa "#{a}" exit]
@@ -419,7 +315,7 @@ class Rb2Rsync
 			}
 			clients.clear if failed
 		end
-		clients
+		opts[:clients]=clients
 	end
 
 	def df_h
@@ -446,12 +342,13 @@ class Rb2Rsync
 		:out=>$stdout,
 		:log=>nil
 	}
-	def run(clients, opts=DEF_OPTS)
+	def run(clients, opts={})
+		opts=DEF_OPTS.merge(opts)
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
 			log_runtime(true)
-			test_clients(clients).each { |client|
+			clients.each { |client|
 				next unless setup(client)
 				go(opts)
 				# TODO test incrementals for client
@@ -467,12 +364,13 @@ class Rb2Rsync
 		@@maillog.mail(mopts)
 	end
 
-	def update(clients, opts=DEF_OPTS)
+	def update(clients, opts={})
+		opts=DEF_OPTS.merge(opts)
 		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
 		@@maillog.open(opts) { |maillog|
 			@action=__method__.to_sym
 			log_runtime(true)
-			test_clients(clients).each { |client|
+			clients.each { |client|
 				next unless setup(client)
 				go(opts)
 				# TODO test incrementals for client

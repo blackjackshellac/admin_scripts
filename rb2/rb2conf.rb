@@ -317,7 +317,7 @@ class Rb2Globals
 
 	Rb2Globals::set_default(:dest, "/mnt/backup")
 	Rb2Globals::set_default(:logdir, "/var/tmp/rb2")
-	Rb2Globals::set_default(:logformat, "rb2_%Y%m%d_%H%M%S.log")
+	Rb2Globals::set_default(:logformat, "rb2_%Y%m%d.log")
 	Rb2Globals::set_default(:email, [])
 	Rb2Globals::set_default(:smtp, "localhost")
 	Rb2Globals::set_default(:syslog, false)
