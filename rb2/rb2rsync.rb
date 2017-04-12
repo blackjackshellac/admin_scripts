@@ -92,6 +92,7 @@ class Rb2Maillog
 			to       to
 			subject  subj
 			body     body
+			charset "UTF-8"
 			#add_file :filename => File.basename(@file), :content => File.read(@file)
 		end
 
