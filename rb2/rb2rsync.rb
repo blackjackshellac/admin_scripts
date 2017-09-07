@@ -255,6 +255,7 @@ class Rb2Rsync
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdir), { :echo => true, :logger=>@@log } ) unless File.exists?(@bdir)
 
 		@bdest=File.join(@bdir, @dirstamp)
+		@@log.debug "bdest=#{@bdest}"
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
 		@dirs = list_bdest(@bdir)
@@ -407,6 +408,7 @@ class Rb2Rsync
 	end
 
 	def test_clients(clients)
+		@@log.debug "Running test_clients on #{clients.inspect}"
 		if clients.empty?
 			c=@rb2conf_clients.keys
 			error c.empty? ? "No clients configured" : "No clients specified, use --all to #{@action.to_s} backup #{@rb2conf.clients.keys.inspect}"
@@ -416,7 +418,7 @@ class Rb2Rsync
 			clients.each { |client|
 				Rb2Rsync.separator("Testing client #{client}")
 				c=client.to_s
-				#@@log.debug @rb2conf_clients.inspect
+				@@log.debug @rb2conf_clients.inspect
 				cc=@rb2conf_clients[client.to_sym]
 				a=cc.get_ssh_address
 				next if a.nil?
@@ -424,16 +426,22 @@ class Rb2Rsync
 				Rb2Rsync.info cmd
 				es = Runner::run3!(cmd, {:strip=>true, :out=>$stdout, :log=>@@log})
 				if es != 0
-					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}"
+					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}: error=#{es}"
 					failed = true
+				else
+					@@log.debug "Success: #{cmd}"
 				end
 			}
-			clients.clear if failed
+			if failed
+				@@log.error "Failed to test clients"
+				clients.clear
+			end
 		end
 		clients
 	end
 
 	def df_h
+		raise "bdest is nil" if @bdest.nil?
 		@@maillog.set_client(nil)
 		Rb2Rsync.info("$ df -h #{@bdest}\n#{%x/df -h #{@bdest}/}", {:echo=>true}) if File.exist?(@bdest)
 	end
@@ -484,6 +492,7 @@ class Rb2Rsync
 			@action=__method__.to_sym
 			log_runtime(true)
 			test_clients(clients).each { |client|
+				@@log.debug "Setup #{client}"
 				next unless setup(client)
 				go(opts)
 				# TODO test incrementals for client
