@@ -19,6 +19,7 @@ class Rb2Maillog
 		@runtime=opts[:runtime]
 		@file = File.join(@@tmp, @runtime.strftime(RB2MAILLOGFMT))
 		@client = nil
+		@compress = true
 	end
 
 	def open(opts, &block)
@@ -82,25 +83,34 @@ class Rb2Maillog
 		mputs fmsg, opts
 	end
 
+	def compress
+		puts %x/gzip #{@file}/
+		@file=@file+".gz"
+	end
+
 	def mail(opts)
+		compress if @compress
+
+		@@log.info "Mailing log file #{@file}"
+
 		subj = opts[:subject]
 		from = opts[:email_from]
 		to   = opts[:email_to]
-		body = File.read(@file)
+		body = "see attachment #{@file}"
 		mailer = Mail.new do
 			from     from
 			to       to
 			subject  subj
 			body     body
-			#add_file :filename => File.basename(@file), :content => File.read(@file)
 		end
 
+		mailer.add_file(@file)
 		mailer.charset = "UTF-8"
 
 		@@log.debug mailer.to_s
 		mailer.deliver
 	rescue => e
-		raise "Failed to mail result: #{opts.inspect} [#{e.to_s}]"
+		@@log.error "Failed to mail result: #{opts.inspect} [#{e.to_s}]"
 	end
 end
 
