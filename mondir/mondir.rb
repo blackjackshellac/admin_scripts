@@ -52,7 +52,7 @@ def stat_path(path)
 	pstat={}
 	KEYS.each { |key|
 		pstat[key]=lstat.send(key)
-		next if pstat[key].class == String || pstat[key].class == Fixnum
+		next if pstat[key].class == String || pstat[key].class == Integer
 		pstat[key] = pstat[key].to_s
 	}
 	pstat
