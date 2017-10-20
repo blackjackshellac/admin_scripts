@@ -436,7 +436,9 @@ class Rb2Rsync
 				Rb2Rsync.info cmd
 				es = Runner::run3!(cmd, {:strip=>true, :out=>$stdout, :log=>@@log})
 				if es != 0
-					Rb2Rsync.error "Failed to ssh to client #{c} with address #{a}: error=#{es}"
+					msg="Failed to ssh to client #{c} with address #{a}: error=#{es}"
+					Rb2Rsync.error msg, :echo=>true
+					raise msg
 					failed = true
 				else
 					@@log.debug "Success: #{cmd}"

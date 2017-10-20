@@ -281,11 +281,19 @@ when :LIST_COMPACT
 when :UPDATE
 	Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
-	rsync.update($opts[:clients], $opts)
+	begin
+		rsync.update($opts[:clients], $opts)
+	rescue => e
+		$log.error e.to_s
+	end
 when :RUN
 	Rb2Util.is_initialized(rb2c)
 	rsync=Rb2Rsync.new(rb2c, $opts)
-	rsync.run($opts[:clients], $opts)
+	begin
+		rsync.run($opts[:clients], $opts)
+	rescue => e
+		$log.error e.to_s
+	end
 when :VERSION
 	rb2c.print_version
 when :NADA
