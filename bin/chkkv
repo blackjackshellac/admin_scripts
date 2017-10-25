@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# chkkv - check kernel version
+#
+#
+
+ME=$(basename $0)
+MD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source $MD/szm_utils
+[ $? -ne 0 ] && echo "$MD/szm_utils not found" && exit 1
+
+set_log autogen # /tmp/$me.$(date +%Y-%m).log
+set_log_tee
+set_log_ts
+set_mail "steeve.mccauley@gmail.com"
+
+output="$($MD/chkkv.rb)"
+status=$?
+
+info "$output"
+
+if [ $status == 0 ]; then
+	info "Running kernel is newest"
+else
+	info "New kernel available"
+	mail_log "New kernel available"
+	exit $status
+fi
+
