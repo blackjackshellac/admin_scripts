@@ -34,7 +34,9 @@ YM=Time.now.strftime('%Y%m')
 LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 
 $opts={
-	:outlet=>"o1",
+	:all=>false,
+	:outlet=> nil,
+	:outlets=>[],
 	:state=>RFOutlet::OFF,
 	:delay=>0,
 	:sched=>{},
@@ -82,6 +84,11 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	# journalctl -k --since "2016-10-16 11:00:00" --until "2016-10-17 11:00:00"
 	opts.on('-o', '--outlet NUM', String, "Outlet number") { |num|
 		$opts[:outlet]="o"+num
+		$opts[:outlets] << $opts[:outlet]
+	}
+
+	opts.on('-a', '--all', "All outlets") {
+		$opts[:all]=true
 	}
 
 	opts.on('-0', '--off', "Outlet off") {
@@ -146,8 +153,6 @@ end
 if $opts[:sniff]
 	exit RFOutlet.sniffer
 end
-
-rfoc.set_outlet($opts[:outlet])
 
 $opts[:lat] = rfoc.lat if $opts[:lat].nil?
 $opts[:long] = rfoc.long if $opts[:long].nil?
@@ -218,53 +223,57 @@ $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
 RFOutletConfig.init($opts)
 
-#o=$opts[:outlet]
-s=$opts[:state]
-outlet=rfoc.outlet
-oname=outlet.name
+$opts[:outlets] = rfoc.all if $opts[:all]
 
-if $opts[:sched].empty?
-	delay = $opts[:delay]
-	if delay > 0
-		$log.info "Sleeping #{delay} seconds before firing: #{oname}"
-		sleep delay
-	end
-	rfcode=outlet.get_rfcode(s)
-	$log.info "Turn #{s} outlet \"#{oname}\" [#{rfcode}]"
-	$log.info outlet.sendcode(rfcode)
-else
-	#22142
-	#75533
-	#sleep 22142 seconds (6 hours)
-	#sleep 75533-22142 seconds (14.8 hours later)
-	adjust = 0
-	$log.debug $opts[:sched].inspect
+$opts[:outlets].each { |label|
+	rfoc.set_outlet(label)
 
-	sched=$opts[:sched]
-	skeys=sched.keys.sort
-	skeys.each { |key|
-		secs=key+tnow
-		state=sched[key]
-		$log.info "Turn #{oname} #{state} at #{Time.at(secs).to_s}: delay=#{key}"
-	}
+	s=$opts[:state]
+	outlet=rfoc.outlet
+	oname=outlet.name
 
-	skeys.each { |delay|
-		s = $opts[:sched][delay]
-		delay -= adjust
-		$log.info "Sleeping #{delay} seconds before setting #{oname} #{s}"
-		begin
+	if $opts[:sched].empty?
+		delay = $opts[:delay]
+		if delay > 0
+			$log.info "Sleeping #{delay} seconds before firing: #{oname}"
 			sleep delay
-		rescue Interrupt => e
-			$log.warn "Caught exception: #{e.inspect}"
-			# ignore Interrupt
-			next
-		ensure
-			adjust += delay
 		end
-
 		rfcode=outlet.get_rfcode(s)
 		$log.info "Turn #{s} outlet \"#{oname}\" [#{rfcode}]"
 		$log.info outlet.sendcode(rfcode)
-	}
-end
+	else
+		#22142
+		#75533
+		#sleep 22142 seconds (6 hours)
+		#sleep 75533-22142 seconds (14.8 hours later)
+		adjust = 0
+		$log.debug $opts[:sched].inspect
 
+		sched=$opts[:sched]
+		skeys=sched.keys.sort
+		skeys.each { |key|
+			secs=key+tnow
+			state=sched[key]
+			$log.info "Turn #{oname} #{state} at #{Time.at(secs).to_s}: delay=#{key}"
+		}
+
+		skeys.each { |delay|
+			s = $opts[:sched][delay]
+			delay -= adjust
+			$log.info "Sleeping #{delay} seconds before setting #{oname} #{s}"
+			begin
+				sleep delay
+			rescue Interrupt => e
+				$log.warn "Caught exception: #{e.inspect}"
+				# ignore Interrupt
+				next
+			ensure
+				adjust += delay
+			end
+
+			rfcode=outlet.get_rfcode(s)
+			$log.info "Turn #{s} outlet \"#{oname}\" [#{rfcode}]"
+			$log.info outlet.sendcode(rfcode)
+		}
+	end
+}

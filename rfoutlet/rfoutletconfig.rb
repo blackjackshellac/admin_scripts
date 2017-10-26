@@ -41,6 +41,14 @@ class RFOutletConfig
 		@@log.die "Outlet not configured: #{label}" if @outlet.nil?
 		@outlet
 	end
+
+	def all
+		labels=[]
+		@outlets.keys.each { |label|
+			labels << label.to_s
+		}
+		labels
+	end
 end
 
 
