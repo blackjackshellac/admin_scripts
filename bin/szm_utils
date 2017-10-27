@@ -1,0 +1,251 @@
+#!/bin/bash
+#
+# source this to get these funcs in your scripts
+#
+# $Id: szm_utils 10 2009-12-01 15:05:46Z steeve $
+#
+####
+
+#h
+#h Usage is: szm_util help|update|funcs
+#h 
+#h	update - get a new copy of the function script in /tmp/szm_util
+#h	funcs  - get information on script functions
+#h	help   - print this help
+#h
+#h  You can also source this script for use in your scripts
+#h
+#h  Example,
+#h
+#h#!/bin/bash
+#h
+#hsource ~/bin/szm_util
+#h[ $? -ne 0 ] && echo "Error: sourcing ~/bin/szm_util" && exit 1
+#h
+#hset_log autogen
+#hset_log_tee
+#hset_log_ts
+#hset_mail "user@somedomain.com"
+#h
+#hcmd="ls -lrt"
+#hrun $cmd
+#h[ $? -ne 0 ] && err "failed to run command $cmd"
+#h
+#hmail_log "output from $cmd"
+#h
+
+me=$(basename -- $0)
+
+TMP=${TMP:=/var/tmp}
+
+SZM_REV=$(echo "$Rev: 10 $" | awk '{print $2}')
+SZM_VER=2009.12.01
+SZM_HOST=$(hostname -s)
+SZM_TMP=$TMP
+SZM_LOG=
+SZM_MAIL=
+declare -i SZM_TEE=0
+declare -i SZM_LOG_TS=0
+declare -i SZM_LOG_CMD=1
+
+info_ts()
+{
+	[ "$SZM_LOG_TS" -eq 0 ] && return
+	echo -e "$(date "+%b %d %T") $SZM_HOST $me: "
+}
+
+info_pipe()
+{
+	local pre=
+	local line
+
+	[ -n "$1" ] && pre="$1 "
+
+	while read line; do
+		if [ $SZM_TEE -eq 1 ]; then
+			echo -e "$(info_ts)${pre}${line}" 2>&1 | tee -a "$SZM_LOG"
+		else
+			echo -e "$(info_ts)${pre}${line}" >> "$SZM_LOG" 2>&1
+		fi
+	done
+}
+
+info_out()
+{
+	local pre
+	local line
+
+	pre=$1
+	shift
+
+	echo -e $* | info_pipe "$pre"
+}
+
+#c info		write output to console and/or log
+info()
+{
+	local ts=""
+
+	# if we're just logging just write it out to stdout
+	[ -z "$SZM_LOG" ] && echo -e "$*" && return
+
+	info_out "" $*
+}
+
+#c warn		write warning output to console and/or log
+warn()
+{
+	info "Warning: $*"
+}
+
+#c err		write error output to console and/or log
+err()
+{
+	info "Error: $*"
+}
+
+#c die		write error output to console and/or log, and exit with errno 1
+die()
+{
+	err "$*"
+	exit 1
+}
+
+#c run		run the specified command, if logging send the command output to 
+#c		log file specified with the set_log command 
+run()
+{
+	local ret
+
+	[ "$SZM_LOG_CMD" -ne 0 ] && info ">> $*"
+	if [ -z "$SZM_LOG" ]; then
+		$*
+		ret=$?
+	else
+		$* 2>&1 | info_pipe $ts
+		ret=${PIPESTATUS[0]}
+	fi
+	return $ret
+}
+
+#c set_log	specify the log file path, or use 'autogen' to have the script
+#c		generate a log with a timestamp
+set_log()
+{
+	SZM_LOG=$*
+	[ $SZM_LOG = "autogen" ] && SZM_LOG=$SZM_TMP/$me.$(date "+%Y%m%d_%T").log
+	[ -f "$SZM_LOG" ] && return 0
+
+	touch "$SZM_LOG"
+	[ $? -ne 0 ] && err "creating log $SZM_LOG" && return 1
+	return 0
+}
+
+#c clr_log	unset the log path specified with set_log
+clr_log()
+{
+	SZM_LOG=
+}
+
+#c set_mail	set the comma separated list of mail recipients
+set_mail()
+{
+	# recipients
+	SZM_MAIL="$*"
+
+	[ -z "$SZM_LOG" ] && warn "log file not specified"
+}
+
+#c clr_mail	unset the list of mail recipients
+clr_mail()
+{
+	SZM_MAIL=
+}
+
+mail_log()
+{
+	local subject
+
+	[ -z "$SZM_MAIL" ] && err "mail recipients not specified" && return 1
+	[ -z "$SZM_LOG" ] && die "log file not specified"
+	[ ! -s "$SZM_LOG" ] && info "nothing to send" && return 0
+
+	subject="$*"
+	[ -z "$subject" ] && subject="$me: $SZM_LOG"
+
+	cat $SZM_LOG | tr "" "-" | /bin/mail -s "$(hostname -s): $subject" $SZM_MAIL
+	#mutt -a "$SZM_LOG" -s "$subject" $SZM_MAIL
+}
+
+set_log_tee()
+{
+	SZM_TEE=1
+}
+
+clr_log_tee()
+{
+	SZM_TEE=0
+}
+
+# enable log timestamp
+set_log_ts()
+{
+	SZM_LOG_TS=1
+}
+
+# disable log timestamp
+clr_log_ts()
+{
+	SZM_LOG_TS=0
+}
+
+# print the run command to the log
+set_log_cmd()
+{
+	SZM_LOG_CMD=1
+}
+
+# don't print the run command to the log
+clr_log_cmd()
+{
+	SZM_LOG_CMD=0
+}
+
+#
+# convert the string to upper case and print to stdout
+#
+toupper()
+{
+	echo $* | dd conv=ucase 2> /dev/null
+}
+
+#
+# convert the string to lower case and print to stdout
+#
+tolower()
+{
+	echo $* | dd conv=lcase 2> /dev/null
+}
+
+[ -z "$1" -a "$me" != "szm_utils" ] && return 0
+
+update()
+{
+	echo	
+}
+
+case "$1" in
+	update)
+		;;
+	-h|help)
+		grep "^#h" $0 | cut -c3-
+		;;
+	funcs)
+		grep "^#c" $0 | cut -c3-
+		;;
+	*)
+		echo "$me: Version $SZM_VER r$SZM_REV"
+		;;
+esac
+
+
