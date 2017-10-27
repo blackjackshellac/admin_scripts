@@ -89,7 +89,7 @@ class Rb2Maillog
 	end
 
 	def get_body
-		errs=%x/grep -v #{@file}/.strip
+		errs=%x/grep -v ^I #{@file}/.strip
 		errors=errs.empty? ? "" : "\nPossible errors:\n#{errors}"
 		cmd="tail -50 #{@file}"
 		tail = %x/#{cmd}/.strip
