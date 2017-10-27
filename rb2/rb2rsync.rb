@@ -88,7 +88,23 @@ class Rb2Maillog
 		@file=@file+".gz"
 	end
 
+	def get_body
+		errs=%x/grep -v #{@file}/.strip
+		errors=errs.empty? ? "" : "\nPossible errors:\n#{errors}"
+		cmd="tail -50 #{@file}"
+		tail = %x/#{cmd}/.strip
+		<<-BODY
+See attachment #{@file}
+
+$ #{cmd}
+#{tail}
+#{errors}
+BODY
+	end
+
 	def mail(opts)
+		body = get_body
+
 		compress if @compress
 
 		@@log.info "Mailing log file #{@file}"
@@ -96,7 +112,6 @@ class Rb2Maillog
 		subj = opts[:subject]
 		from = opts[:email_from]
 		to   = opts[:email_to]
-		body = "see attachment #{@file}"
 		mailer = Mail.new do
 			from     from
 			to       to
