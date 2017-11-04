@@ -36,6 +36,7 @@ LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 $opts={
 	:all=>false,
 	:outlet=> nil,
+	:names=>[],
 	:outlets=>[],
 	:state=>RFOutlet::OFF,
 	:delay=>0,
@@ -85,6 +86,11 @@ $opts = OParser.parse($opts, HELP) { |opts|
 	opts.on('-o', '--outlet NUM', String, "Outlet number") { |num|
 		$opts[:outlet]="o"+num
 		$opts[:outlets] << $opts[:outlet]
+	}
+
+	opts.on('-n', '--name NAME', String, "Outlet name (regex match)") { |name|
+		$opts[:names] << name
+		$opts[:names].uniq!
 	}
 
 	opts.on('-a', '--all', "All outlets") {
@@ -224,6 +230,18 @@ $opts[:logger]=$log
 RFOutletConfig.init($opts)
 
 $opts[:outlets] = rfoc.all if $opts[:all]
+
+unless $opts[:names].empty?
+	$opts[:names].each { |name|
+		regex=/#{name}/i
+		outlets=rfoc.match(regex)
+		next if outlets.empty?
+		$log.debug "Found outlets for regex /#{name}/i : #{outlets.inspect}"
+		$opts[:outlets].concat(outlets)
+	}
+end
+
+$opts[:outlets].uniq!
 
 $opts[:outlets].each { |label|
 	rfoc.set_outlet(label)

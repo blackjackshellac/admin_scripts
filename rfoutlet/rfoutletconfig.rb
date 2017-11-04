@@ -44,8 +44,20 @@ class RFOutletConfig
 
 	def all
 		labels=[]
-		@outlets.keys.each { |label|
+		@config[:outlets].keys.each { |label|
 			labels << label.to_s
+		}
+		labels
+	end
+
+	def match(regex)
+		labels=[]
+		@config[:outlets].each_pair { |label,config|
+			label = label.to_s
+			name  = config[:name]
+			@@log.debug "Testing #{name} against #{regex.to_s}"
+			next if regex.match(name).nil?
+			labels << label
 		}
 		labels
 	end
