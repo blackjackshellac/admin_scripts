@@ -52,6 +52,8 @@ function secret_cookie() {
 function light_switch(outlet, state) {
 	secret_cookie();
 
+	$('#output').html("Waiting for response ...");
+
 	var url = "/lights/"
 	url += state ? "on" : "off"
 
@@ -65,12 +67,18 @@ function light_switch(outlet, state) {
 
 	$("body").css("cursor", "progress");
 
-	var result = $.get( url, function(data) {
+	var result = $.getJSON( url, function(data) {
 		console.log( "success" );
 	}).fail(function(data) {
 		console.log( "error" );
 	}).always(function(data) {
-		if (typeof data === 'object') {
+		if (data instanceof Array) {
+			html="";
+			for (var i = 0; i < data.length; i++) {
+				html+=data[i]+"\n";
+			}
+			data=html;
+		} else if (data instanceof Object) {
 			data=data.responseText;
 		}
 		$('#output').html(data);

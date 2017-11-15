@@ -9,6 +9,14 @@ require 'json'
 # lazy auth
 SECRET_TXT="/home/pi/bin/secret.txt"
 
+begin
+	NAMES_CONFIG_JSON=%x/rfoutlet.rb -J NAMES/
+	NAMES_CONFIG=JSON.parse(NAMES_CONFIG_JSON, :symbolize_names=>true)
+rescue => e
+	puts "Failed to load rfoutlet NAMES config data: #{e.message}"
+	exit 1
+end
+
 set :port, 1966
 
 def validate_secret
@@ -24,33 +32,33 @@ def validate_secret
 	end
 end
 
-get '/' do
-	  #{"o1":"Upstairs hall","o2":"Living room bar","o3":"Living room","o4":"Blackboard hall","o5":"Den lamp","o6":"0304-3"}
-	json=%x/rfoutlet.rb -J NAMES/
-	names=JSON.parse(json, :symbolize_names=>true)
+def light_switch(args, state)
+	args += (state ? " -1" : " -0")
+	out=%x/rfoutlet.rb #{args}/
+	puts out
+	out.split(/\n/).map { |line| line+="<br>" }
+end
 
-	erb :index, :locals => { :names=>names }
+get '/' do
+	#{"o1":"Upstairs hall","o2":"Living room bar","o3":"Living room","o4":"Blackboard hall","o5":"Den lamp","o6":"0304-3"}
+	erb :index, :locals => { :names=>NAMES_CONFIG }
 end
 
 get '/on' do
 	validate_secret
 
-	outlet=request.env['HTTP_OUTLET']
-	args= outlet.eql?("all") ? "-a" : "-#{outlet}"
-	lines=%x/rfoutlet.rb #{args} -1/
-	out=""
-	lines.split(/\n/).each { |line| out+="#{line}<br/>\n" }
-	out
+	outlet = request.env['HTTP_OUTLET']
+	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
+
+	light_switch("-#{outlet}", true).to_json
 end
 
 get '/off' do
 	validate_secret
 
 	outlet=request.env['HTTP_OUTLET']
-	args= outlet.eql?("all") ? "-a" : "-#{outlet}"
-	lines=%x/rfoutlet.rb #{args} -0/
-	out=""
-	lines.split(/\n/).each { |line| out+="#{line}<br/>\n" }
-	out
+	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
+
+	light_switch("-#{outlet}", false).to_json
 end
 
