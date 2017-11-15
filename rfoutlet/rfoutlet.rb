@@ -4,6 +4,7 @@
 require 'json'
 require 'fileutils'
 require 'daemons'
+# gem install ruby-sun-times
 require 'sun_times'
 
 me=$0
@@ -46,6 +47,7 @@ $opts={
 	:lat=>nil,
 	:long=>nil,
 	:log => nil,
+	:json_item=>nil,
 	:list => false,
 	:sniff => false,
 	:daemonize => false,
@@ -129,6 +131,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		end
 	}
 
+	opts.on('-J', '--json-list ITEM', String, "Print json config to stdout: #{RFOutletConfig.items}") { |item|
+		$opts[:json_item] = item
+	}
+
 	opts.on('-l', '--list', "List outlets") {
 		$opts[:list]=true
 	}
@@ -151,6 +157,10 @@ $log.debug $opts.inspect
 RFOutletConfig.init($opts)
 rfoc = RFOutletConfig.new($opts[:json])
 
+unless $opts[:json_item].nil?
+	puts rfoc.print_item($opts[:json_item])
+	exit 0
+end
 if $opts[:list]
 	rfoc.list
 	exit 0

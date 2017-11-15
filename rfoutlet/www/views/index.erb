@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Lights</title>
+		<script type="text/javascript" src="js/jquery.js"></script>
+		<script type="text/javascript" src="js/rfoutlet.js"></script>
+	</head>
+	<body>
+		Secret: <input id="secret" type="password" name="fname"><button id="show">Show</button><p>
+		<table>
+			<% names.each_pair do |outlet,name| %>
+			<tr>
+				<td><%= name %></td>
+				<td><button class="button_on"  data-outlet="<%= outlet %>"> On </button></td>
+				<td><button class="button_off" data-outlet="<%= outlet %>">Off </button></td>
+			</tr>
+			<% end %>
+			<tr>
+				<td>All</td>
+				<td><button class="button_on"  data-outlet="a"> On </button></td>
+				<td><button class="button_off" data-outlet="a">Off </button></td>
+			</tr>
+		</table>
+		<p>
+		<span id="output"></span>
+	</body>
+</html>
