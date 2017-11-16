@@ -4,24 +4,52 @@
 		<title>Lights</title>
 		<script type="text/javascript" src="js/jquery.js"></script>
 		<script type="text/javascript" src="js/rfoutlet.js"></script>
+
+		<link rel="stylesheet" type="text/css" href="css/rfoutlet.css">
 	</head>
 	<body>
-		Secret: <input id="secret" type="password" name="fname"><button id="show">Show</button><p>
-		<table>
-			<% names.each_pair do |outlet,name| %>
-			<tr>
-				<td><%= name %></td>
-				<td><button class="button_on"  data-outlet="<%= outlet %>"> On </button></td>
-				<td><button class="button_off" data-outlet="<%= outlet %>">Off </button></td>
-			</tr>
-			<% end %>
-			<tr>
-				<td>All</td>
-				<td><button class="button_on"  data-outlet="a"> On </button></td>
-				<td><button class="button_off" data-outlet="a">Off </button></td>
-			</tr>
-		</table>
+		<!--
+		<input id="secret" type="password" name="fname" placeholder="Secret code">
+		<span id="show" class="hide-show">Show</span>
+		<button id="show">Show</button>
+		-->
+
+		<header>Lights</header>
 		<p>
-		<span id="output"></span>
+		<div class="container">
+			<form class="form">
+				<input id="secret" type="password" name="secret code" placeholder="Secret code" />
+				<button id="show" type="button">Show</button>
+			</form>
+		</div>
+		<p>
+		<nav>
+			<table id="outlets" class="table">
+				<tr>
+					<th></th>
+					<th>Location</th>
+					<th></th>
+				</tr>
+				<% names.each_pair do |outlet,name| %>
+					<tr>
+						<td><button class="button_on"  data-outlet="<%= outlet %>"> On </button></td>
+						<td><%= name %></td>
+						<td><button class="button_off" data-outlet="<%= outlet %>">Off </button></td>
+					</tr>
+				<% end %>
+				<tr>
+					<td><button class="button_on"  data-outlet="a"> On </button></td>
+					<td>All</td>
+					<td><button class="button_off" data-outlet="a">Off </button></td>
+				</tr>
+			</table>
+		</nav>
+		<p>
+		<footer>Copyright &copy; 2017, One Guy Coding</footer>
+		<p>
+		<div id="output">
+
+		</div>
+
 	</body>
 </html>

@@ -6,12 +6,41 @@ require 'sinatra'
 require 'sinatra/cookies'
 require 'json'
 
+me=$0
+if File.symlink?(me)
+	me=File.readlink($0)
+	md=File.dirname($0)
+	me=File.realpath(me)
+end
+ME=File.basename(me, ".rb")
+MD=File.dirname(me)
+LIB=File.realpath(File.join(MD, "../..", "lib"))
+
+require_relative File.join(LIB, "logger")
+require_relative File.join('..', "rfoutletconfig")
+require_relative File.join('..', "rf_outlet")
+
+$log=Logger.set_logger(STDOUT, Logger::INFO)
+
+CFG="/home/pi/bin/rfoutlet.json"
+
 # lazy auth
 SECRET_TXT="/home/pi/bin/secret.txt"
 
 begin
-	NAMES_CONFIG_JSON=%x/rfoutlet.rb -J NAMES/
+	RFOutletConfig.init(:logger=>$log)
+	$log.info "Loading RF config #{CFG}"
+	rfoc=RFOutletConfig.new(CFG)
+rescue => e
+	puts "Failed to load RF outlet config: #{CFG}"
+	puts e.message
+	exit 1
+end
+
+begin
+	NAMES_CONFIG_JSON=rfoc.print_item(:NAMES) #%x/rfoutlet.rb -J NAMES/
 	NAMES_CONFIG=JSON.parse(NAMES_CONFIG_JSON, :symbolize_names=>true)
+	puts NAMES_CONFIG_JSON
 rescue => e
 	puts "Failed to load rfoutlet NAMES config data: #{e.message}"
 	exit 1
@@ -32,11 +61,13 @@ def validate_secret
 	end
 end
 
+def string2array(out, suffix)
+	out.split(/\n/).map { |line| line+="<br>" }
+end
+
 def light_switch(args, state)
 	args += (state ? " -1" : " -0")
-	out=%x/rfoutlet.rb #{args}/
-	puts out
-	out.split(/\n/).map { |line| line+="<br>" }
+	%x/rfoutlet.rb #{args}/
 end
 
 get '/' do
@@ -50,7 +81,16 @@ get '/on' do
 	outlet = request.env['HTTP_OUTLET']
 	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
 
-	light_switch("-#{outlet}", true).to_json
+	state=RFOutlet::ON
+
+	labels = outlet.eql?("a") ? rfoc.outlets.keys : [ outlet ]
+	out=""
+	labels.each { |label|
+		rfo=rfoc.set_outlet(label)
+		out += "Turning #{state.downcase} #{rfo.name}\n"
+		out += "%s\n" % rfo.turn(state)
+	}
+	string2array(out, "<br>")
 end
 
 get '/off' do
@@ -59,6 +99,15 @@ get '/off' do
 	outlet=request.env['HTTP_OUTLET']
 	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
 
-	light_switch("-#{outlet}", false).to_json
+	state=RFOutlet::OFF
+
+	labels = outlet.eql?("a") ? rfoc.outlets.keys : [ outlet ]
+	out=""
+	labels.each { |label|
+		rfo=rfoc.set_outlet(label)
+		out += "Turning #{state.downcase} #{rfo.name}\n"
+		out += "%s\n" % rfo.turn(state)
+	}
+	string2array(out, "<br>")
 end
 

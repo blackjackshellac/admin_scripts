@@ -26,6 +26,10 @@ class RFOutlet
 		%x[#{@@codesend} #{rfcode}].strip
 	end
 
+	def turn(state)
+		sendcode(get_rfcode(state))
+	end
+
 	def self.all_eof(files)
 		files.find { |f| !f.eof }.nil?
 	end
