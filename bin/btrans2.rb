@@ -52,7 +52,7 @@ class Transaction
 	ACCOUNTS="Other 2 JOINT|Chequing|Savings"
 	RE_BILL=/^\s*(Bill\s)(?<bill>\d+)\s*$/
 	RE_REFN=/^\s*(Ref[#]:)\s*(?<refn>\d+)\s*([|] Cancel This Payment)?\s*$/
-	RE_TRAN=/^\s*[\$](?<amt>\d+\.\d+)\s(?<hbpt>has been paid to)\s(?<name>[A-Za-z\s]+)?\s([\(](?<alias>[A-Za-z\s]+)[\)]\s)?(?<number>[A-Za-z\d]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./
+	RE_TRAN=/^\s*[\$](?<amt>\d+\.\d+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./
 	RE_DONE=/^\s*[\.]\s*$/
 
 	@@log=Logger.new(STDERR)
@@ -164,7 +164,7 @@ lines.each { |line|
 			trans=Transaction.new
 		end
 	else
-		$log.warn "No match for line #{line}, ignoring"
+		$log.warn "No match for line: #{line}"
 	end
 }
 
