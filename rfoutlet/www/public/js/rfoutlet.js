@@ -13,6 +13,21 @@ $(function() {
 		light_switch(outlet, 0);
 	});
 
+	$( ".button_hamburger").click(function() {
+		var $this = $(this);
+		var outlet=$this.data("outlet");
+		var offset=$this.offset();
+		//$('.flyout').offset(offset);
+		//$('.flyout').toggle();
+
+		var modal = $('#myModal');
+		modal.show();
+	});
+
+	$( ".close" ).click(function() {
+		$('#myModal').hide();
+	});
+
 	$( "#show" ).click(function() {
 		var secret=$("#secret");
 

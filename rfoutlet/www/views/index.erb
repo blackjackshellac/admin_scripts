@@ -6,6 +6,7 @@
 		<script type="text/javascript" src="js/rfoutlet.js"></script>
 
 		<link rel="stylesheet" type="text/css" href="css/rfoutlet.css">
+		<link rel="stylesheet" type="text/css" href="css/modal.css">
 		<link rel="icon" type="image/png" href="favicon.png">
 		[…]
 	</head>
@@ -25,11 +26,15 @@
 			</form>
 		</div>
 		<p>
+		<!-- gear &#9881; -->
+		<button id="nav-toggle" href="#">&#9200;</button>
+		<p>
 		<nav>
 			<table id="outlets" class="table">
 				<tr>
 					<th></th>
 					<th>Location</th>
+					<th></th>
 					<th></th>
 				</tr>
 				<% names.each_pair do |outlet,name| %>
@@ -37,12 +42,14 @@
 						<td><button class="button_on"  data-outlet="<%= outlet %>"> On </button></td>
 						<td><%= name %></td>
 						<td><button class="button_off" data-outlet="<%= outlet %>">Off </button></td>
+						<td><button class="button_hamburger" data-outlet="<%= outlet %>">&#9200;</button></td>
 					</tr>
 				<% end %>
 				<tr>
 					<td><button class="button_on"  data-outlet="a"> On </button></td>
 					<td>All</td>
 					<td><button class="button_off" data-outlet="a">Off </button></td>
+					<td><button class="button_hamburger" data-outlet="a">&#9200;</button></td>
 				</tr>
 			</table>
 		</nav>
@@ -53,5 +60,53 @@
 
 		</div>
 
+		<!-- The Modal -->
+		<div id="myModal" class="modal">
+			<!-- Modal content -->
+			<div class="modal-content">
+				<span class="close">&times;</span>
+				<p>&nbsp;</p>
+				<form>
+					<fieldset>
+						<legend>Sunrise</legend>
+						<input id="sunrise" type="checkbox">
+						<label for="sunrise_range_before">Random seconds before</label>
+						<input id="sunrise_range_before" type="number">
+						<label for="sunrise_range_after">after</label>
+						<input id="sunrise_range_after" type="number">
+					</fieldset>
+					<fieldset>
+						<legend>Sunset</legend>
+						<input id="sunset" type="checkbox">
+						<label for="sunset_range_before">Random seconds before</label>
+						<input id="sunset_range_before" type="number">
+						<label for="sunset_range_after">after</label>
+						<input id="sunset_range_after" type="number">
+					</fieldset>
+					<fieldset>
+						<legend>Morning schedule</legend>
+						<input id="sched_morn_sun" type="checkbox">
+						<label for="sched_morn_sun">Sun</label>
+						<input id="sched_morn_mon" type="checkbox">
+						<label for="sched_morn_mon">Mon</label>
+						<input id="sched_morn_tue" type="checkbox">
+						<label for="sched_morn_tue">Tue</label>
+						<input id="sched_morn_wed" type="checkbox">
+						<label for="sched_morn_wed">Wed</label>
+						<input id="sched_morn_thu" type="checkbox">
+						<label for="sched_morn_thu">Thu</label>
+						<input id="sched_morn_fri" type="checkbox">
+						<label for="sched_morn_fri">Fri</label>
+						<input id="sched_morn_sat" type="checkbox">
+						<label for="sched_morn_sat">Sat</label><br>
+						<label for "sched_morn_on">Turn on</label>
+						<input id="sched_morn_on" type="time">
+						<label for "sched_morn_off">Turn off</label>
+						<input id="sched_morn_off" type="time">
+					</fieldset>
+				</form>
+			</div>
+
+		</div>
 	</body>
 </html>

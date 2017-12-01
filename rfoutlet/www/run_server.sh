@@ -6,5 +6,5 @@ LOG=/var/tmp/rfoutlet_server.$(date +%Y%m%d).log
 
 cd $MD
 echo Logging to $LOG
-nohup ./server.rb >> $LOG 2>&1 &
+nohup ./rfoutlet_server.rb >> $LOG 2>&1 &
 
