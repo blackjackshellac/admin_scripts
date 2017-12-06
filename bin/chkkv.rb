@@ -3,9 +3,14 @@
 #
 
 require 'time'
+require 'tempfile'
 
-#newest=$(rpm -q kernel --last | head -1 | cut -f1 -d' ').$(uname -p)
-#current=kernel-$(uname -r)
+ME=File.basename($0, ".rb")
+MD=File.dirname(File.realpath($0))
+
+# notification recipients
+RECIP=File.join(MD, ME+".notify")
+NOTIFY=File.exist?(RECIP) ? File.read(RECIP) : ""
 
 class CheckKernelVersion
 	RE_KERNEL_STRING_SPLIT=/\s+/
@@ -103,58 +108,53 @@ class CheckKernelVersion
 		as_string(entry[:kernel], entry[:time])
 	end
 
-	def self.kernel_dump_test
-		puts "      Number of kernels=#{kernels.length}"
-		puts "             Kernel map="+kernels_map.inspect
-		puts "         Running kernel="+map_as_string(@@current)
-		puts "          Latest kernel="+map_as_string(@@latest)
+	def self.kernel_dump_test(out=STDOUT)
+		out.puts "      Number of kernels=#{kernels.length}"
+		out.puts "             Kernel map="+kernels_map.inspect
+		out.puts "         Running kernel="+map_as_string(@@current)
+		out.puts "          Latest kernel="+map_as_string(@@latest)
 		kernels_map.sort_by { |k,t| t }.reverse.each { |kernel,time|
-			puts "                 Kernel="+as_string(kernel, time)
+			out.puts "                 Kernel="+as_string(kernel, time)
 		}
-		puts "        Test if current="+is_current.inspect
+		out.puts "        Test if current="+is_current.inspect
+
+		out.puts
 	end
+
+	def self.notify(email, quiet=true)
+		return 0 if is_current
+
+		output = Tempfile.new(ME)
+
+		kernel_dump_test(output)
+		summary(output)
+
+		output.flush
+		output.close
+
+		host=%x/hostname -s/.strip
+
+		# mail -s #{host}: new kernel available #{@@latest}" -a #{output.path}
+		cmd=%/cat #{output.path} | mail -s "#{host}: new kernel available #{@@latest[:kernel]}" #{email}/
+
+		unless quiet
+			puts cmd
+			puts %x/cat #{output.path}/
+		end
+
+		%x/#{cmd}/ unless email.empty?
+
+		is_current
+	end
+
+	def self.summary(out=STDOUT)
+		out.puts "Running = #{CheckKernelVersion.map_as_string(CheckKernelVersion.current)}"
+		out.puts " Newest = #{CheckKernelVersion.map_as_string(CheckKernelVersion.latest)}"
+	end
+
 end
 
-#puts CheckKernelVersion.kernel_dump_test
+puts "Warning: email recipients file not found: #{RECIP}" if NOTIFY.empty?
 
-puts "Running = #{CheckKernelVersion.map_as_string(CheckKernelVersion.current)}"
-puts " Newest = #{CheckKernelVersion.map_as_string(CheckKernelVersion.latest)}"
+exit CheckKernelVersion.notify(NOTIFY, true)
 
-exit CheckKernelVersion.is_current
-
-### kernels=%x/rpm -q kernel --last/.split(/\n/)
-### #kernel-3.10.0-514.6.1.el7.x86_64              Fri 20 Jan 2017 01:33:30 AM EST
-### #kernel-3.10.0-514.2.2.el7.x86_64              Tue 13 Dec 2016 01:43:35 AM EST
-### #kernel-3.10.0-327.36.3.el7.x86_64             Wed 26 Oct 2016 01:33:56 AM EDT
-### #kernel-3.10.0-327.36.2.el7.x86_64             Wed 12 Oct 2016 01:34:35 AM EDT
-### #kernel-3.10.0-327.28.3.el7.x86_64             Sat 20 Aug 2016 08:12:39 AM EDT
-### 
-### bits=kernels[0].split(/[\s]+/, 2)
-### if bits.length != 2
-### 	kernels.each { |k| puts k }
-### 	raise "newest kernel not found in kernels output: #{kernels[0]}"
-### end
-### platform=%x/uname -p/.strip
-### newest=bits[0]
-### newest << ".#{platform}" if newest[/#{platform}$/].nil?
-### #puts newest
-### current = "kernel-#{%x/uname -r/.strip}"
-### #puts current
-### 
-### #newest=$(rpm -q kernel --last | head -1 | cut -f1 -d' ').$(uname -p)
-### #current=kernel-$(uname -r)
-### #
-### #info "Running = $current"
-### #info "Newest  = $newest"
-### #
-### #if [ "$newest" != "$current" ]; then
-### #	mail_log "New kernel available: $newest"
-### #	exit 1
-### #else
-### #	info "Running kernel is newest"
-### #fi
-### 
-### exit_status=newest.eql?(current) ? 0 : 1
-### puts "Running = #{current}\n Newest = #{newest}"
-### exit exit_status
-### 
