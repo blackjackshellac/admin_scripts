@@ -8,13 +8,14 @@ class RFOutlet
 	@@codesend="/var/www/html/rfoutlet/codesend"
 	@@rfsniffer="/var/www/html/rfoutlet/RFSniffer"
 
-	attr_reader :label, :name, :code, :on, :off
+	attr_reader :label, :name, :code, :on, :off, :sched
 	def initialize(label, h)
 		@label = label
 		@name = h[:name]
 		@code = h[:code]
 		@on   = h[:on]
 		@off  = h[:off]
+		@sched = h[:sched].nil? ? nil : Sched.new(h[:sched])
 	end
 
 	def get_rfcode(state)
@@ -97,5 +98,3 @@ class RFOutlet
 	end
 
 end
-
-

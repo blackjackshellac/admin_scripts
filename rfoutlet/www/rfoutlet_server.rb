@@ -19,31 +19,22 @@ LIB=File.realpath(File.join(MD, "../..", "lib"))
 require_relative File.join(LIB, "logger")
 require_relative File.join('..', "rfoutletconfig")
 require_relative File.join('..', "rf_outlet")
+require_relative File.join('..', "sched")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
-CFG="/home/pi/bin/rfoutlet.json"
+CFG=File.expand_path("~/bin/rfoutlet.json")
 
 # lazy auth
-SECRET_TXT="/home/pi/bin/secret.txt"
+SECRET_TXT=File.expand_path("~/bin/secret.txt")
 
 begin
 	RFOutletConfig.init(:logger=>$log)
 	$log.info "Loading RF config #{CFG}"
 	rfoc=RFOutletConfig.new(CFG)
 rescue => e
-	puts "Failed to load RF outlet config: #{CFG}"
-	puts e.message
-	exit 1
-end
-
-begin
-	NAMES_CONFIG_JSON=rfoc.print_item(:NAMES) #%x/rfoutlet.rb -J NAMES/
-	NAMES_CONFIG=JSON.parse(NAMES_CONFIG_JSON, :symbolize_names=>true)
-	puts NAMES_CONFIG_JSON
-rescue => e
-	puts "Failed to load rfoutlet NAMES config data: #{e.message}"
-	exit 1
+	$log.error "Failed to load RF outlet config: #{CFG}"
+	$log.die e.message
 end
 
 set :port, 1966
@@ -61,8 +52,13 @@ def validate_secret
 	end
 end
 
-def string2array(out, suffix)
-	out.split(/\n/).map { |line| line+="<br>" }
+# append the suffix to each line in array out, returns the array of altered lines
+#
+# @param out - array of lines to alter
+# @param suffix - suffix to append to each line
+# @returns array of lines with suffix appended
+def append2lines(out, suffix)
+	out.split(/\n/).map { |line| line+=suffix }
 end
 
 def light_switch(args, state)
@@ -70,16 +66,23 @@ def light_switch(args, state)
 	%x/rfoutlet.rb #{args}/
 end
 
+before '/*' do
+	path=request.path_info
+	$log.info "path=.#{path}."
+	unless path.eql?('/')
+		$log.info "Validate secret for #{path}"
+		validate_secret
+	end
+end
+
 get '/' do
 	#{"o1":"Upstairs hall","o2":"Living room bar","o3":"Living room","o4":"Blackboard hall","o5":"Den lamp","o6":"0304-3"}
-	erb :index, :locals => { :names=>NAMES_CONFIG }
+	erb :index, :locals => { :names=>rfoc.hash_config(:name) }
 end
 
 get '/on' do
-	validate_secret
-
 	outlet = request.env['HTTP_OUTLET']
-	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
+	halt 400, "No outlet specified in headers" if outlet.nil? || outlet.empty?
 
 	state=RFOutlet::ON
 
@@ -90,14 +93,12 @@ get '/on' do
 		out += "Turning #{state.downcase} #{rfo.name}\n"
 		out += "%s\n" % rfo.turn(state)
 	}
-	string2array(out, "<br>")
+	append2lines(out, "<br>")
 end
 
 get '/off' do
-	validate_secret
-
 	outlet=request.env['HTTP_OUTLET']
-	halt 400, "No outlet specified in cookies" if outlet.nil? || outlet.empty?
+	halt 400, "No outlet specified in headers" if outlet.nil? || outlet.empty?
 
 	state=RFOutlet::OFF
 
@@ -108,6 +109,23 @@ get '/off' do
 		out += "Turning #{state.downcase} #{rfo.name}\n"
 		out += "%s\n" % rfo.turn(state)
 	}
-	string2array(out, "<br>")
+	append2lines(out, "<br>")
 end
 
+get '/outlet' do
+	outlet = request.env['HTTP_OUTLET']
+	halt 400, "No outlet specified in headers" if outlet.nil? || outlet.empty?
+
+	oc=rfoc.outlet_config_json(outlet)
+	halt 401, "Outlet not found #{outlet}" if oc.nil?
+	oc
+end
+
+post '/outlet' do
+	oc=JSON.parse(request.body.read, :symbolize_names=>true)
+	outlet=oc[:outlet].to_sym
+	data=oc[:data]
+	rfoc.update_outlet_config(outlet, data)
+	rfoc.save_config
+	$log.info "post outlet: "+oc.inspect
+end

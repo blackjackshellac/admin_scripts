@@ -1,31 +1,40 @@
 /* The Modal (background) */
 .modal {
     display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
+    position: absolute; /* Stay in place */
     z-index: 1; /* Sit on top */
-    left: 0;
-    top: 0;
-    width: 100%; /* Full width */
+    left: 8px;
+    top: 8px;
+    width: 50%; /* Full width */
     height: 100%; /* Full height */
     overflow: auto; /* Enable scroll if needed */
     background-color: rgb(0,0,0); /* Fallback color */
-    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
 }
 
 /* Modal Content/Box */
 .modal-content {
     background-color: #fefefe;
-    margin: 15% auto; /* 15% from the top and centered */
+    margin: 1% auto; /* 15% from the top and centered */
     padding: 20px;
-    border: 1px solid #888;
-	max-width: 80%;
-    width: auto !important;
+    border: 5px solid #888;
+	max-width: 75%;
+    width: 75%;
     /* width: 60%; /* Could be more or less, depending on screen size */
+}
+
+.modal-title {
+	background-color: #c0c0c0;
+	font-size: 28px;
+	font-weight: bold;
+	margin: 5px;
+	margin-bottom: 10px;
+	padding: 10px;
 }
 
 /* The Close Button */
 .close {
-    color: #aaa;
+    color: red;
     float: right;
     font-size: 28px;
     font-weight: bold;
@@ -33,7 +42,63 @@
 
 .close:hover,
 .close:focus {
-    color: black;
+    color: darkred;
     text-decoration: none;
     cursor: pointer;
 }
+
+/* The Check Button */
+.check {
+    color: green;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.check:hover,
+.check:focus {
+    color: darkgreen;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+
+label {
+	display:inline-block;
+	width:200px;
+	margin-right:5px;
+	text-align:right;
+}
+
+input {
+	font-family: "Trebuchet MS", Arial, Helvetica, sans-serif;
+	font-size: 1em;
+
+	border: 1px solid #c2c2c2;
+	box-shadow:none;
+	border-radius: 0px;
+	background-color: #f2f2f2;
+}
+
+input[type="text"]:disabled,
+input[type="number"]:disabled {
+    background: #dddddd;
+}
+
+/* For Firefox */
+input[type='number'] {
+    -moz-appearance:textfield;
+}
+/* Webkit browsers like Safari and Chrome */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+fieldset {
+	border:none;
+	width:500px;
+	margin:0px auto;
+}
+
