@@ -153,14 +153,16 @@ function save_outlet_config() {
 		data.sched.sunrise={
 			enabled: true,
 			before: $('#sunrise_range_before').val().trim(),
-			after: $('#sunrise_range_after').val().trim()
+			after: $('#sunrise_range_after').val().trim(),
+			duration: $('#sunrise_duration').val().trim()
 		}
 	}
 	if ($('#sunset').prop('checked')) {
 		data.sched.sunset={
 			enabled: true,
 			before: $('#sunset_range_before').val().trim(),
-			after: $('#sunset_range_after').val().trim()
+			after: $('#sunset_range_after').val().trim(),
+			duration: $('#sunset_duration').val().trim()
 		}
 	}
 	if (jQuery.isEmptyObject(data.sched)) {
@@ -194,28 +196,34 @@ function show_config(outlet, data) {
 	if (undefined === data.sched) {
 		data.sched = {};
 	}
+
 	if (undefined === data.sched.sunrise) {
 		data.sched.sunrise={
 			enabled: false,
 			before: 1800,
-			after: 1800
-		};
-	}
-	if (undefined === data.sched.sunset) {
-		data.sched.sunset = {
-			enabled: false,
-			before: 1800,
-			after: 1800
+			after: 1800,
+			duration: 7200
 		};
 	}
 
 	$('#sunrise').prop('checked', data.sched.sunrise.enabled);
 	$('#sunrise_range_before').val(data.sched.sunrise.before);
 	$('#sunrise_range_after').val(data.sched.sunrise.after);
+	$('#sunrise_duration').val(data.sched.sunrise.duration)
+
+	if (undefined === data.sched.sunset) {
+		data.sched.sunset = {
+			enabled: false,
+			before: 1800,
+			after: 1800,
+			duration: 7200
+		};
+	}
 
 	$('#sunset').prop('checked', data.sched.sunset.enabled);
 	$('#sunset_range_before').val(data.sched.sunset.before);
 	$('#sunset_range_after').val(data.sched.sunset.after);
+	$('#sunset_duration').val(data.sched.sunset.duration);
 
 	modal.show();
 }

@@ -17,6 +17,7 @@ class SchedSun
 		@enabled = h[:enabled]||false
 		@before = h[:before].to_i||0
 		@after = h[:after].to_i||0
+      @duration = h[:duration].to_i||7200 # 2 hours by default
 
       raise "Unknown sched type in SchedSun: #{@type}" if @type != :sunrise && @type != :sunset
 	end
