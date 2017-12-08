@@ -37,15 +37,20 @@ class RFOutletConfig
 	end
 
 	def fillSchedQueue(queue)
+		queue.clear
 		@outlets.each { |outlet, rfo|
 			next if rfo.sched.nil?
 			if !rfo.sched.sunrise.nil? && rfo.sched.sunrise.enabled
 				time = rfo.sched.sunrise.next
 				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
+				time += rfo.sched.sunrise.duration
+				queue.push SchedEntry.new(time, rfo, RFOutlet::OFF)
 			end
 			if !rfo.sched.sunset.nil? && rfo.sched.sunset.enabled
 				time = rfo.sched.sunset.next
 				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
+				time += rfo.sched.sunset.duration
+				queue.push SchedEntry.new(time, rfo, RFOutlet::OFF)
 			end
 		}
 		queue

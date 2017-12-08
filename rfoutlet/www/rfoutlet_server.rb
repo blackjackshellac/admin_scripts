@@ -48,6 +48,7 @@ rescue => e
 end
 
 rfoc.fillSchedQueue($sched_queue)
+puts $sched_queue.slump
 
 set :port, 1966
 
@@ -139,5 +140,6 @@ post '/outlet' do
 	data=oc[:data]
 	rfoc.update_outlet_config(outlet, data)
 	rfoc.save_config
+	rfoc.fillSchedQueue($sched_queue)
 	$log.info "post outlet: "+oc.inspect
 end

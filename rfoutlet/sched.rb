@@ -11,13 +11,13 @@ class SchedSun
       @@long = long
    end
 
-	attr_reader :enabled, :before, :after
+	attr_reader :enabled, :before, :after, :duration
 	def initialize(type, h)
 		@type = type
 		@enabled = h[:enabled]||false
-		@before = h[:before].to_i||0
-		@after = h[:after].to_i||0
-      @duration = h[:duration].to_i||7200 # 2 hours by default
+		@before = (h[:before]||0).to_i
+		@after = (h[:after]||0).to_i
+      @duration = (h[:duration]||7200).to_i # 2 hours by default
 
       raise "Unknown sched type in SchedSun: #{@type}" if @type != :sunrise && @type != :sunset
 	end
@@ -76,8 +76,16 @@ class SchedEntry
    def fire
       now = Time.now.to_i
       delay = @time-now
-      sleep delay if delay > 0
+      if delay > 0
+         @@log.info "Sleeping #{delay} seconds before firing"
+         sleep delay
+      end
+      @@log.info "Run rfo.turn(#{@state}): #{@rfo.to_s}"
       @rfo.turn(@state)
+   end
+
+   def to_s
+      "Entry %s/%s/%s" % [ Time.at(@time).strftime("%Y%m%d_%H%M%S"), @rfo.to_s, @state ]
    end
 
 end
@@ -97,6 +105,7 @@ class SchedQueue
    def pop
       @lock.synchronize {
          len = @queue.length
+         @@log.info "Found #{len} entries on queue"
          return nil if len == 0
          return @queue[0] if len == 1
          @queue.sort_by { |q|
@@ -108,14 +117,28 @@ class SchedQueue
    def push(entry)
       raise "Invalid entry in SchedQueue" if entry.class != SchedEntry
       @lock.synchronize {
-         @@log.info "Adding entry at time #{entry.time}: "+Time.at(entry.time).to_s
+         @@log.info "Adding #{entry.state} entry at time #{Time.at(entry.time)}: #{entry.rfo.to_s}"
          @queue << entry
+         @@log.info "Now #{@queue.length} entries in queue"
       }
+      #puts dump
    end
 
    def clear
       @lock.synchronize {
          @queue = []
+      }
+   end
+
+   def slump
+      @lock.synchronize {
+         s=@queue.sort_by { |e|
+            e.time
+         }
+         puts "Dumping #{s.length} entries"
+         s.each { |entry|
+            puts "Dump: "+entry.to_s
+         }
       }
    end
 end
@@ -148,12 +171,12 @@ class Sched
          begin
             entry = queue.pop
             if entry.nil?
-               snooze = 5
-               puts "Nothing in queue, sleeping for #{snooze}"
+               snooze = 1
+               #puts "Nothing in queue, sleeping for #{snooze}"
                sleep snooze
             else
                # sleep until this time
-               @@log.info entry.inspect
+               @@log.info entry.to_s
                @@log.info entry.fire
             end
          rescue Interrupt => e

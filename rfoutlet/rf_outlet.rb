@@ -18,6 +18,10 @@ class RFOutlet
 		@sched = h[:sched].nil? ? nil : Sched.new(h[:sched])
 	end
 
+	def to_s
+		"%s/%s/%s/%s/%s" % [ @label, @name, @code, @on, @off ]
+	end
+
 	def get_rfcode(state)
 		(state.eql?(ON) ? @on : @off)
 	end
@@ -91,10 +95,6 @@ class RFOutlet
 			puts "exit_status = [#{exit_status}]"
 		}
 		exit_status
-	end
-
-	def to_s
-		"%s: %s [%s]" % [ @label, @name, @code ]
 	end
 
 end
