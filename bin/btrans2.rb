@@ -52,7 +52,7 @@ class Transaction
 	ACCOUNTS="Other 2 JOINT|Chequing|Savings"
 	RE_BILL=/^\s*(Bill\s)(?<bill>\d+)\s*$/
 	RE_REFN=/^\s*(Ref[#]:)\s*(?<refn>\d+)\s*([|] Cancel This Payment)?\s*$/
-	RE_TRAN=/^\s*[\$](?<amt>\d+\.\d+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./
+	RE_TRAN=/^\s*[\$](?<amt>[\d+\.,]+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./
 	RE_DONE=/^\s*[\.]\s*$/
 
 	@@log=Logger.new(STDERR)
@@ -120,15 +120,29 @@ class Transaction
 	end
 
 	def summary
+		if @trans.empty?
+			$log.debug "Ignoring empty transaction"
+			return
+		end
+
 		name=@trans[:alias].nil? ? @trans[:name] : ("%s (%s)" % [ @trans[:alias], @trans[:name] ])
+		trans[:name_alias]=name
 
 		@trans[:alias] = @trans[:name] if @trans[:alias].nil?
-		puts @trans[:acct]
-		puts name
-		puts "$#{@trans[:amt]}"
-		puts @trans[:date]
-		puts @trans[:refn]
+
+		[ :acct, :name_alias, :amt, :date, :refn ].each { |key|
+			val=@trans[key]
+			if val.nil?
+				puts "WARNING: Trans value not found for \'#{key}\'"
+			else
+				puts val
+			end
+		}
 		puts
+	end
+
+	def empty?
+		@trans.empty?
 	end
 end
 
@@ -168,8 +182,14 @@ lines.each { |line|
 	end
 }
 
-$log.info "Summarizing transactions ...\n"
+$log.info "Summarizing transactions ...\n" unless transactions.empty?
 transactions.each { |trans|
 	trans.summary
 }
 
+unless trans.empty?
+	$log.info "Incomplete transactions ...\n"
+	unless transactions.include?(trans)
+		trans.summary
+	end
+end
