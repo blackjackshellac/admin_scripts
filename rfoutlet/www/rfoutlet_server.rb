@@ -5,6 +5,7 @@ require 'sinatra'
 # gem install sinatra-contrib
 require 'sinatra/cookies'
 require 'json'
+require 'thread'
 
 me=$0
 if File.symlink?(me)
@@ -28,6 +29,15 @@ CFG=File.expand_path("~/bin/rfoutlet.json")
 # lazy auth
 SECRET_TXT=File.expand_path("~/bin/secret.txt")
 
+Sched.init(:logger=>$log)
+SchedEntry.init(:logger=>$log)
+SchedQueue.init(:logger=>$log)
+$sched_queue = SchedQueue.new
+
+puts $sched_queue.inspect
+t = Sched.create_thread($sched_queue)
+
+
 begin
 	RFOutletConfig.init(:logger=>$log)
 	$log.info "Loading RF config #{CFG}"
@@ -36,6 +46,8 @@ rescue => e
 	$log.error "Failed to load RF outlet config: #{CFG}"
 	$log.die e.message
 end
+
+rfoc.fillSchedQueue($sched_queue)
 
 set :port, 1966
 

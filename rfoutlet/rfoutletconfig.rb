@@ -36,6 +36,21 @@ class RFOutletConfig
 		}
 	end
 
+	def fillSchedQueue(queue)
+		@outlets.each { |outlet, rfo|
+			next if rfo.sched.nil?
+			if !rfo.sched.sunrise.nil? && rfo.sched.sunrise.enabled
+				time = rfo.sched.sunrise.next
+				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
+			end
+			if !rfo.sched.sunset.nil? && rfo.sched.sunset.enabled
+				time = rfo.sched.sunset.next
+				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
+			end
+		}
+		queue
+	end
+
 	def create_rfoutlet(outlet, data)
 		rfo=RFOutlet.new(outlet, data)
 		sched=rfo.sched

@@ -58,7 +58,75 @@ class SchedSun
 	end
 end
 
+class SchedEntry
+   @@log = Logger.new(STDOUT)
+
+   def self.init(opts)
+      @@log = opts[:logger] if opts.key?(:logger)
+   end
+
+   attr_reader :time, :rfo, :state
+   def initialize(time, rfo, state)
+      raise "Invalid outlet state in SchedEntry" if state != RFOutlet::ON && state != RFOutlet::OFF
+      @time = time
+      @rfo = rfo
+      @state = state
+   end
+
+   def fire
+      now = Time.now.to_i
+      delay = @time-now
+      sleep delay if delay > 0
+      @rfo.turn(@state)
+   end
+
+end
+
+class SchedQueue
+   @@log = Logger.new(STDOUT)
+
+   def self.init(opts)
+      @@log = opts[:logger] if opts.key?(:logger)
+   end
+
+   def initialize
+      @queue = []
+      @lock = Mutex.new
+   end
+
+   def pop
+      @lock.synchronize {
+         len = @queue.length
+         return nil if len == 0
+         return @queue[0] if len == 1
+         @queue.sort_by { |q|
+            q.time
+         }[0]
+      }
+   end
+
+   def push(entry)
+      raise "Invalid entry in SchedQueue" if entry.class != SchedEntry
+      @lock.synchronize {
+         @@log.info "Adding entry at time #{entry.time}: "+Time.at(entry.time).to_s
+         @queue << entry
+      }
+   end
+
+   def clear
+      @lock.synchronize {
+         @queue = []
+      }
+   end
+end
+
 class Sched
+   @@log = Logger.new(STDOUT)
+
+   def self.init(opts)
+      @@log = opts[:logger] if opts.key?(:logger)
+   end
+
 	attr_reader :sunrise, :sunset
 	def initialize(h)
 		@sunrise = h[:sunrise].nil? ? nil : SchedSun.new(:sunrise, h[:sunrise])
@@ -71,4 +139,34 @@ class Sched
 		times << @sunset.next  unless @sunset.nil?
 		times.sort!
 	end
+
+   def self.thread_loop(queue)
+      puts queue.inspect
+      raise "queue is not a SchedQueue" if queue.class != SchedQueue
+      loop {
+         entry = nil
+         begin
+            entry = queue.pop
+            if entry.nil?
+               snooze = 5
+               puts "Nothing in queue, sleeping for #{snooze}"
+               sleep snooze
+            else
+               # sleep until this time
+               @@log.info entry.inspect
+               @@log.info entry.fire
+            end
+         rescue Interrupt => e
+
+         rescue => e
+
+         end
+      }
+   end
+
+   def self.create_thread(queue)
+      Thread.new {
+         Sched.thread_loop(queue)
+      }
+   end
 end
