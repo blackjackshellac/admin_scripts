@@ -23,12 +23,13 @@ class RFOutletConfig
 		@@log = opts[:logger] if opts.key?(:logger)
 	end
 
-	attr_reader :config_file, :config, :outlets, :outlet, :lat, :long
+	attr_reader :config_file, :config, :outlets, :outlet, :lat, :long, :reload
 	def initialize(config_file)
 		@config = read_config(config_file)
 		@lat = @config[:lat]
 		@long = @config[:long]
 		SchedSun.latlong(@lat, @long)
+		@reload = false
 
 		@outlets={}
 		@config[:outlets].each_pair { |label, value|
@@ -36,21 +37,23 @@ class RFOutletConfig
 		}
 	end
 
+	def reloadQueue(reload=true)
+		@reload = reload
+	end
+
 	def fillSchedQueue(queue)
-		queue.clear
+		@reload = false
 		@outlets.each { |outlet, rfo|
 			next if rfo.sched.nil?
 			if !rfo.sched.sunrise.nil? && rfo.sched.sunrise.enabled
-				time = rfo.sched.sunrise.next
-				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
-				time += rfo.sched.sunrise.duration
-				queue.push SchedEntry.new(time, rfo, RFOutlet::OFF)
+				rfo.sched.sunrise.next_entries(rfo).each { |entry|
+					queue.push entry
+				}
 			end
 			if !rfo.sched.sunset.nil? && rfo.sched.sunset.enabled
-				time = rfo.sched.sunset.next
-				queue.push SchedEntry.new(time, rfo, RFOutlet::ON)
-				time += rfo.sched.sunset.duration
-				queue.push SchedEntry.new(time, rfo, RFOutlet::OFF)
+				time = rfo.sched.sunset.next_entries(rfo).each { |entry|
+					queue.push entry
+				}
 			end
 		}
 		queue

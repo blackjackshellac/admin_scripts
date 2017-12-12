@@ -18,6 +18,11 @@ class RFOutlet
 		@sched = h[:sched].nil? ? nil : Sched.new(h[:sched])
 	end
 
+	def eql?(other)
+		return false if other.nil? || other.class != RFOutlet
+		@label.eql?(other.label)
+	end
+
 	def to_s
 		"%s/%s/%s/%s/%s" % [ @label, @name, @code, @on, @off ]
 	end
