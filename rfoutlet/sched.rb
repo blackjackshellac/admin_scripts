@@ -73,9 +73,9 @@ class SchedEntry
       @state = state
    end
 
-   def fire
+   def fire(delay=nil)
       now = Time.now.to_i
-      delay = @time-now
+      delay = @time-now if delay.nil?
       if delay > 0
          @@log.info "Sleeping #{delay} seconds before firing"
          sleep delay
@@ -107,10 +107,10 @@ class SchedQueue
          len = @queue.length
          @@log.info "Found #{len} entries on queue"
          return nil if len == 0
-         return @queue[0] if len == 1
-         @queue.sort_by { |q|
-            q.time
-         }[0]
+         #return @queue.delete_at(0) if len == 1
+         @queue.sort_by! { |q|
+             q.time
+         }.delete_at(0)
       }
    end
 
@@ -178,6 +178,7 @@ class Sched
                # sleep until this time
                @@log.info entry.to_s
                @@log.info entry.fire
+			   queue.slump
             end
          rescue Interrupt => e
 
