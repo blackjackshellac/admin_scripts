@@ -24,7 +24,7 @@ class RFOutlet
 	end
 
 	def to_s
-		"%s/%s/%s/%s/%s" % [ @label, @name, @code, @on, @off ]
+		"%s:[%s/%s](%s/%s)" % [ @label, @name, @code, @on, @off ]
 	end
 
 	def get_rfcode(state)
@@ -33,7 +33,11 @@ class RFOutlet
 
 	def sendcode(rfcode)
 		# return output
-		%x[#{@@codesend} #{rfcode}].strip
+		cmd="#{@@codesend} #{rfcode}"
+		%x[#{cmd}].strip
+	rescue => e
+		puts "Failed to execute [#{cmd}]: #{e.message}"
+		exit 1
 	end
 
 	def turn(state)

@@ -26,6 +26,38 @@ class SchedSun
 		"%s: from %d seconds before %s to %d seconds after" % [ @enabled, @before, @type, @after]
 	end
 
+	def next_entries(rfo)
+		entries = []
+		if @enabled
+			time = next_time
+			entries << SchedEntry.new(time[0], time[1], rfo, RFOutlet::ON)
+			time = next_time(@duration)
+			entries << SchedEntry.new(time[0], time[1], rfo, RFOutlet::OFF)
+		end
+		entries
+	end
+
+	#
+	# return an array of two elements
+	# times[0] = time of next sunrise/sunset
+	# times[1] = random tweak from -@before to +@after times[0]
+	#
+	def next_time(duration=0)
+		now	= Time.now
+		st = SunTimes.new
+
+		if @type == :sunrise
+			time = st.rise(now, @@lat, @@long)
+		elsif @type == :sunset
+			time = st.set(now, @@lat, @@long)
+		end
+
+		rtweak = random_tweak
+		time = is_tomorrow(now, time+duration+rtweak)
+
+		[ time, rtweak ]
+	end
+
 	def random_tweak
 		b=-@before
 		a=@after
@@ -46,30 +78,7 @@ class SchedSun
 		time.to_i
 	end
 
-	def next_entries(rfo)
-		times = next_times
-
-		entries = []
-		entries << SchedEntry.new(times[0], rfo, RFOutlet::ON)
-		entries << SchedEntry.new(times[1], rfo, RFOutlet::OFF)
-		entries
-	end
-
-	def next_times
-		now	= Time.now
-		st = SunTimes.new
-
-		if @type == :sunrise
-			time = st.rise(now, @@lat, @@long)
-		elsif @type == :sunset
-			time = st.set(now, @@lat, @@long)
-		end
-
-		times=[]
-		times << is_tomorrow(now, time + random_tweak)
-		times << is_tomorrow(now, time + @duration + random_tweak)
-		times
-	end
+	private :next_time, :is_tomorrow, :random_tweak
 
 end
 
@@ -80,29 +89,35 @@ class SchedEntry
 		@@log = opts[:logger] if opts.key?(:logger)
 	end
 
-	attr_reader :time, :rfo, :state
-	def initialize(time, rfo, state)
+	attr_reader :time, :random, :rfo, :state
+	def initialize(time, random, rfo, state)
 		raise "Invalid outlet state in SchedEntry" if state != RFOutlet::ON && state != RFOutlet::OFF
 		@time = time
+		@random = random # random tweak
 		@rfo = rfo
 		@state = state
 	end
 
-	def fire(delay=nil)
+	def fire
 		now = Time.now.to_i
-		delay = @time-now if delay.nil?
-		#return false if delay > 100
+		delay = @time+@random-now if delay.nil?
+		if delay > 100
+			#@@log.debug "Delay too long, iterating sleep: #{delay}"
+			return false
+		end
+		# almost time to fire, wait for a bit
 		if delay > 0
 			@@log.info "Sleeping #{delay} seconds before firing"
 			sleep delay
 		end
+		# enough waiting, let's do this
 		@@log.info "Run rfo.turn(#{@state}): #{@rfo.to_s}"
 		@rfo.turn(@state)
 		true
 	end
 
 	def to_s
-		"Entry %s/%s/%s" % [ Time.at(@time).strftime("%Y%m%d_%H%M%S"), @rfo.to_s, @state ]
+		"Entry %s (%s)/%s/%s" % [ Time.at(@time).strftime("%Y%m%d_%H%M%S"), @random.to_s, @rfo.to_s, @state ]
 	end
 
 	def eql?(other)
@@ -144,7 +159,7 @@ class SchedQueue
 			if @queue.any? { |e|	entry.eql?(e) }
 				@@log.info "Entry is already on queue: "+entry.to_s
 			else
-				@@log.info "Adding #{entry.state} entry at time #{Time.at(entry.time)}: #{entry.rfo.to_s}"
+				@@log.info "Adding #{entry.state.upcase} entry at time #{Time.at(entry.time+entry.random)}: #{entry.rfo.to_s}"
 				@queue << entry
 				@@log.info "Now #{@queue.length} entries in queue"
 			end
@@ -185,30 +200,27 @@ class Sched
 		@sunset =  h[:sunset].nil? ? nil : SchedSun.new(:sunset, h[:sunset])
 	end
 
-	def next
-		times=[]
-		times.concat @sunrise.next_times unless @sunrise.nil?
-		times.concat @sunset.next_times  unless @sunset.nil?
-		times.sort
-	end
-
 	def self.thread_loop(queue, rfoc)
 		raise "queue is not a SchedQueue" if queue.class != SchedQueue
+
+		snooze = 1
+
+		entry = nil
 		loop {
-			entry = nil
 			begin
 				if rfoc.reload
 					$log.info "Reloading queue"
 					rfoc.fillSchedQueue(queue)
-					next
 				end
-				entry = queue.pop
-				if entry.nil?
-					snooze = 1
-				else
-					snooze = entry.fire ? 0 : 1
+
+				# reuse the same entry if it's not nil
+				entry = queue.pop if entry.nil?
+				unless entry.nil?
+					# got an entry, try to fire
+					entry = nil if entry.fire
 				end
-				sleep snooze if snooze > 0
+				# sleep for a bit before retrying
+				sleep snooze
 			rescue Interrupt => e
 				@@log.warn "Caught interrupt, continuing"
 			rescue => e
@@ -222,4 +234,15 @@ class Sched
 			Sched.thread_loop(queue, rfoc)
 		}
    end
+
+	def next_entries(rfo)
+		entries=[]
+		if !@sunrise.nil?
+			entries.concat(@sunrise.next_entries(rfo))
+		end
+		if !@sunset.nil?
+			entries.concat(@sunset.next_entries(rfo))
+		end
+		entries
+	end
 end

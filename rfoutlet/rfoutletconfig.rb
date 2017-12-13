@@ -45,16 +45,9 @@ class RFOutletConfig
 		@reload = false
 		@outlets.each { |outlet, rfo|
 			next if rfo.sched.nil?
-			if !rfo.sched.sunrise.nil? && rfo.sched.sunrise.enabled
-				rfo.sched.sunrise.next_entries(rfo).each { |entry|
-					queue.push entry
-				}
-			end
-			if !rfo.sched.sunset.nil? && rfo.sched.sunset.enabled
-				time = rfo.sched.sunset.next_entries(rfo).each { |entry|
-					queue.push entry
-				}
-			end
+			rfo.sched.next_entries(rfo).each { |entry|
+				queue.push entry
+			}
 		}
 		queue
 	end
@@ -65,7 +58,6 @@ class RFOutletConfig
 		unless sched.nil?
 			@@log.info sched.sunrise.describe unless sched.sunrise.nil?
 			@@log.info sched.sunset.describe unless sched.sunset.nil?
-			@@log.info sched.next.inspect
 		end
 		rfo
 	rescue => e
