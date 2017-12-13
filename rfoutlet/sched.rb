@@ -91,7 +91,7 @@ class SchedEntry
 	def fire(delay=nil)
 		now = Time.now.to_i
 		delay = @time-now if delay.nil?
-		return false if delay > 100
+		#return false if delay > 100
 		if delay > 0
 			@@log.info "Sleeping #{delay} seconds before firing"
 			sleep delay
@@ -193,7 +193,6 @@ class Sched
 	end
 
 	def self.thread_loop(queue, rfoc)
-		puts queue.inspect
 		raise "queue is not a SchedQueue" if queue.class != SchedQueue
 		loop {
 			entry = nil
@@ -220,7 +219,7 @@ class Sched
 
 	def self.create_thread(queue, rfoc)
 		Thread.new {
-			Sched.thread_loop(queue)
+			Sched.thread_loop(queue, rfoc)
 		}
    end
 end
