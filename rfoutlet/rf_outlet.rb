@@ -18,9 +18,39 @@ class RFOutlet
 		@sched = h[:sched].nil? ? nil : Sched.new(h[:sched])
 	end
 
+	# {:outlet=>"o6",
+	# 	:data=>{
+	# 	:name=>"Stairway xmas lights",
+	# 	:code=>"0304-2",
+	# 	:on=>"5330371",
+	# 	:off=>"5330380",
+	# 	:sched=>{
+	# 		:sunrise=>{:enabled=>true, :before=>"3600", :after=>"0", :duration=>"7200"},
+	# 		:sunset=>{:enabled=>true, :before=>"1800", :after=>"300", :duration=>"21600"}
+	# 	}
+	# }
+	# }
+	#
+	# @return true if the schedule has been updated
+	def update(outlet, data)
+		return false unless is_outlet(outlet)
+		@name = data[:name] unless data[:name].nil?
+		return false if data[:sched]
+		if @sched.nil?
+			@sched = Sched.new(data[:sched])
+		else
+			@sched.update(data[:sched])
+		end
+		true
+	end
+
 	def eql?(other)
 		return false if other.nil? || other.class != RFOutlet
 		@label.eql?(other.label)
+	end
+
+	def is_outlet(outlet)
+		outlet.to_s.eql?(@label)
 	end
 
 	def to_s

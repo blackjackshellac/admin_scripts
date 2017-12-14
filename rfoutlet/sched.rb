@@ -11,15 +11,30 @@ class SchedSun
 		@@long = long
 	end
 
+	DEFAULTS = {
+		:enabled => false,
+		:before => 0,
+		:after => 0,
+		:duration => 7200
+	}
 	attr_reader :enabled, :before, :after, :duration
 	def initialize(type, h)
 		@type = type
-		@enabled = h[:enabled]||false
-		@before = (h[:before]||0).to_i
-		@after = (h[:after]||0).to_i
-		@duration = (h[:duration]||7200).to_i # 2 hours by default
-
 		raise "Unknown sched type in SchedSun: #{@type}" if @type != :sunrise && @type != :sunset
+
+		set_fields(h)
+	end
+
+	def defval(h, key)
+		h={} if h.nil?
+		h[key]||DEFAULTS[key]
+	end
+
+	def set_fields(h)
+		@enabled = defval(h, :enabled)
+		@before = defval(h, :before).to_i
+		@after = defval(h, :after).to_i
+		@duration = defval(h, :duration).to_i
 	end
 
 	def describe
@@ -124,7 +139,6 @@ class SchedEntry
 		return false if other.nil? || other.class != SchedEntry
 		(other.time == @time && other.state.eql?(@state) && other.rfo.eql?(@rfo))
 	end
-
 end
 
 class SchedQueue
@@ -183,6 +197,26 @@ class SchedQueue
 			}
 		}
 	end
+
+	# {:outlet=>"o6",
+	# 	:data=>{
+	# 	:name=>"Stairway xmas lights",
+	# 	:code=>"0304-2",
+	# 	:on=>"5330371",
+	# 	:off=>"5330380",
+	# 	:sched=>{
+	# 		:sunrise=>{:enabled=>true, :before=>"3600", :after=>"0", :duration=>"7200"},
+	# 		:sunset=>{:enabled=>true, :before=>"1800", :after=>"300", :duration=>"21600"}
+	# 	}
+	# }
+	# }
+	def update_entry(outlet, data)
+		@lock.synchronize {
+			@queue.each { |entry|
+				entry.rfo.update(outlet, data)
+			}
+		}
+	end
 end
 
 class Sched
@@ -198,6 +232,27 @@ class Sched
 	def initialize(h)
 		@sunrise = h[:sunrise].nil? ? nil : SchedSun.new(:sunrise, h[:sunrise])
 		@sunset =  h[:sunset].nil? ? nil : SchedSun.new(:sunset, h[:sunset])
+	end
+
+	def update(data)
+		if data.key?(:sunrise)
+			if @sunrise.nil?
+				@sunrise = SchedSun.new(:sunrise, data[:sunrise])
+			else
+				@sunrise.set_fields(data[:sunrise])
+			end
+		else
+			@sunrise = nil
+		end
+		if data.key?(:sunset)
+			if @sunset.nil?
+				@sunset = SchedSun.new(:sunset, data[:sunset])
+			else
+				@sunset.set_fields(data[:sunset])
+			end
+		else
+			@sunset = nil
+		end
 	end
 
 	def self.thread_loop(queue, rfoc)

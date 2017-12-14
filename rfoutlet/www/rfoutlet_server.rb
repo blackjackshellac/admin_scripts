@@ -146,10 +146,11 @@ class RFOutletServer < Sinatra::Base
 
 	post '/outlet' do
 		oc=JSON.parse(request.body.read, :symbolize_names=>true)
-		outlet=oc[:outlet].to_sym
+		outlet=oc[:outlet]
 		data=oc[:data]
-		$rfoc.update_outlet_config(outlet, data)
+		$rfoc.update_outlet_config(outlet.to_sym, data)
 		$rfoc.save_config
+		$sched_queue.update_entry(outlet.to_s, data)
 		$rfoc.fillSchedQueue($sched_queue)
 		$log.info "post outlet: "+oc.inspect
 	end
