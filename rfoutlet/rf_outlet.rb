@@ -34,8 +34,9 @@ class RFOutlet
 	# @return true if the schedule has been updated
 	def update(outlet, data)
 		return false unless is_outlet(outlet)
+		puts "#{@label}: update #{outlet} with #{data.inspect}"
 		@name = data[:name] unless data[:name].nil?
-		return false if data[:sched]
+		return false if data[:sched].nil?
 		if @sched.nil?
 			@sched = Sched.new(data[:sched])
 		else
@@ -50,7 +51,7 @@ class RFOutlet
 	end
 
 	def is_outlet(outlet)
-		outlet.to_s.eql?(@label)
+		outlet.to_s.eql?(@label.to_s)
 	end
 
 	def to_s

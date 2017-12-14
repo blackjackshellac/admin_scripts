@@ -152,6 +152,7 @@ class RFOutletServer < Sinatra::Base
 		$rfoc.save_config
 		$sched_queue.update_entry(outlet.to_s, data)
 		$rfoc.fillSchedQueue($sched_queue)
+		$sched_queue.slump
 		$log.info "post outlet: "+oc.inspect
 	end
 end

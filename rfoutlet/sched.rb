@@ -235,10 +235,12 @@ class Sched
 	end
 
 	def update(data)
+		@@log.info "Updating Sched with #{data.inspect}"
 		if data.key?(:sunrise)
 			if @sunrise.nil?
 				@sunrise = SchedSun.new(:sunrise, data[:sunrise])
 			else
+				@@log.info "Updating sunrise: #{@sunrise.to_s}: #{data[:sunrise].inspect}"
 				@sunrise.set_fields(data[:sunrise])
 			end
 		else
@@ -248,6 +250,7 @@ class Sched
 			if @sunset.nil?
 				@sunset = SchedSun.new(:sunset, data[:sunset])
 			else
+				@@log.info "Updating sunset: #{@sunset.to_s}: #{data[:sunset].inspect}"
 				@sunset.set_fields(data[:sunset])
 			end
 		else
