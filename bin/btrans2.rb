@@ -165,6 +165,15 @@ while line = gets
 		break
 	end
 
+	if line[/^(Bill|Ref[#]|[\$])/].nil?
+		$log.debug "Appending to last line: #{line}"
+		if lines.length < 1
+			$log.die "Can't concatonate element to empty array: #{line}"
+		end
+		# append this line to the previous line if it doesn't end in Bill|Ref#|$
+		line=lines.delete_at(-1)+" "+line
+		$log.info "Updated '#{line}'"
+	end
 	lines << line
 end
 
