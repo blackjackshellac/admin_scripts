@@ -74,20 +74,38 @@ url='https://www.youtube.com/watch?v=6V5mtUff6ik'
 
 TAG_FIELD_NAMES={
 	:title => "TITLE",
+	:album => "ALBUM",
 	:artist=> "ARTIST",
 	:genre => "GENRE",
 	:year  => "DATE",
 	:url   => "CONTACT"
 }
+SEP="="*80
 
 def dump_field_list(prefix, tag)
-	puts "================================================="
+	puts SEP
 	puts prefix unless prefix.nil? || prefix.empty?
 	puts "Count: #{tag.field_count.to_s}"
 	tag.field_list_map.each_pair { |key,val|
 		#puts "%-15s: %s" % [ key.to_s, val.to_s ]
 		printf("%15s: %s\n", key.to_s, val.to_s)
 	}
+end
+
+def swap_title_artist?(data)
+	if data.key?(:title) && data.key?(:artist)
+		puts SEP
+		[ :artist, :title ].each { |key|
+			printf("%15s: %s\n", key.to_s, data[key])
+		}
+		ans = Readline.readline("Swap artist/title? (y/N) > ")
+		if ans.eql?("y")
+			artist=data[:title]
+			data[:title]=data[:artist]
+			data[:artist]=artist
+		end
+	end
+	data
 end
 
 def tag_vorbis_file(filename, data)
@@ -102,8 +120,11 @@ def tag_vorbis_file(filename, data)
 
 		dump_field_list("Before", tag)
 
+		data = swap_title_artist?(data)
+
 		tag.title   = data[:title]
 		tag.artist  = data[:artist]
+		tag.album   = data[:album]
 		tag.genre   = data[:genre]
 		tag.year    = data[:year].to_i if data.key?(:year)
 		tag.comment = "youtube #{data[:code]}"
@@ -129,6 +150,7 @@ def process_url(url, opts)
 	data=parse_filename(filedata[:filename])
 	data[:genre]=opts[:genre]
 	data[:url]=url
+	data[:album]="youtube"
 	tag_vorbis_file(filedata[:file], data)
 end
 
@@ -141,11 +163,35 @@ end
 #data[:url]="http://youtube.com"
 #tag_vorbis_file(filedata[:file], data)
 
+def run(cmd, args=nil)
+	cmd="#{cmd} #{args}" unless args.nil? || args.empty?
+	puts "run> "+cmd
+	puts %x/#{cmd}/
+end
+
+RE_URL=/^https?.*/
+RE_EASYTAG=/^easytag/
+RE_FIND=/^find\s(.*)/
+RE_LL=/^ll\s?(.*)/
+RE_QUIT=/^quit/
 if ARGV.empty?
-	while url = Readline.readline("Enter url> ")
-		url.strip!
-		break if url.empty?
-		process_url(url, $opts)
+	while cmd = Readline.readline("Enter url|find|easytag|ll> ")
+		cmd.strip!
+		break if cmd.empty?
+		case cmd
+		when RE_URL
+			process_url(cmd, $opts)
+		when RE_EASYTAG
+			run("easytag", ".")
+		when RE_FIND
+			run("find -ls | grep -i \"#{$1}\"")
+		when RE_LL
+			run("ls -l", $1)
+		when RE_QUIT
+			break
+		else
+			puts "Unknown cmd #{cmd}"
+		end
 	end
 	exit 0
 end
