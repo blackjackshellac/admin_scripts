@@ -147,6 +147,13 @@ TAG_FIELD_NAMES={
 }
 SEP="="*80
 
+def dump_data(data)
+	puts SEP
+	data.each_pair { |key, val|
+		printf("%15s: %s\n", key.to_s, val.to_s)
+	}
+end
+
 def dump_field_list(prefix, tag)
 	puts SEP
 	puts prefix unless prefix.nil? || prefix.empty?
@@ -155,6 +162,67 @@ def dump_field_list(prefix, tag)
 		#puts "%-15s: %s" % [ key.to_s, val.to_s ]
 		printf("%15s: %s\n", key.to_s, val.to_s)
 	}
+end
+
+def edit_field(key, data)
+	raise "Field name must be given" if key.nil?
+	key = key.to_sym
+	raise "No data for field #{key}" unless data.key?(key)
+	ans = Readline.readline("Enter new value for #{key} #{data[key]}>>> ")
+	ans.strip!
+	puts "Warning: field is empty" if ans.empty?
+	data[key]=ans
+rescue Interrupt => e
+	puts "Aborting ..."
+rescue => e
+	puts e.message
+ensure
+	return data
+end
+
+def swap_field(key1, key2, data)
+	raise "Two field names must be given" if key1.nil? || key2.nil?
+	key1 = key1.to_sym
+	key2 = key2.to_sym
+	raise "No data for field #{key1}" unless data.key?(key1)
+	raise "No data for field #{key2}" unless data.key?(key2)
+	val = data[key1]
+	data[key1] = data[key2]
+	data[key2] = val
+rescue Interrupt => e
+	puts "Aborting ..."
+rescue => e
+	puts e.message
+ensure
+	return data
+end
+
+def edit_field_data(data)
+	dump_data(data)
+	while ans = Readline.readline("edit|swap|done|cancel >> ")
+		ans.strip!
+		case ans
+		when /^edit\s*(.*?)?\s*$/
+			data = edit_field($1, data)
+			dump_data(data)
+		when /^swap\s*(.*?)?\s*(.*?)?\s*$/
+			data = swap_field($1, $2, data)
+			dump_data(data)
+		when /^done/
+			break
+		when /^cancel/
+			data = {}
+			break
+		else
+			puts "Unknown command: #{ans}"
+		end
+	end
+rescue Interrupt => e
+	puts "Aborting ..."
+rescue => e
+	$log.error e.message
+ensure
+	return data
 end
 
 def swap_title_artist?(data)
@@ -185,7 +253,8 @@ def tag_vorbis_file(filename, data)
 
 		dump_field_list("Before", tag)
 
-		data = swap_title_artist?(data)
+		#data = swap_title_artist?(data)
+		data = edit_field_data(data)
 
 		tag.title   = data[:title]
 		tag.artist  = data[:artist]
