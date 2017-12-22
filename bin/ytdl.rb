@@ -175,9 +175,8 @@ RE_FIND=/^find\s(.*)/
 RE_LL=/^ll\s?(.*)/
 RE_QUIT=/^quit/
 if ARGV.empty?
-	while cmd = Readline.readline("Enter url|find|easytag|ll> ")
+	while cmd = Readline.readline("Enter url|find|easytag|ll|quit> ")
 		cmd.strip!
-		break if cmd.empty?
 		case cmd
 		when RE_URL
 			process_url(cmd, $opts)
