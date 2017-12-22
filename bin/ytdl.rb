@@ -6,15 +6,63 @@
 # gem install taglib-ruby
 require 'taglib'
 require 'readline'
+require 'logger'
+require 'optparse'
+require 'json'
+require 'open3'
+
+ME=File.basename($0, ".rb")
+MD=File.expand_path(File.dirname(File.realpath($0)))
+
+class Logger
+	def err(msg)
+		self.error(msg)
+	end
+
+	def die(msg)
+		self.error(msg)
+		exit 1
+	end
+end
+
+def set_logger(stream)
+	log = Logger.new(stream)
+	log.level = Logger::INFO
+	log.datetime_format = "%Y-%m-%d %H:%M:%S"
+	log.formatter = proc do |severity, datetime, progname, msg|
+		"#{severity} #{datetime}: #{msg}\n"
+	end
+	log
+end
+
+$log = set_logger(STDERR)
+
+$opts = {
+	:genre => "xmas"
+}
+optparser=OptionParser.new { |opts|
+	opts.banner = "#{ME}.rb [options]\n"
+
+	opts.on('-g', '--genre GENTRE', "Set the genre, default=#{$opts[:genre]}") { |genre|
+		$opts[:genre]=genre
+	}
+
+	opts.on('-d', '--debug', "Enable debugging output") {
+		$log.level = Logger::DEBUG
+	}
+
+	opts.on('-h', '--help', "Help") {
+		$stdout.puts ""
+		$stdout.puts opts
+		exit 0
+	}
+}
+optparser.parse!
 
 #file="Queen - Thank God It's Christmas-6V5mtUff6ik"
 # Queen - Thank God It's Christmas-6V5mtUff6ik
 RE_FILE=/^\s*(?<artist>[^\-]+)\s*\-\s*(?<title>[^\-]+?)\(?(?<year>[12][90]\d\d)?\)?\s*\-\s*(?<code>.*)\s*$/
 RE_DEST=/^\[ffmpeg\]\sDestination:\s*(?<filename>.*?)(?<ext>\.ogg)\s*$/m
-
-$opts = {
-	:genre => "xmas"
-}
 
 #out=%{
 #[youtube] l14aDp-4NKk: Downloading webpage
@@ -31,7 +79,7 @@ $opts = {
 def parse_out(out)
 	m=RE_DEST.match(out)
 	return {} if m.nil? || m[:filename].nil?
-	puts "match: #{m[:filename]}#{m[:ext]}"
+	$log.debug "match: #{m[:filename]}#{m[:ext]}"
 	h={
 		:file=>m[:filename]+m[:ext],
 		:filename=>m[:filename],
@@ -47,10 +95,28 @@ def parse_filename(filename)
 	[ :artist, :title, :code, :year ].each { |key|
 		v=m[key]
 		next if v.nil?
-		puts "metadata: #{v}"
+		$log.debug "metadata: #{key}=#{v}"
 		h[key]=v.strip
 	}
 	h
+end
+
+def run_popen(cmd, opts={:echo=>true})
+	puts cmd
+	result={
+		:out=>"",
+		:exit_status=>1
+	}
+	Open3.popen2e(cmd) { |stdin, stdout_stderr, wait_thr|
+		pid = wait_thr.pid # pid of the started process.
+		stdin.close
+		stdout_stderr.each { |line|
+			puts line if opts[:echo]
+			result[:out] << line+"\n"
+		}
+		result[:exit_status] = wait_thr.value # Process::Status object returned.
+	}
+ 	result
 end
 
 def download_url(url, type=:vorbis, opts={})
@@ -65,12 +131,11 @@ end
 def download_type(url, type, opts)
 	ytdl=opts[:ytdl]||""
 	cmd=%/youtube-dl #{ytdl} -x --audio-format #{type.to_s} #{url}/
-	puts cmd
-	out=%x/#{cmd}/
-	out
+	#out=%x/#{cmd}/
+	result = run_popen(cmd)
+	raise "Command failed: #{cmd}" unless result[:exit_status] == 0
+	result[:out]
 end
-
-url='https://www.youtube.com/watch?v=6V5mtUff6ik'
 
 TAG_FIELD_NAMES={
 	:title => "TITLE",
@@ -110,9 +175,9 @@ end
 
 def tag_vorbis_file(filename, data)
 	# Load a file
-	
-	puts "filename: "+filename
-	puts "metadata: "+data.inspect
+
+	$log.debug "filename: "+filename
+	$log.debug "metadata: "+data.inspect
 
 	TagLib::Ogg::Vorbis::File.open(filename) do |file|
 		puts file.tag
@@ -199,4 +264,3 @@ puts ARGV.inspect
 ARGV.each { |url|
 	process_url(url, $opts)
 }
-
