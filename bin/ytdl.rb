@@ -38,13 +38,18 @@ end
 $log = set_logger(STDERR)
 
 $opts = {
-	:genre => "xmas"
+	:genre => "xmas",
+	:file => nil
 }
 optparser=OptionParser.new { |opts|
 	opts.banner = "#{ME}.rb [options]\n"
 
-	opts.on('-g', '--genre GENTRE', "Set the genre, default=#{$opts[:genre]}") { |genre|
+	opts.on('-g', '--genre GENRE', "Set the genre, default=#{$opts[:genre]}") { |genre|
 		$opts[:genre]=genre
+	}
+
+	opts.on('-f', '--file NAME', "Reprocess file already downloaded") { |file|
+		$opts[:file]=file
 	}
 
 	opts.on('-d', '--debug', "Enable debugging output") {
@@ -59,10 +64,13 @@ optparser=OptionParser.new { |opts|
 }
 optparser.parse!
 
+$log.debug "ARGV="+ARGV.inspect
+
 #file="Queen - Thank God It's Christmas-6V5mtUff6ik"
 # Queen - Thank God It's Christmas-6V5mtUff6ik
-RE_FILE=/^\s*(?<artist>[^\-]+)\s*\-\s*(?<title>[^\-]+?)\(?(?<year>[12][90]\d\d)?\)?\s*\-\s*(?<code>.*)\s*$/
-RE_DEST=/^\[ffmpeg\]\sDestination:\s*(?<filename>.*?)(?<ext>\.ogg)\s*$/m
+RE_PARSE_FILENAME=/^\s*(?<artist>[^\-]+)\s*\-\s*(?<title>[^\-]+?)\(?(?<year>[12][90]\d\d)?\)?\s*\-\s*(?<code>.*)\s*$/
+RE_DEST_FILENAME_EXT=/^\[ffmpeg\]\sDestination:\s*(?<filename>.*?)(?<ext>\.ogg)\s*$/m
+RE_FILENAME_EXT=/\s*(?<filename>.*?)(?<ext>\.ogg)\s*$/
 
 #out=%{
 #[youtube] l14aDp-4NKk: Downloading webpage
@@ -76,8 +84,7 @@ RE_DEST=/^\[ffmpeg\]\sDestination:\s*(?<filename>.*?)(?<ext>\.ogg)\s*$/m
 #Deleting original file The Pogues Featuring Kirsty MacColl - Fairytale Of New York-l14aDp-4NKk.m4a (pass -k to keep)
 #}
 
-def parse_out(out)
-	m=RE_DEST.match(out)
+def parse_match(m)
 	return {} if m.nil? || m[:filename].nil?
 	$log.debug "match: #{m[:filename]}#{m[:ext]}"
 	h={
@@ -85,12 +92,23 @@ def parse_out(out)
 		:filename=>m[:filename],
 		:ext=>m[:ext]
 	}
+	$log.debug "filedata=#{h.inspect}"
 	h
+end
+
+def parse_out(out)
+	m=RE_DEST_FILENAME_EXT.match(out)
+	parse_match(m)
+end
+
+def parse_file(file)
+	m=RE_FILENAME_EXT.match(file)
+	parse_match(m)
 end
 
 def parse_filename(filename)
 	h={}
-	m=RE_FILE.match(filename)
+	m=RE_PARSE_FILENAME.match(filename)
 	return h if m.nil?
 	[ :artist, :title, :code, :year ].each { |key|
 		v=m[key]
@@ -133,7 +151,7 @@ def download_type(url, type, opts)
 	cmd=%/youtube-dl #{ytdl} -x --audio-format #{type.to_s} #{url}/
 	#out=%x/#{cmd}/
 	result = run_popen(cmd)
-	raise "Command failed: #{cmd}" unless result[:exit_status] == 0
+	raise "Command failed: "+result[:out] unless result[:exit_status] == 0
 	result[:out]
 end
 
@@ -145,6 +163,7 @@ TAG_FIELD_NAMES={
 	:year  => "DATE",
 	:url   => "CONTACT"
 }
+TAG_FIELDS=TAG_FIELD_NAMES.keys
 SEP="="*80
 
 def dump_data(data)
@@ -167,7 +186,7 @@ end
 def edit_field(key, data)
 	raise "Field name must be given" if key.nil?
 	key = key.to_sym
-	raise "No data for field #{key}" unless data.key?(key)
+	raise "No data for field #{key}" if !data.key?(key) || !TAG_FIELDS.include?(key)
 	ans = Readline.readline("Enter new value for #{key} #{data[key]}>>> ")
 	ans.strip!
 	puts "Warning: field is empty" if ans.empty?
@@ -276,26 +295,32 @@ def tag_vorbis_file(filename, data)
 
 end
 
-def process_url(url, opts)
-	puts url
-	out=download_url(url, :vorbis)
-
-	filedata=parse_out(out)
+def process_filedata(filedata, opts)
 	data=parse_filename(filedata[:filename])
 	data[:genre]=opts[:genre]
-	data[:url]=url
+	data[:url]=opts[:url] unless opts[:url].nil?
 	data[:album]="youtube"
 	tag_vorbis_file(filedata[:file], data)
 end
 
-#filename="[ffmpeg] Destination: Now That's What I Call Christmas 2018 - Old Classic Christmas Songs of All Time-oOlDchIOdA0.ogg"
-#filedata=parse_out(filename)
-#puts filename
-#puts filedata.inspect
-#data=parse_filename(filedata[:filename])
-#data[:genre]="xmas"
-#data[:url]="http://youtube.com"
-#tag_vorbis_file(filedata[:file], data)
+def process_file(path, opts)
+	file=File.basename(path)
+	dir=File.dirname(path)
+	Dir.chdir(dir) {
+		filedata=parse_file(file)
+		process_filedata(filedata, opts)
+	}
+end
+
+def process_url(url, opts)
+	out=download_url(url, :vorbis, opts)
+	filedata=parse_out(out)
+	opts[:url]=url
+	process_filedata(filedata, opts)
+rescue => e
+	$log.error e.message
+end
+
 
 def run(cmd, args=nil)
 	cmd="#{cmd} #{args}" unless args.nil? || args.empty?
@@ -303,33 +328,51 @@ def run(cmd, args=nil)
 	puts %x/#{cmd}/
 end
 
-RE_URL=/^https?.*/
+RE_URL=/^(?:url)?\s*(https?.*)/
 RE_EASYTAG=/^easytag/
+RE_FILE=/^file\s?(.*)?/
 RE_FIND=/^find\s(.*)/
 RE_LL=/^ll\s?(.*)/
 RE_QUIT=/^quit/
+RE_VI=/^vi/
+RE_EMACS=/^emacs/
 if ARGV.empty?
-	while cmd = Readline.readline("Enter url|find|easytag|ll|quit> ")
+	mode="vi"
+#
+#	Readline.completion_proc = Proc.new do |str|
+#		puts "str=#{str}"
+#		unless str[RE_FILE].nil?
+#			Dir[str+'*'].grep( /^#{Regexp.escape(str)}/ )
+#		end
+#	end
+	while cmd = Readline.readline("Enter url|file|find|easytag|ll|quit|#{mode}> ", true)
 		cmd.strip!
 		case cmd
 		when RE_URL
-			process_url(cmd, $opts)
+			process_url($1, $opts)
 		when RE_EASYTAG
 			run("easytag", ".")
+		when RE_FILE
+			process_file($1, $opts)
 		when RE_FIND
 			run("find -ls | grep -i \"#{$1}\"")
 		when RE_LL
 			run("ls -l", $1)
 		when RE_QUIT
 			break
+		when RE_VI
+			Readline.vi_editing_mode
+			mode="emacs"
+		when RE_EMACS
+			Readline.emacs_editing_mode
+			mode="vi"
 		else
 			puts "Unknown cmd #{cmd}"
 		end
 	end
 	exit 0
+else
+	ARGV.each { |url|
+		process_url(url, $opts)
+	}
 end
-
-puts ARGV.inspect
-ARGV.each { |url|
-	process_url(url, $opts)
-}
