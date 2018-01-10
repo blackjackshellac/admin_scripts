@@ -7,12 +7,9 @@ require 'daemons'
 # gem install ruby-sun-times
 require 'sun_times'
 
-me=$0
-if File.symlink?(me)
-	me=File.readlink($0)
-	md=File.dirname($0)
-	me=File.realpath(me)
-end
+# if this is a symlink get the actual directory path of the script
+me=File.symlink?($0) ? File.join(__dir__, File.basename($0)) : $0
+
 ME=File.basename(me, ".rb")
 MD=File.dirname(me)
 LIB=File.realpath(File.join(MD, "..", "lib"))
