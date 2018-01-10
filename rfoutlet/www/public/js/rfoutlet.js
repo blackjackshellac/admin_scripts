@@ -1,5 +1,8 @@
 
 // document ready
+/**
+ * Document Ready
+ */
 $(function() {
 
 	$(document).keydown(function(e) {
@@ -73,6 +76,10 @@ $(function() {
 	$("#secret").val(getCookie("secret"));
 });
 
+/**
+ * [defocus description]
+ * @return {[type]} [description]
+ */
 function defocus() {
 	window.focus();
 	if (document.activeElement) {
@@ -80,6 +87,11 @@ function defocus() {
 	}
 }
 
+/**
+ * [setCookie description]
+ * @param {[type]} key   [description]
+ * @param {[type]} value [description]
+ */
 function setCookie(key, value) {
 	var expires = new Date();
 	// cookie expires in about 365*10 years
@@ -87,16 +99,31 @@ function setCookie(key, value) {
 	document.cookie = key + '=' + value + ';expires=' + expires.toUTCString();
 }
 
+/**
+ * [getCookie description]
+ * @param  {[type]} key [description]
+ * @return {[type]}     [description]
+ */
 function getCookie(key) {
 	var keyValue = document.cookie.match('(^|;) ?' + key + '=([^;]*)(;|$)');
 	return keyValue ? keyValue[2] : null;
 }
 
+/**
+ * [secret_cookie description]
+ * @return {[type]} [description]
+ */
 function secret_cookie() {
 	var secret=$("#secret").val();
 	setCookie('secret', secret);
 }
 
+/**
+ * [light_switch description]
+ * @param  {[type]} outlet [description]
+ * @param  {[type]} state  [description]
+ * @return {[type]}        [description]
+ */
 function light_switch(outlet, state) {
 	secret_cookie();
 
@@ -137,6 +164,10 @@ function light_switch(outlet, state) {
 	return result;
 }
 
+/**
+ * [save_outlet_config description]
+ * @return {[type]} [description]
+ */
 function save_outlet_config() {
 	oc={
 		outlet: $('#outlet').val(),
@@ -171,6 +202,12 @@ function save_outlet_config() {
 	return oc;
 }
 
+/**
+ * [show_config description]
+ * @param  {[type]} outlet [description]
+ * @param  {[type]} data   [description]
+ * @return {[type]}        [description]
+ */
 function show_config(outlet, data) {
 	var modal = $('#myModal');
 
@@ -228,6 +265,11 @@ function show_config(outlet, data) {
 	modal.show();
 }
 
+/**
+ * [post_outlet_config description]
+ * @param  {[type]} oc [description]
+ * @return {[type]}    [description]
+ */
 function post_outlet_config(oc) {
 	secret_cookie();
 
@@ -258,7 +300,11 @@ function post_outlet_config(oc) {
 
 }
 
-
+/**
+ * [get_outlet_config description]
+ * @param  {[type]} outlet [description]
+ * @return {[type]}        [description]
+ */
 function get_outlet_config(outlet) {
 	secret_cookie();
 
