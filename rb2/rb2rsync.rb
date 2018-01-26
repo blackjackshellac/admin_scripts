@@ -239,7 +239,7 @@ class Rb2Rsync
 		dirs
 	end
 
-	def list_bdest(bdir)
+	def list_bdir(bdir)
 		dirs=[]
 		FileUtils.chdir(bdir) {
 			@@log.debug "Scanning backup destination directory: "+bdir
@@ -253,8 +253,31 @@ class Rb2Rsync
 		sort_dirs(dirs)
 	end
 
+	def find_latest_bdest(dirs, action)
+		dirs=[] if dirs.nil?
+		case action
+		when :run
+			bdest = File.join(@bdir, @dirstamp)
+			# don't use current backup directory "@dirstamp" for latest from list of dirs
+			idx=@dirstamp.eql?(dirs[0]) ? 1 : 0
+			latest=dirs[idx].nil? ? nil : File.join(@bdir, dirs[idx])
+		when :update
+			# don't use current backup directory "@dirstamp" for latest from list of dirs
+			idx=@dirstamp.eql?(dirs[0]) ? 1 : 0
+
+			raise Rb2RsyncError, "Backup destination for update not found" if dirs[0].nil?
+			bdest = dirs[0].nil? ? nil : File.join(@bdir, dirs[0])
+			latest=nil
+		else
+			raise Rb2RsyncError, "Unknown backup action: #{action}"
+		end
+		raise Rb2RsyncError, "Latest is not a directory: #{latest}" unless latest.nil? || File.directory?(latest)
+		[latest,bdest]
+	end
+
 	def find_latest(dirs=nil)
-		dirs = list_bdest(@bdir) if dirs.nil?
+		dirs = list_bdir(@bdir) if dirs.nil?
+
 		latest=nil
 		unless dirs.empty?
 			# don't use current backup directory for latest from list of dirs
@@ -265,7 +288,7 @@ class Rb2Rsync
 		latest
 	end
 
-	def setup(client)
+	def setup(client, action)
 		@client=client.to_s
 
 		# maillog adds client string to output
@@ -279,14 +302,14 @@ class Rb2Rsync
 		@bdir=File.join(@dest, @client)
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdir), { :echo => true, :logger=>@@log } ) unless File.exists?(@bdir)
 
-		@bdest=File.join(@bdir, @dirstamp)
-		@@log.debug "bdest=#{@bdest}"
+		@dirs = list_bdir(@bdir)
+
+		@latest,@bdest=find_latest_bdest(@dirs, action)
+
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
-		@dirs = list_bdest(@bdir)
-		@latest = find_latest(@dirs)
-
-		Rb2Rsync.info("latest #{@latest}", { :echo => true })
+		Rb2Rsync.info("bdest  #{@bdest}", { :echo => true })
+		Rb2Rsync.info("latest #{@latest}", { :echo => true }) unless latest.nil?
 
 		@client_config=@rb2conf_clients[client.to_sym]
 		if @client_config.nil?
@@ -498,7 +521,7 @@ class Rb2Rsync
 			@action=__method__.to_sym
 			log_runtime(true)
 			test_clients(clients).each { |client|
-				next unless setup(client)
+				next unless setup(client, @action)
 				go(opts)
 				# TODO test incrementals for client
 			}
@@ -520,7 +543,7 @@ class Rb2Rsync
 			log_runtime(true)
 			test_clients(clients).each { |client|
 				@@log.debug "Setup #{client}"
-				next unless setup(client)
+				next unless setup(client, @action)
 				go(opts)
 				# TODO test incrementals for client
 			}

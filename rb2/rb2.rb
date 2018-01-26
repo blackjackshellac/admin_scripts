@@ -284,7 +284,10 @@ when :UPDATE
 	begin
 		rsync.update($opts[:clients], $opts)
 	rescue => e
-		$log.error e.to_s
+		$log.error "Update failed: "+e.to_s
+		e.backtrace.each { |line|
+			puts line
+		}
 	end
 when :RUN
 	Rb2Util.is_initialized(rb2c)
@@ -292,7 +295,10 @@ when :RUN
 	begin
 		rsync.run($opts[:clients], $opts)
 	rescue => e
-		$log.error e.to_s
+		$log.error "Run failed: "+e.to_s
+		e.backtrace.each { |line|
+			puts line
+		}
 	end
 when :VERSION
 	rb2c.print_version
