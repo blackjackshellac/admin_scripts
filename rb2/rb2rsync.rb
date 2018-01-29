@@ -309,7 +309,7 @@ class Rb2Rsync
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
 		Rb2Rsync.info("bdest  #{@bdest}", { :echo => true })
-		Rb2Rsync.info("latest #{@latest}", { :echo => true }) unless latest.nil?
+		Rb2Rsync.info("latest #{@latest}", { :echo => true }) unless @latest.nil?
 
 		@client_config=@rb2conf_clients[client.to_sym]
 		if @client_config.nil?
