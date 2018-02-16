@@ -150,6 +150,15 @@ Transaction.init( :logger => $log )
 
 $log.info "Paste transaction and hit Ctrl-D to process"
 
+def join_last(lines, line, sep="")
+	$log.die "Can't concatonate element to empty array: #{line}" if lines.length < 1
+
+	# append this line to the previous line if it doesn't end in Bill|Ref#|$
+	line=lines.delete_at(-1)+sep+line
+	$log.info "Updated '#{line}'"
+	line
+end
+
 lines=[]
 while line = gets
 	line.strip!
@@ -165,20 +174,21 @@ while line = gets
 		break
 	end
 
-	if line[/^(Bill|Ref[#]|[\$])/].nil?
-		$log.debug "Appending to last line: #{line}"
-		if lines.length < 1
-			$log.die "Can't concatonate element to empty array: #{line}"
-		end
-		# append this line to the previous line if it doesn't end in Bill|Ref#|$
-		line=lines.delete_at(-1)+" "+line
-		$log.info "Updated '#{line}'"
+	if !line[/^[0-9]+\s/].nil?
+		$log.info "Appending account# to last line: #{line}"
+
+		line=join_last(lines, line, "")
+	elsif line[/^(Bill|Ref[#]|[\$])/].nil?
+		$log.info "Appending to last line: #{line}"
+
+		line=join_last(lines, line, " ")
 	end
 	lines << line
 end
 
 transactions=[]
 trans=Transaction.new
+
 lines.each { |line|
 	if trans.process(line)
 		if trans.done
