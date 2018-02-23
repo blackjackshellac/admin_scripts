@@ -23,6 +23,7 @@ require_relative File.join(LIB, "logger")
 require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "rf_outlet")
 require_relative File.join(MD, "rfoutletconfig")
+require_relative File.join(MD, "sched")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
