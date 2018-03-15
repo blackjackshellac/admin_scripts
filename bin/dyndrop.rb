@@ -418,11 +418,11 @@ def blackListCidr(cidr, opts)
 end
 
 def search_table(table, addr, cidrs)
+	found=false
 	dupes=[]
 	cidrs.each { |cidr|
 		cs=cidr.to_s
 		next if dupes.include?(cs)
-		found=false
 		puts "Searching for #{addr} in blacklisted cidr #{cs}"
 		table.each_pair { |key,val|
 			if key.eql?(cs) 
