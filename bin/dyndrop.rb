@@ -60,7 +60,9 @@ $opts = {
 	:list=>false,
 	:save=>false,
 	:shell=>false,
-	:cidr=>[]
+	:global=>{},
+	:cidr=>[],
+	:history=>File.join(MD, ME+".history")
 }
 
 optparser = OptionParser.new do |opts|
@@ -205,7 +207,9 @@ RE_HAS=/(has)\s+(?<a>.*)/
 RE_HELP=/(help)/
 RE_EMACS=/(emacs)/
 RE_VI=/(vim?)/
-RE_GLOBAL=/(?<key>range|cidr)/
+RE_GLOBAL=/(?<key>addr|range|cidr)$/
+RE_GLOBALS=/(globals)/
+RE_HISTORY=/(history)/
 
 HELP_TEXT=<<-HELPTEXT
 	Commands  Description
@@ -216,6 +220,7 @@ HELP_TEXT=<<-HELPTEXT
 	show      show dynamic
 	save      save shorewall state
 	has       search for ip address
+	globals   list known global variables
 	quit      quit shell
 	emacs     use emacs command line editing
 	vi|vim    user vi command line editing
@@ -373,6 +378,12 @@ def shell_cmd(opts)
 		when RE_SAVE
 			ret[:save]=true
 			return ret
+		when RE_GLOBALS
+			ret[:globals]=true
+			return ret
+		when RE_HISTORY
+			ret[:history]=true
+			return ret
 		end
 
 		m=ans.match(RE_HAS)
@@ -392,7 +403,7 @@ def shell_cmd(opts)
 
 		ret[:unknown]=ans
 	rescue Interrupt => e
-		ret[:quit]=true
+		# ignore
 	rescue => e
 		ret[:error]=e
 	end
@@ -405,6 +416,9 @@ def getMergedCidr(lower, upper, echo=true)
 	puts "Getting merged cidr array" if echo
 	cidrs = NetAddr.merge(ip_net_range, :Objectify => true)
 	cidrs
+rescue Interrupt => e
+	puts "Interrupted "+e.to_s
+	[]
 end
 
 def blackListCidr(cidr, opts)
@@ -435,6 +449,33 @@ def search_table(table, addr, cidrs)
 	}
 end
 
+def shell_history_load(opts)
+	history=File.read(opts[:history])
+	history.split(/\n/).each { |line|
+		Readline::HISTORY.push(line)
+	}
+rescue => e
+	$log.info "Failed to load history: "+e.to_s
+end
+
+def shell_history_save(opts)
+	File.open(opts[:history], "w") { |fd|
+		Readline::HISTORY.to_a.uniq.each { |line|
+			fd.puts line
+		}
+	}
+rescue => e
+	$log.info "Failed to save history: "+e.to_s
+end
+
+def shell_history_show(opts)
+	Readline::HISTORY.to_a.uniq.each { |line|
+		line.strip!
+		next if line.empty?
+		puts line
+	}
+end
+
 def shell_editing_mode
 	editor=ENV['VISUAL']||ENV['EDITOR']
 	case editor
@@ -454,7 +495,6 @@ end
 def set_global_key(key, data, opts)
 	val=data[key]
 	return if val.nil?
-	opts[:global]||={}
 	opts[:global][key]=val
 	puts "%10s: %s" % [key.to_s.capitalize, val ]
 end
@@ -497,6 +537,7 @@ end
 
 
 def shell_run(opts)
+	shell_history_load(opts)
 	shell_editing_mode
 	puts helptext
 	while true
@@ -535,11 +576,17 @@ def shell_run(opts)
 			puts ret[:range]
 			cidrs=getMergedCidr(ret[:lower], ret[:upper], true)
 			cidrs.each { |cidr|
-				blackListCidr(cidr, $opts)
+				blackListCidr(cidr, opts)
 			}
 		elsif ret[:cidr]
 			puts ret[:cidr]
-			blackListCidr(ret[:cidr], $opts)
+			blackListCidr(ret[:cidr], opts)
+		elsif ret[:globals]
+			opts[:global].each_pair { |key, val|
+				puts "%8s: %s" % [ key.to_s.capitalize, val ]
+			}
+		elsif ret[:history]
+			shell_history_show(opts)
 		elsif ret[:error]
 			puts ret[:error]
 		elsif ret[:unknown]
@@ -547,9 +594,12 @@ def shell_run(opts)
 		elsif ret[:help]
 			puts helptext
 		else
+			puts
 		end
 	end
-
+	shell_history_save(opts)
+rescue => e
+	e.backtrace.each { |line| puts line }
 end
 
 shell_run($opts) if $opts[:shell]
