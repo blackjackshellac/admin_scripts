@@ -64,7 +64,7 @@ class Rb2Util
 	end
 
 	def self.initialize_backup_destination(dest)
-		mask=File.umask(0066)
+		mask=File.umask(0022)
 		init = get_init(dest)
 		@@log.warn "Backup directory already initialized #{init}" if File.exist?(init)
 		File.open(init, "w") { |fd|
