@@ -317,6 +317,8 @@ end
 def get_key_address(ret, key)
 	a=ret[key]
 
+	puts "Matching addr #{a}"
+
 	m=a.match(RE_RANGE)
 	if m.nil?
 		m=a.match(RE_CIDR)
@@ -360,7 +362,8 @@ def shell_cmd(opts)
 		unless m.nil?
 			key=m[:key].to_sym
 			val = get_global_key(key, opts)
-			return nil if val.nil?
+			return ret if val.nil?
+			puts opts[:global].inspect
 			ret=get_key_address(opts[:global], key)
 			return ret
 		end
@@ -406,6 +409,7 @@ def shell_cmd(opts)
 		# ignore
 	rescue => e
 		ret[:error]=e
+		e.backtrace.each { |line| puts line }
 	end
 	ret
 end
@@ -557,6 +561,7 @@ def shell_run(opts)
 			data=whois_parser(ret[:addr])
 			puts data[:out]
 
+			set_global_key(:addr, data, opts)
 			set_global_key(:range, data, opts)
 			set_global_key(:cidr, data, opts)
 			set_global_key(:county, data, opts)
