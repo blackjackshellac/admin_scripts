@@ -26,6 +26,7 @@ require_relative File.join(LIB, "o_parser")
 require_relative File.join(MD, "fwlog")
 require_relative File.join(MD, "format_xlsx")
 #require_relative File.join(LIB, "whois_classifier", "whois_bayes")
+require_relative File.join(MD, "abuseipdb")
 
 $log=Logger.set_logger(STDERR, Logger::INFO)
 
@@ -48,7 +49,8 @@ $opts={
 	:resolv=>false,
 	:lookup=>false,
 	:logger=>$log,
-	:headers=>true
+	:headers=>true,
+	:ipdb_apikey=>nil
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -60,7 +62,11 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:filter]=filter
 	}
 
-	opts.on('-k', '--since DATE', String, "Kernel log since YYYY-mm-dd HH:MM:SS") { |since|
+	opts.on('-k', '--since DATE', String, "Kernel log since YYYY-mm-dd HH:MM:SS, or integer seconds before 'now'") { |since|
+		if since.to_i > 0
+			ts=Time.now.to_i-since.to_i
+			since=Time.at(ts).strftime("%Y-%m-%d %H:%M:%S")
+		end
 		$opts[:since]=since
 	}
 
@@ -70,6 +76,11 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-S', '--ssh USER_HOST', String, "ssh to user@host to run journalctl") { |user_host|
 		$opts[:ssh]=user_host
+	}
+
+	opts.on('-c', '--check KEY', String, "") { |apikey|
+		#https://www.abuseipdb.com/check/[IP]/json?key=[API_KEY]&days=[DAYS]
+		$opts[:ipdb_apikey]=apikey
 	}
 
 	opts.on('-i', '--input FILE', String, "Kernel log to parse") { |file|
@@ -112,6 +123,7 @@ $opts[:in]=/IN=#{$opts[:in]}\s/
 $log.die "Must specify an input file (--file) or time since (--since)" if $opts[:file].nil? && $opts[:since].nil?
 
 FWLog.init($opts)
+AbuseIPDB.init($opts)
 
 input=[]
 if !$opts[:file].nil?
@@ -163,6 +175,13 @@ input.each { |line|
 
 $log.die "Nothing to output, firewall journal entries is empty" if entries.empty?
 
+def summarise(entries)
+	entries.each_pair { |ip, entry|
+		puts "%15s: %s" % [ ip, entry.count ]
+	}
+	puts "%s ips total" % entries.count
+end
+
 case $opts[:format]
 when :xlsx
 	FormatXLSX.init($opts)
@@ -198,14 +217,25 @@ when :csv
 	csv.close
 	fd.close
 when :json
-	result = []
-	entries.each_pair { |src, fwla|
-		fwla.each { |fwl|
-			result << fwl.to_a
-		}
-	}
-	puts JSON.pretty_generate(result)
+	#result = []
+	#entries.each_pair { |src, fwla|
+	#	fwla.each { |fwl|
+	#		result << fwl.to_a
+	#	}
+	#}
+	#puts JSON.pretty_generate(result)
+	#puts JSON.pretty_generate(entries)
+	#summarise(entries)
 else
 	puts "No output format specified"
 end
 
+#AbuseIPDB.check("37.72.175.156")
+results={}
+entries.each_pair { |ip, entry|
+	result = AbuseIPDB.check(ip)
+	next if result.empty?
+	results[ip]=result
+} unless $opts[:ipdb_apikey].nil?
+
+summarise(results)
