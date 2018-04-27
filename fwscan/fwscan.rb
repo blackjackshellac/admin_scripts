@@ -230,7 +230,10 @@ else
 	puts "No output format specified"
 end
 
-#AbuseIPDB.check("37.72.175.156")
+#result = AbuseIPDB.check("37.72.175.156")
+#entries = {}
+#AbuseIPDB.summarise_result(result)
+
 results={}
 entries.each_pair { |ip, entry|
 	result = AbuseIPDB.check(ip)
@@ -238,4 +241,6 @@ entries.each_pair { |ip, entry|
 	results[ip]=result
 } unless $opts[:ipdb_apikey].nil?
 
-summarise(results)
+results.each_pair { |ip,result|
+	AbuseIPDB.summarise_result(result)
+}
