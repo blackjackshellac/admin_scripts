@@ -48,12 +48,21 @@ class AbuseIPDB
 		return ""
 	end
 
-	def self.summarise_result(result)
+	def self.summarise_result(result, stream)
 		if result.key?(:error) && !result[:error].nil?
-			puts JSON.pretty_generate(result)
+			stream.puts JSON.pretty_generate(result)
 		else
-			puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], result[:raw].count, result[:isoCode], result[:country], result[:categories].join(",") ]
+			stream.puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], result[:raw].count, result[:isoCode], result[:country], result[:categories].join(",") ]
 		end
+	end
+
+	def self.summarise_results(results, email)
+		return if results.empty?
+
+		results.each_pair { |ip,result|
+			AbuseIPDB.summarise_result(result, $stdout)
+		}
+
 	end
 
 	def self.check(ip)

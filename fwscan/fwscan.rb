@@ -241,6 +241,4 @@ entries.each_pair { |ip, entry|
 	results[ip]=result
 } unless $opts[:ipdb_apikey].nil?
 
-results.each_pair { |ip,result|
-	AbuseIPDB.summarise_result(result)
-}
+AbuseIPDB.summarise_results(results, nil)
