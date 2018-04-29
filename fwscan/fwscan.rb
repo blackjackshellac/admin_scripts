@@ -50,7 +50,8 @@ $opts={
 	:lookup=>false,
 	:logger=>$log,
 	:headers=>true,
-	:ipdb_apikey=>nil
+	:ipdb_apikey=>nil,
+	:email=>nil
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -78,9 +79,14 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:ssh]=user_host
 	}
 
-	opts.on('-c', '--check KEY', String, "") { |apikey|
+	opts.on('-c', '--check KEY', String, "API key for AbuseIPDB") { |apikey|
 		#https://www.abuseipdb.com/check/[IP]/json?key=[API_KEY]&days=[DAYS]
 		$opts[:ipdb_apikey]=apikey
+	}
+
+	opts.on('-e', '--email ADDRESS', String, "Recipient for AbuseIPDB summary") { |email|
+		$opts[:email]=email
+		$opts[:subject]="%s: AbuseIPDB summary %s" % [ %x/hostname -s/.strip, Time.now.strftime('%Y%m%d-%H%M') ]
 	}
 
 	opts.on('-i', '--input FILE', String, "Kernel log to parse") { |file|
@@ -234,6 +240,7 @@ end
 #entries = {}
 #AbuseIPDB.summarise_result(result)
 
+$opts[:tmpfile]=Tempfile.new("fwscan")
 results={}
 entries.each_pair { |ip, entry|
 	result = AbuseIPDB.check(ip)
@@ -241,4 +248,4 @@ entries.each_pair { |ip, entry|
 	results[ip]=result
 } unless $opts[:ipdb_apikey].nil?
 
-AbuseIPDB.summarise_results(results, nil)
+AbuseIPDB.summarise_results(results, $opts)
