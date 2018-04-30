@@ -34,7 +34,7 @@ class AbuseIPDB
 	end
 
 	def self.get_categories(resp)
-		puts "#{resp.class}="+resp.inspect
+		#puts "#{resp.class}="+resp.inspect
 		categories=[]
 		resp.each { |entry|
 			get_category(categories, entry)
@@ -104,7 +104,7 @@ class AbuseIPDB
 		uri = URI(uri_str)
 
 		puts uri.to_s
-		puts uri.inspect
+		#puts uri.inspect
 
 		#
 		#{
@@ -130,7 +130,7 @@ class AbuseIPDB
 		Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https', :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
 			request = Net::HTTP::Get.new uri.request_uri
 			response = http.request request
-			puts response.inspect
+			#puts response.inspect
 			json=response.body
 			if json.empty?
 				result[:error]={
@@ -190,7 +190,7 @@ class AbuseIPDB
 
 		body = opts[:body]
 
-		puts "body=#{body}"
+		puts "body=\n#{body}"
 
 		subj = opts[:subject]
 		from = opts[:email_from]
