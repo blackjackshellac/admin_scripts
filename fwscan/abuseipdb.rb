@@ -13,6 +13,8 @@ class AbuseIPDB
 	@@api_key=nil
 	@@log = Logger.new(STDOUT)
 
+	@@memoizer = {}
+
 	def initialize
 	end
 
@@ -54,15 +56,23 @@ class AbuseIPDB
 		if result.key?(:error) && !result[:error].nil?
 			stream.puts JSON.pretty_generate(result)
 		else
-			stream.puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], result[:raw].count, result[:isoCode], result[:country], result[:categories].join(",") ]
+			count=result[:raw].count
+			stream.puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0
 		end
 	end
 
 	def self.summarise_results(results, opts)
 		return if results.empty?
 
+		# results_by_count is an array like
+		# [ [ ip0, { # result0 } ], [ ip1, { #result1 } ], ... ]
+		results_by_count = results.sort_by { |ip, result|
+			result.key?(:raw) ? result[:raw].count : 0
+		}
+
 		stream = Tempfile.new('abuseipdb')
-		results.each_pair { |ip,result|
+		results_by_count.each { |item|
+			result=item[1]
 			AbuseIPDB.summarise_result(result, stream)
 		}
 
@@ -81,7 +91,9 @@ class AbuseIPDB
 	end
 
 	def self.check(ip)
-		return if @@api_key.nil?
+		return { :error=> "API key not set" } if @@api_key.nil?
+
+		return @@memoizer[ip] if @@memoizer.key?(ip)
 
 		puts "AbuseIPDB: checking #{ip}"
 		params = {
@@ -169,6 +181,7 @@ class AbuseIPDB
 					@@log.error e.to_s
 				end
 			end
+		@@memoizer[ip]=result unless result[:error].nil?
 		result
 	end
 

@@ -245,7 +245,11 @@ results={}
 entries.each_pair { |ip, entry|
 	result = AbuseIPDB.check(ip)
 	next if result.empty?
-	results[ip]=result
+	if result[:error].nil?
+		results[ip]=result
+	else
+		$log.error result[:error]
+	end
 } unless $opts[:ipdb_apikey].nil?
 
 AbuseIPDB.summarise_results(results, $opts)
