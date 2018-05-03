@@ -53,11 +53,12 @@ class AbuseIPDB
 	end
 
 	def self.summarise_result(result, stream)
-		if result.key?(:error) && !result[:error].nil?
-			stream.puts JSON.pretty_generate(result)
-		else
+		if result[:error].nil?
 			count=result[:raw].count
 			stream.puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0
+		else
+			stream.puts "Error: #{result[:error]}"
+			stream.puts JSON.pretty_generate(result)
 		end
 	end
 
@@ -93,7 +94,10 @@ class AbuseIPDB
 	def self.check(ip)
 		return { :error=> "API key not set" } if @@api_key.nil?
 
-		return @@memoizer[ip] if @@memoizer.key?(ip)
+		if @@memoizer.key?(ip)
+			@@log.info "Address is already scanned: #{ip}"
+			return @@memoizer[ip]
+		end
 
 		puts "AbuseIPDB: checking #{ip}"
 		params = {
