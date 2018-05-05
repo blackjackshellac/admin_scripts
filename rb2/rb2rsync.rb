@@ -308,6 +308,8 @@ class Rb2Rsync
 
 		Rb2Rsync.info(FileUtils.mkdir_p(@bdest), { :echo => true, :logger=>@@log }) unless File.exists?(@bdest)
 
+		FileUtils.chmod(0755, @bdest)
+
 		Rb2Rsync.info("bdest  #{@bdest}", { :echo => true })
 		Rb2Rsync.info("latest #{@latest}", { :echo => true }) unless @latest.nil?
 
