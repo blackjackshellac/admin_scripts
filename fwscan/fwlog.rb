@@ -140,18 +140,25 @@ class FWLog
 		a
 	end
 
-	def self.summarise_entries(entries, stream)
+	def self.summarise_entries(entries, results, stream)
 		stream.puts "+"*50
-		#entries_by_count = entries.sort_by { |ip, entry|
-		#	entry.count
-		#}
-		#
-		#entries_by_count.each { |item|
-		#	stream.puts "%15s: %s" % [ item[0], item[1] ]
-		#}
-		entries.each_pair { |ip, entry|
-			stream.puts "%15s: %s" % [ ip, entry.count ]
+
+		# ip => [ fwl0, fwl1, ... ]
+		entries_by_count = entries.sort_by { |ip, fwla|
+			fwla.count
 		}
+
+		entries_by_count.each { |item|
+			ip = item[0]
+			fwla = item[1]
+			count = fwla.count
+			stream.puts "%15s: %d" % [ ip, fwla.count ]
+			AbuseIPDB.summarise_result(results[ip], stream) if results.key?(ip)
+		}
+
+		# entries.each_pair { |ip, fwla|
+		# 	stream.puts "%15s: %s" % [ ip, fwla.count ]
+		# }
 		stream.puts "%s ips total" % entries.count
 	end
 

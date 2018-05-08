@@ -248,7 +248,7 @@ entries.each_pair { |ip, entry|
 
 Tempfile.open('fwscan') { |stream|
 	# summarise ip and counts
-	FWLog.summarise_entries(entries, stream)
+	FWLog.summarise_entries(entries, results, stream)
 
 	AbuseIPDB.summarise_results(results, stream, $opts)
 
