@@ -252,8 +252,10 @@ Tempfile.open('fwscan') { |stream|
 
 	AbuseIPDB.summarise_results(results, stream, $opts)
 
-	unless $opts[:email].nil?
-		stream.rewind
+	stream.rewind
+	if $opts[:email].nil?
+		puts stream.read
+	else
 		$opts[:body]=stream.read
 		$opts[:email_to]=$opts[:email]
 		$opts[:email_from]=$opts[:email]
