@@ -7,6 +7,7 @@ require 'fileutils'
 require 'find'
 require 'csv'
 require 'open3'
+require 'tempfile'
 
 me=File.symlink?($0) ? File.readlink($0) : $0
 ME=File.basename($0, ".rb")
@@ -27,6 +28,7 @@ require_relative File.join(MD, "fwlog")
 require_relative File.join(MD, "format_xlsx")
 #require_relative File.join(LIB, "whois_classifier", "whois_bayes")
 require_relative File.join(MD, "abuseipdb")
+require_relative File.join(MD, "emailer")
 
 $log=Logger.set_logger(STDERR, Logger::INFO)
 
@@ -84,9 +86,9 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:ipdb_apikey]=apikey
 	}
 
-	opts.on('-e', '--email ADDRESS', String, "Recipient for AbuseIPDB summary") { |email|
+	opts.on('-e', '--email ADDRESS', String, "Recipient for fwscan summary") { |email|
 		$opts[:email]=email
-		$opts[:subject]="%s: AbuseIPDB summary %s" % [ %x/hostname -s/.strip, Time.now.strftime('%Y%m%d-%H%M') ]
+		$opts[:subject]="%s: fwscan summary %s" % [ %x/hostname -s/.strip, Time.now.strftime('%Y%m%d-%H%M') ]
 	}
 
 	opts.on('-i', '--input FILE', String, "Kernel log to parse") { |file|
@@ -130,6 +132,7 @@ $log.die "Must specify an input file (--file) or time since (--since)" if $opts[
 
 FWLog.init($opts)
 AbuseIPDB.init($opts)
+Emailer.init($opts)
 
 input=[]
 if !$opts[:file].nil?
@@ -181,13 +184,6 @@ input.each { |line|
 
 $log.die "Nothing to output, firewall journal entries is empty" if entries.empty?
 
-def summarise(entries)
-	entries.each_pair { |ip, entry|
-		puts "%15s: %s" % [ ip, entry.count ]
-	}
-	puts "%s ips total" % entries.count
-end
-
 case $opts[:format]
 when :xlsx
 	FormatXLSX.init($opts)
@@ -231,7 +227,6 @@ when :json
 	#}
 	#puts JSON.pretty_generate(result)
 	#puts JSON.pretty_generate(entries)
-	#summarise(entries)
 else
 	puts "No output format specified"
 end
@@ -240,7 +235,6 @@ end
 #entries = {}
 #AbuseIPDB.summarise_result(result)
 
-$opts[:tmpfile]=Tempfile.new("fwscan")
 results={}
 entries.each_pair { |ip, entry|
 	result = AbuseIPDB.check(ip)
@@ -252,4 +246,18 @@ entries.each_pair { |ip, entry|
 
 } unless $opts[:ipdb_apikey].nil?
 
-AbuseIPDB.summarise_results(results, $opts)
+Tempfile.open('fwscan') { |stream|
+	# summarise ip and counts
+	FWLog.summarise_entries(entries, stream)
+
+	AbuseIPDB.summarise_results(results, stream, $opts)
+
+	unless $opts[:email].nil?
+		stream.rewind
+		$opts[:body]=stream.read
+		$opts[:email_to]=$opts[:email]
+		$opts[:email_from]=$opts[:email]
+
+		Emailer.mail($opts)
+	end
+}

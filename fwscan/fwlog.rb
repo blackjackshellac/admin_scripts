@@ -1,5 +1,5 @@
 #
-# 
+#
 #
 
 require 'socket'
@@ -123,7 +123,7 @@ class FWLog
 	end
 
 	def self.to_a_headers
-		%w/Src TimeStamp In Proto DstPort PortName SrcName/	
+		%w/Src TimeStamp In Proto DstPort PortName SrcName/
 	end
 
 	# if :n == 0 print @src, otherwise print a space
@@ -140,5 +140,19 @@ class FWLog
 		a
 	end
 
-end
+	def self.summarise_entries(entries, stream)
+		stream.puts "+"*50
+		#entries_by_count = entries.sort_by { |ip, entry|
+		#	entry.count
+		#}
+		#
+		#entries_by_count.each { |item|
+		#	stream.puts "%15s: %s" % [ item[0], item[1] ]
+		#}
+		entries.each_pair { |ip, entry|
+			stream.puts "%15s: %s" % [ ip, entry.count ]
+		}
+		stream.puts "%s ips total" % entries.count
+	end
 
+end

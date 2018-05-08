@@ -2,7 +2,6 @@
 require 'uri'
 require 'cgi'
 require 'net/http'
-require 'mail'
 require 'tempfile'
 
 class AbuseIPDB
@@ -62,7 +61,7 @@ class AbuseIPDB
 		end
 	end
 
-	def self.summarise_results(results, opts)
+	def self.summarise_results(results, stream, opts)
 		return if results.empty?
 
 		# results_by_count is an array like
@@ -71,24 +70,13 @@ class AbuseIPDB
 			result.key?(:raw) ? result[:raw].count : 0
 		}
 
-		stream = Tempfile.new('abuseipdb')
+		stream.puts "+"*50
+
 		results_by_count.each { |item|
 			result=item[1]
 			AbuseIPDB.summarise_result(result, stream)
 		}
 
-		unless opts[:email].nil?
-			stream.rewind
-			opts[:body]=stream.read
-			opts[:email_to]=opts[:email]
-			opts[:email_from]=opts[:email]
-			#opts[:subject]=opts[:subject]
-
-			AbuseIPDB.mail(opts)
-		end
-
-		stream.close
-		#stream.unlink
 	end
 
 	def self.check(ip)
@@ -187,35 +175,6 @@ class AbuseIPDB
 			end
 		@@memoizer[ip]=result unless result[:error].nil?
 		result
-	end
-
-	def self.mail(opts)
-		@@log.info "Mailing summary"
-
-		body = opts[:body]
-
-		puts "body=\n#{body}"
-
-		subj = opts[:subject]
-		from = opts[:email_from]
-		to   = opts[:email_to]
-		mailer = Mail.new do
-			from     from
-			to       to
-			subject  subj
-			body     body
-		end
-
-		#mailer.add_file(@file)
-		mailer.charset = "UTF-8"
-
-		@@log.debug mailer.to_s
-		mailer.deliver
-	rescue => e
-		@@log.error "Failed to mail result: #{opts.inspect} [#{e.to_s}]"
-		e.backtrace.each { |line|
-			puts line
-		}
 	end
 
 end
