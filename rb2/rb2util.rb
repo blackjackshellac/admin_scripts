@@ -70,7 +70,7 @@ class Rb2Util
 		File.open(init, "w") { |fd|
 			fd.puts "Backup directory initialized #{dest} [#{Time.now.utc.to_s}]"
 		}
-		FileUtils.chmod(0600, init)
+		FileUtils.chmod(0644, init)
 	rescue Errno::EACCES => e
 		raise Rb2Error, "access denied, initializing destination #{dest}"
 	rescue Errno::EEXIST => e
