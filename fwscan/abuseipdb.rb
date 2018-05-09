@@ -51,10 +51,10 @@ class AbuseIPDB
 		return ""
 	end
 
-	def self.summarise_result(result, stream)
+	def self.summarise_result(result, stream, prefix="")
 		if result[:error].nil?
 			count=result[:raw].count
-			stream.puts "%15s (%4d) - %s (%s) [%s]" % [ result[:ip], count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0
+			stream.puts "%s%15s (%d) - %s (%s) [%s]" % [ prefix, result[:ip], count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0
 		else
 			stream.puts "Error: #{result[:error]}"
 			stream.puts JSON.pretty_generate(result)
@@ -70,7 +70,7 @@ class AbuseIPDB
 			result.key?(:raw) ? result[:raw].count : 0
 		}
 
-		stream.puts "+"*50
+		stream.puts " AbuseIPDB Summary ".center(50, "+")
 
 		results_by_count.each { |item|
 			result=item[1]

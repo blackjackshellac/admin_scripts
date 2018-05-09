@@ -97,6 +97,10 @@ class FWLog
 		"#{port}/#{proto}"
 	end
 
+	def proto_dpt
+		"#{@proto}/#{@dpt}"
+	end
+
 	def self.service(port, proto)
 		@lookup ? Socket.getservbyport(port.to_i) : pp(port, proto)
 	rescue => e
@@ -140,26 +144,44 @@ class FWLog
 		a
 	end
 
+	def summary(stream)
+		stream.puts "\t%s: %s/%s" % [ @ts.strftime("%Y%m%d %H%M%S"), @dpt, @proto ]
+	end
+
 	def self.summarise_entries(entries, results, stream)
-		stream.puts "+"*50
+		stream.puts " IP Summary ".center(50, "+")
 
 		# ip => [ fwl0, fwl1, ... ]
 		entries_by_count = entries.sort_by { |ip, fwla|
 			fwla.count
 		}
 
+		ports = {}
+		ports.default = 0
 		entries_by_count.each { |item|
 			ip = item[0]
 			fwla = item[1]
 			count = fwla.count
-			stream.puts "%15s: %d" % [ ip, fwla.count ]
-			AbuseIPDB.summarise_result(results[ip], stream) if results.key?(ip)
+			stream.puts "%15s (%d)" % [ ip, fwla.count ]
+			# should be sorted by arrival time (@ts), already
+			fwla.each { |fwl|
+				fwl.summary(stream)
+				ports[fwl.proto_dpt] += 1
+			}
+			AbuseIPDB.summarise_result(results[ip], stream, "\tAbuseIPDB> ") if results.key?(ip)
+		}
+		stream.puts "%s ips total" % entries.count
+
+		stream.puts " Port Summary ".center(50, "+")
+
+		ports_by_count = ports.sort_by { |ppp, count|
+			count
+		}
+		ports_by_count.each { |item|
+			#next if item[1].to_i <= 1
+			stream.puts "\t%s: %d" % item
 		}
 
-		# entries.each_pair { |ip, fwla|
-		# 	stream.puts "%15s: %s" % [ ip, fwla.count ]
-		# }
-		stream.puts "%s ips total" % entries.count
 	end
 
 end
