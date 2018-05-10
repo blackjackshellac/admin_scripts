@@ -453,7 +453,14 @@ class Rb2Rsync
 			remove_backup(@bdest, opts) if @action == :run
 			link_latest
 		end
-		FileUtils.rmdir(@bdest)
+		begin
+			FileUtils.rmdir(@bdest)
+		rescue Errno::EACCES => e
+		rescue Errno::ENOTEMPTY => e
+			# ignore if directory is not empty
+		rescue => e
+			throw e
+		end
 		exit_status
 	end
 
