@@ -134,8 +134,8 @@ class CheckKernelVersion
 
 		host=%x/hostname -s/.strip
 
-		# mail -s #{host}: new kernel available #{@@latest}" -a #{output.path}
-		cmd=%/cat #{output.path} | mail -s "#{host}: new kernel available #{@@latest[:kernel]}" #{email}/
+		# mail -s #{host}: #{@@latest}" -a #{output.path}
+		cmd=%/cat #{output.path} | mail -s "#{host}: #{@@latest[:kernel]}" #{email}/
 
 		unless quiet
 			puts cmd
