@@ -38,8 +38,9 @@ end
 $log = set_logger(STDERR)
 
 $opts = {
-	:genre => "xmas",
-	:file => nil
+	:genre => "music",
+	:file => nil,
+	:wdir => nil
 }
 optparser=OptionParser.new { |opts|
 	opts.banner = "#{ME}.rb [options]\n"
@@ -52,7 +53,11 @@ optparser=OptionParser.new { |opts|
 		$opts[:file]=file
 	}
 
-	opts.on('-d', '--debug', "Enable debugging output") {
+	opts.on('-d', '--dir ', String, "Output directory") { |dir|
+		$opts[:wdir]=dir
+	}
+
+	opts.on('-D', '--debug', "Enable debugging output") {
 		$log.level = Logger::DEBUG
 	}
 
@@ -161,7 +166,8 @@ TAG_FIELD_NAMES={
 	:artist=> "ARTIST",
 	:genre => "GENRE",
 	:year  => "DATE",
-	:url   => "CONTACT"
+	:url   => "CONTACT",
+	:code  => "COMMENT"
 }
 TAG_FIELDS=TAG_FIELD_NAMES.keys
 SEP="="*80
@@ -221,6 +227,9 @@ def edit_field_data(data)
 	while ans = Readline.readline("edit|swap|done|cancel >> ")
 		ans.strip!
 		case ans
+		when /^\s*(title|album|artist|genre|year|url|code)\s*/
+			data = edit_field($1, data)
+			dump_data(data)
 		when /^edit\s*(.*?)?\s*$/
 			data = edit_field($1, data)
 			dump_data(data)
@@ -328,11 +337,25 @@ def run(cmd, args=nil)
 	puts %x/#{cmd}/
 end
 
+def chdir(dir)
+	return if dir.nil?
+	dir.strip!
+	if File.directory?(dir)
+		puts "cd #{dir}"
+		Dir.chdir(dir)
+	else
+		$log.error "Directory not found: #{dir}"
+	end
+end
+
+chdir $opts[:wdir]
+
 RE_URL=/^(?:url)?\s*(https?.*)/
 RE_EASYTAG=/^easytag/
 RE_FILE=/^file\s?(.*)?/
 RE_FIND=/^find\s(.*)/
-RE_LL=/^ll\s?(.*)/
+RE_LL=/^(?:ll|ls)\s?(.*)/
+RE_CD=/^cd\s*(.*)/
 RE_QUIT=/^quit/
 RE_VI=/^vi/
 RE_EMACS=/^emacs/
@@ -345,7 +368,7 @@ if ARGV.empty?
 #			Dir[str+'*'].grep( /^#{Regexp.escape(str)}/ )
 #		end
 #	end
-	while cmd = Readline.readline("Enter url|file|find|easytag|ll|quit|#{mode}> ", true)
+	while cmd = Readline.readline("Enter url|file|find|easytag|ll|cd|quit|#{mode}> ", true)
 		cmd.strip!
 		case cmd
 		when RE_URL
@@ -358,6 +381,8 @@ if ARGV.empty?
 			run("find -ls | grep -i \"#{$1}\"")
 		when RE_LL
 			run("ls -l", $1)
+		when RE_CD
+			chdir($1)
 		when RE_QUIT
 			break
 		when RE_VI
@@ -370,6 +395,7 @@ if ARGV.empty?
 			puts "Unknown cmd #{cmd}"
 		end
 	end
+	run("echo 'Working directory ... '; pwd")
 	exit 0
 else
 	ARGV.each { |url|
