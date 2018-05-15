@@ -40,7 +40,7 @@ $log = set_logger(STDERR)
 $opts = {
 	:genre => "music",
 	:file => nil,
-	:wdir => nil
+	:wdir => ENV['YTDL_WDIR']
 }
 optparser=OptionParser.new { |opts|
 	opts.banner = "#{ME}.rb [options]\n"
@@ -53,7 +53,7 @@ optparser=OptionParser.new { |opts|
 		$opts[:file]=file
 	}
 
-	opts.on('-d', '--dir ', String, "Output directory") { |dir|
+	opts.on('-d', '--dir ', String, "Output directory, can also set YTDL_WDIR") { |dir|
 		$opts[:wdir]=dir
 	}
 
@@ -339,7 +339,7 @@ end
 
 def chdir(dir)
 	return if dir.nil?
-	dir.strip!
+	dir=dir.strip
 	if File.directory?(dir)
 		puts "cd #{dir}"
 		Dir.chdir(dir)
