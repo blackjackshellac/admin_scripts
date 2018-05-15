@@ -441,12 +441,13 @@ def search_table(table, addr, cidrs)
 	cidrs.each { |cidr|
 		cs=cidr.to_s
 		next if dupes.include?(cs)
+		dupes << cs
+
 		puts "Searching for #{addr} in blacklisted cidr #{cs}"
 		table.each_pair { |key,val|
 			if key.eql?(cs) 
 				puts "Address #{addr} is blacklisted in #{cs}"
 				found=true
-				dupes << cs
 			end
 		}
 		puts "cidr #{cs} not blacklisted" unless found
