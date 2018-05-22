@@ -97,8 +97,12 @@ class FWLog
 		"#{port}/#{proto}"
 	end
 
+	def self.proto_dpt(proto, dpt)
+		"#{proto}/#{dpt}"
+	end
+
 	def proto_dpt
-		"#{@proto}/#{@dpt}"
+		FWLog.proto_dpt(@proto, @dpt)
 	end
 
 	def self.service(port, proto)
@@ -172,14 +176,34 @@ class FWLog
 		}
 		stream.puts "%s ips total" % entries.count
 
-		stream.puts " Port Summary ".center(50, "+")
+		#stream.puts " Port Summary ".center(50, "+")
 
-		ports_by_count = ports.sort_by { |ppp, count|
-			count
+		#ports_by_count = ports.sort_by { |ppp, count|
+		#	count
+		#}
+		#ports_by_count.each { |item|
+		#	#next if item[1].to_i <= 1
+		#	stream.puts "\t%s: %d" % item
+		#}
+		protos={}
+		ports.each_pair { |ppp,cnt|
+			m = ppp.match(/(.*?)\/(.*)/)
+			next if m.nil?
+			proto=m[1]
+			port=m[2]
+			protos[proto]=[] if protos[proto].nil?
+			protos[proto] << port.to_i
 		}
-		ports_by_count.each { |item|
-			#next if item[1].to_i <= 1
-			stream.puts "\t%s: %d" % item
+		stream.puts " Protocol Port Summary ".center(50, "+")
+		protos.each_pair { |proto,aports|
+			stream.print "\t#{proto}:"
+			aports.uniq.sort.each { |port|
+				pp=FWLog.proto_dpt(proto, port)
+				cnt=ports[pp]||0
+				stream.print "%d(%d) " % [ port, cnt ]
+			}
+			stream.puts
+			#stream.puts "\t#{proto}: %s" % ports.uniq.sort.join(", ")
 		}
 
 	end
