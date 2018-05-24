@@ -191,7 +191,9 @@ end
 
 def edit_field(key, data)
 	raise "Field name must be given" if key.nil?
-	key = key.to_sym
+	key = key.strip.to_sym
+	puts "key=#{key} TAG_FIELDS=#{TAG_FIELDS.inspect} found=#{TAG_FIELDS.include?(key)}"
+	data[key]="" if TAG_FIELDS.include?(key) && !data.key?(key)
 	raise "No data for field #{key}" if !data.key?(key) || !TAG_FIELDS.include?(key)
 	ans = Readline.readline("Enter new value for #{key} #{data[key]}>>> ")
 	ans.strip!
