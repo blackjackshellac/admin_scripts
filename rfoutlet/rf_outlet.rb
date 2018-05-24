@@ -65,7 +65,11 @@ class RFOutlet
 	def sendcode(rfcode)
 		# return output
 		cmd="#{@@codesend} #{rfcode}"
-		%x[#{cmd}].strip
+		out=""
+		5.times { |i|
+			out=%x[#{cmd}].strip
+		}
+		out
 	rescue => e
 		puts "Failed to execute [#{cmd}]: #{e.message}"
 		exit 1
