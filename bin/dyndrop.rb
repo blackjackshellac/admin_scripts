@@ -199,7 +199,7 @@ end
 
 RE_ADDR=/(addr\s*)?(?<a>\d+\.\d+\.\d+\.\d+)/
 RE_RANGE=/(range\s*)?(?<r1>\d+\.\d+\.\d+\.\d+)\s*-\s*(?<r2>\d+\.\d+\.\d+\.\d+)/
-RE_CIDR=/(cidr\s*)?(?<a1>\d+)(?<a2>\.\d+)?(?<a3>\.\d+)?(?<a4>\.\d+)?\/(?<mask>\d+)/
+RE_CIDR=/(cidr\s*)?(?<a1>\d+)(?<a2>\.\d+)?(?<a3>\.\d+)?(?<a4>\.\d+)?\/(?<mask>\d+)(?:\s|$)/
 RE_QUIT=/(quit|exit)/
 RE_SHOW=/(show)/
 RE_SAVE=/(save)/
@@ -435,22 +435,28 @@ def blackListCidr(cidr, opts)
 	end
 end
 
+def search_table_cidr(table, addr, cs)
+	puts "Searching for #{addr} in cidr #{cs}"
+	table.each_pair { |key,val|
+		return cs if key.eql?(cs)
+	}
+	nil
+end
+
 def search_table(table, addr, cidrs)
-	found=false
 	dupes=[]
+	blacklisted=[]
 	cidrs.each { |cidr|
 		cs=cidr.to_s
 		next if dupes.include?(cs)
 		dupes << cs
-
-		puts "Searching for #{addr} in blacklisted cidr #{cs}"
-		table.each_pair { |key,val|
-			if key.eql?(cs) 
-				puts "Address #{addr} is blacklisted in #{cs}"
-				found=true
-			end
-		}
-		puts "cidr #{cs} not blacklisted" unless found
+		out=search_table_cidr(table, addr, cs)
+		next if out.nil?
+		blacklisted << out
+	}
+	puts
+	blacklisted.each { |cs|
+		puts " ** Address #{addr} is blacklisted in #{cs}"
 	}
 end
 
