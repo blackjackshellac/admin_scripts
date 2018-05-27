@@ -250,6 +250,8 @@ Tempfile.open('fwscan') { |stream|
 	# summarise ip and counts
 	FWLog.summarise_entries(entries, results, stream)
 
+	# allow entries to access counts
+	$opts[:entries]=entries
 	AbuseIPDB.summarise_results(results, stream, $opts)
 
 	stream.rewind

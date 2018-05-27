@@ -172,7 +172,7 @@ class FWLog
 				fwl.summary(stream)
 				ports[fwl.proto_dpt] += 1
 			}
-			AbuseIPDB.summarise_result(results[ip], stream, "\tAbuseIPDB> ") if results.key?(ip)
+			AbuseIPDB.summarise_result(results[ip], fwla, stream, "\tAbuseIPDB> ") if results.key?(ip)
 		}
 		stream.puts "%s ips total" % entries.count
 
