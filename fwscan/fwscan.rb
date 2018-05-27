@@ -237,6 +237,7 @@ end
 
 results={}
 entries.each_pair { |ip, entry|
+	sleep 0.25
 	result = AbuseIPDB.check(ip)
 	next if result.empty?
 
