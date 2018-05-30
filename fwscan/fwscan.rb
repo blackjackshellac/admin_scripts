@@ -29,6 +29,7 @@ require_relative File.join(MD, "format_xlsx")
 #require_relative File.join(LIB, "whois_classifier", "whois_bayes")
 require_relative File.join(MD, "abuseipdb")
 require_relative File.join(MD, "emailer")
+require_relative File.join(MD, "fwipset")
 
 $log=Logger.set_logger(STDERR, Logger::INFO)
 
@@ -53,7 +54,8 @@ $opts={
 	:logger=>$log,
 	:headers=>true,
 	:ipdb_apikey=>nil,
-	:email=>nil
+	:email=>nil,
+	:ipset=>nil
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -99,6 +101,10 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:in]=inp
 	}
 
+	opts.on('-P', '--ipset NAME', String, "ipset name on firewall to block ips dynamically") { |name|
+		$opts[:ipset]=name
+	}
+
 	opts.on('-f', '--format FORMAT', String, "Output format: #{FORMATS.to_json}") { |type|
 		format = type.downcase.to_sym
 		format = nil unless FORMATS.include?(format)
@@ -133,6 +139,7 @@ $log.die "Must specify an input file (--file) or time since (--since)" if $opts[
 FWLog.init($opts)
 AbuseIPDB.init($opts)
 Emailer.init($opts)
+FWipset.init($opts)
 
 input=[]
 if !$opts[:file].nil?
@@ -235,6 +242,8 @@ end
 #entries = {}
 #AbuseIPDB.summarise_result(result)
 
+vipset = FWipset.load_ipset($opts[:ipset], $opts[:ssh]) unless $opts[:ipset].nil?
+
 results={}
 entries.each_pair { |ip, entry|
 	sleep 0.25
@@ -255,6 +264,29 @@ Tempfile.open('fwscan') { |stream|
 	$opts[:entries]=entries
 	AbuseIPDB.summarise_results(results, stream, $opts)
 
+	unless $opts[:ipset].nil?
+		updated=false
+		entries.each_pair { |ip, entry|
+			result = results[ip]
+			next if result[:raw].nil?
+			if entry.count > 2 && result[:raw].count > 2
+				stream.puts "Block ip #{ip} in #{$opts[:ipset]}"
+				stream.puts FWipset.add(ip, $opts[:ipset], $opts[:ssh])
+				updated=true
+			end
+		}
+
+		stream.puts " #{$opts[:ipset]} ipset Summary ".center(50, "+")
+		vipset.each_pair { |ip, fwipset|
+			stream.puts fwipset.to_s
+		}
+		if updated
+			cmd=$opts[:ssh].nil? ? "" : "ssh root@#{$opts[:ssh]} "
+			cmd="#{cmd}shorewall save"
+			stream.puts %x/#{cmd}/
+		end
+	end
+
 	stream.rewind
 	if $opts[:email].nil?
 		puts stream.read
@@ -265,4 +297,6 @@ Tempfile.open('fwscan') { |stream|
 
 		Emailer.mail($opts)
 	end
+
+
 }
