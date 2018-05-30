@@ -74,7 +74,7 @@ class FWipset
 	end
 
 	def to_s
-		"%15s: %d %d %d" % self.to_a
+		"%15s timeout=%d packets=%d bytes=%d" % self.to_a
 	end
 
 	def to_a
