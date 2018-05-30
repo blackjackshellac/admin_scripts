@@ -244,13 +244,20 @@ end
 
 vipset = FWipset.load_ipset($opts[:ipset], $opts[:ssh]) unless $opts[:ipset].nil?
 
+errors=0
 results={}
 entries.each_pair { |ip, entry|
 	sleep 0.25
 	result = AbuseIPDB.check(ip)
 	next if result.empty?
 
-	$log.error result[:error] unless result[:error].nil?
+	unless result[:error].nil?
+		$log.error result[:error]
+		errors += 1
+		# just give up
+		break if errors >= 10
+		sleep 10
+	end
 
 	results[ip]=result
 

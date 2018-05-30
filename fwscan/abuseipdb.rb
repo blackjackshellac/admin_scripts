@@ -57,8 +57,9 @@ class AbuseIPDB
 			fwlac = (fwla.nil? || fwla.empty?) ? 0 : fwla.count
 			stream.puts "%s%15s (%d) - [%d] %s (%s) [%s]" % [ prefix, result[:ip], fwlac, count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0 || fwlac  > 0
 		else
-			stream.puts "Error: #{result[:error]}"
-			stream.puts JSON.pretty_generate(result)
+			stream.puts "%s%15s Error: #{result[:error]}" % [ prefix, result[:ip] ]
+			stream.puts result.to_json
+			#stream.puts JSON.pretty_generate(result)
 		end
 	end
 
