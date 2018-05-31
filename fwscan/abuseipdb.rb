@@ -3,6 +3,8 @@ require 'uri'
 require 'cgi'
 require 'net/http'
 require 'tempfile'
+require 'json'
+require 'fileutils'
 
 class AbuseIPDB
 	ABUSEIPDB_DOM="https://www.abuseipdb.com"
@@ -12,15 +14,53 @@ class AbuseIPDB
 	@@api_key=nil
 	@@log = Logger.new(STDOUT)
 
+	@@memoizer_store = nil
 	@@memoizer = {}
 
 	def initialize
+	end
+
+	def self.load_memoizer
+		return if @@memoizer_store.nil? || !File.exists?(@@memoizer_store)
+
+		json = File.read(@@memoizer_store)
+		memoizer = JSON.parse(json, :symbolize_names => true)
+		now = Time.now.to_i
+		# check them once per day
+		timeout = 86400
+		puts "before "+memoizer.count.to_s
+		memoizer = memoizer.delete_if { |ip, result|
+			age=now-result[:time]
+			delete=(age > timeout)
+			action=delete ? "deleting" : "keeping"
+			puts "#{action} ip=#{ip} time=#{result[:time]} now=#{now} age=#{age}"
+			delete
+		}
+		# convert hash key symbols to strings
+		memoizer.each_pair { |ip,result|
+			@@memoizer[ip.to_s]=result
+		}
+		puts "after "+@@memoizer.count.to_s
+	end
+
+	def self.save_memoizer
+		return if @@memoizer_store.nil?
+		puts " >> saving "+@@memoizer_store
+		File.open(@@memoizer_store, "w") { |fd|
+			fd.puts JSON.pretty_generate(@@memoizer)
+		}
 	end
 
 	def self.init(opts)
 		@@log = opts[:logger] unless opts[:logger].nil?
 		@@api_key = opts[:ipdb_apikey] unless opts[:ipdb_apikey].nil?
 		@@log.info "API KEY=#{@@api_key}"
+
+		username=ENV['LOGNAME']||ENV['USERNAME']||ENV['USER']
+		@@memoizer_store = "%s/abuseipdb_store.json" % (username.nil? ? "/var/tmp" : "/var/tmp/#{username}")
+		FileUtils.mkdir_p File.dirname(@@memoizer_store)
+
+		load_memoizer
 	end
 
 	def self.apikey(key)
@@ -85,6 +125,10 @@ class AbuseIPDB
 
 	end
 
+	def self.memoized(ip)
+		@@memoizer[ip]
+	end
+
 	def self.check(ip)
 		return { :error=> "API key not set" } if @@api_key.nil?
 
@@ -106,16 +150,16 @@ class AbuseIPDB
 
 		#
 		#{
-	   #  "ip": "148.153.35.50",
-	   #  "category": [
-	   #    14
-	   #  ],
-	   #  "created": "Wed, 28 Mar 2018 10:02:09 +0000",
-	   #  "country": "United States",
-	   #  "isoCode": "US",
-	   #  "isWhitelisted": false
-	   #}
-	   #
+		#  "ip": "148.153.35.50",
+		#  "category": [
+		#    14
+		#  ],
+		#  "created": "Wed, 28 Mar 2018 10:02:09 +0000",
+		#  "country": "United States",
+		#  "isoCode": "US",
+		#  "isWhitelisted": false
+		#}
+		#
 
 		result = {
 			:ip=>ip,
@@ -123,8 +167,10 @@ class AbuseIPDB
 			:country=>"",
 			:isoCode=>"",
 			:raw=>[],
-			:error=>nil
+			:error=>nil,
+			:time=>Time.now.to_i
 		}
+		begin
 		Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https', :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
 			request = Net::HTTP::Get.new uri.request_uri
 			response = http.request request
@@ -174,13 +220,24 @@ class AbuseIPDB
 					}
 				end
 
-				rescue => e
-					@@log.error "Failed to parse json response: #{json}"
-					@@log.error e.to_s
-				end
+			rescue => e
+				@@log.error "Failed to parse json response: #{json}"
+				@@log.error e.to_s
 			end
-		@@memoizer[ip]=result unless result[:error].nil?
+		end
+		if result[:error].nil? && !result[:raw].empty?
+			@@memoizer[ip]=result
+
+			save_memoizer
+		end
+		rescue Net::ReadTimeout => e
+			result[:error]=e.message
+		rescue => e
+			result[:error]=e.message
+		end
 		result
 	end
 
 end
+
+

@@ -93,13 +93,18 @@ class FWipset
 		}
 	end
 
+	def self.exists?(ip, setname, host=nil)
+		ipset=get_ipset(setname, host)
+		ipset.key?(ip)
+	end
+
 	def self.add(ip, setname, host=nil)
 		ipset=get_ipset(setname, host)
-		return "IP already in ipset #{ip}" if ipset.key?(ip)
+		return " >> IP already in ipset #{ip}" if ipset.key?(ip)
 		cmd="ipset add #{setname} #{ip}"
 		cmd=ssh_cmd(cmd, host)
 		out=%x/#{cmd}/
-		out
+		out.strip
 	end
 end
 

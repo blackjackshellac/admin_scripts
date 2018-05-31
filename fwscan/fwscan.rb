@@ -247,9 +247,15 @@ vipset = FWipset.load_ipset($opts[:ipset], $opts[:ssh]) unless $opts[:ipset].nil
 errors=0
 results={}
 entries.each_pair { |ip, entry|
-	sleep 0.25
-	result = AbuseIPDB.check(ip)
-	next if result.empty?
+	# limited to 60 checks per minute
+
+	result = AbuseIPDB.memoized(ip)
+	if result.nil?
+		sleep 10
+		result = AbuseIPDB.check(ip)
+	end
+
+	next if result.nil? || result.empty?
 
 	unless result[:error].nil?
 		$log.error result[:error]
@@ -275,11 +281,16 @@ Tempfile.open('fwscan') { |stream|
 		updated=false
 		entries.each_pair { |ip, entry|
 			result = results[ip]
-			next if result[:raw].nil?
-			if entry.count > 2 && result[:raw].count > 2
-				stream.puts "Block ip #{ip} in #{$opts[:ipset]}"
-				stream.puts FWipset.add(ip, $opts[:ipset], $opts[:ssh])
-				updated=true
+			next if result.nil? || result[:raw].nil?
+			reports=result[:raw].count
+			if entry.count > 2 && reports > 2 || reports >= 10
+				if !FWipset.exists?(ip, $opts[:ipset], $opts[:ssh])
+					stream.puts "Block ip #{ip} in #{$opts[:ipset]}"
+					stream.puts FWipset.add(ip, $opts[:ipset], $opts[:ssh])
+					updated=true
+				end
+			elsif entry.count >= 10 && reports == 0
+				stream.puts "Consider reporting #{ip} at AbuseIPDB"
 			end
 		}
 
