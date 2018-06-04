@@ -55,7 +55,8 @@ $opts={
 	:headers=>true,
 	:ipdb_apikey=>nil,
 	:email=>nil,
-	:ipset=>nil
+	:ipset=>nil,
+	:sleep_secs => 10
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -242,32 +243,7 @@ end
 #entries = {}
 #AbuseIPDB.summarise_result(result)
 
-vipset = FWipset.load_ipset($opts[:ipset], $opts[:ssh]) unless $opts[:ipset].nil?
-
-errors=0
-results={}
-entries.each_pair { |ip, entry|
-	# limited to 60 checks per minute
-
-	result = AbuseIPDB.memoized(ip)
-	if result.nil?
-		sleep 10
-		result = AbuseIPDB.check(ip)
-	end
-
-	next if result.nil? || result.empty?
-
-	unless result[:error].nil?
-		$log.error result[:error]
-		errors += 1
-		# just give up
-		break if errors >= 10
-		sleep 10
-	end
-
-	results[ip]=result
-
-} unless $opts[:ipdb_apikey].nil?
+results = AbuseIPDB.check_entries(entries.keys, $opts)
 
 Tempfile.open('fwscan') { |stream|
 	# summarise ip and counts
@@ -277,33 +253,7 @@ Tempfile.open('fwscan') { |stream|
 	$opts[:entries]=entries
 	AbuseIPDB.summarise_results(results, stream, $opts)
 
-	unless $opts[:ipset].nil?
-		updated=false
-		entries.each_pair { |ip, entry|
-			result = results[ip]
-			next if result.nil? || result[:raw].nil?
-			reports=result[:raw].count
-			if entry.count > 2 && reports > 2 || reports >= 10
-				if !FWipset.exists?(ip, $opts[:ipset], $opts[:ssh])
-					stream.puts "Block ip #{ip} in #{$opts[:ipset]}"
-					stream.puts FWipset.add(ip, $opts[:ipset], $opts[:ssh])
-					updated=true
-				end
-			elsif entry.count >= 10 && reports == 0
-				stream.puts "Consider reporting #{ip} at AbuseIPDB"
-			end
-		}
-
-		stream.puts " #{$opts[:ipset]} ipset Summary ".center(50, "+")
-		vipset.each_pair { |ip, fwipset|
-			stream.puts fwipset.to_s
-		}
-		if updated
-			cmd=$opts[:ssh].nil? ? "" : "ssh root@#{$opts[:ssh]} "
-			cmd="#{cmd}shorewall save"
-			stream.puts %x/#{cmd}/
-		end
-	end
+	FWipset.compare_fwscan_abuseipdb(entries, results, stream, $opts)
 
 	stream.rewind
 	if $opts[:email].nil?
@@ -315,6 +265,4 @@ Tempfile.open('fwscan') { |stream|
 
 		Emailer.mail($opts)
 	end
-
-
 }

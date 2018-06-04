@@ -14,7 +14,7 @@ MD=File.dirname(File.expand_path($0))
 HOSTNAME=%x/hostname -s/
 
 begin
-	SHOREWALL_BIN=%x/bash -c "type -p shorewall"/.strip
+	SHOREWALL_BIN=ENV['SHOREWALL_BIN']||%x/bash -c "type -p shorewall"/.strip
 	#puts "bin="+SHOREWALL_BIN
 	SHOREWALL_VER=%x/#{SHOREWALL_BIN} version/.strip
 	#puts SHOREWALL_VER
@@ -26,9 +26,10 @@ rescue => e
 		puts line
 	}
 	puts "shorewall: "+e.message
-	puts "shorewall command not found or wrong version"
+	puts "shorewall command not found or wrong version, faking it"
 
-	exit 1
+	SHOREWALL_BIN="echo shorewall"
+	SHOREWALL_VER=""
 end
 
 puts "run #{SHOREWALL_BIN} blacklist CIDR"
@@ -197,6 +198,9 @@ rescue Interrupt => e
 end
 end
 
+BINARY_H={}
+(0..255).each { |v| BINARY_H[v]="%08b"%v }
+
 RE_ADDR=/(addr\s*)?(?<a>\d+\.\d+\.\d+\.\d+)/
 RE_RANGE=/(range\s*)?(?<r1>\d+\.\d+\.\d+\.\d+)\s*-\s*(?<r2>\d+\.\d+\.\d+\.\d+)/
 RE_CIDR=/(cidr\s*)?(?<a1>\d+)(?<a2>\.\d+)?(?<a3>\.\d+)?(?<a4>\.\d+)?\/(?<mask>\d+)(?:\s|$)/
@@ -226,7 +230,7 @@ HELP_TEXT=<<-HELPTEXT
 	vi|vim    user vi command line editing
 	help      this help text
 
-	The range, cidr and addr command strings are optional, meaning that it 
+	The range, cidr and addr command strings are optional, meaning that it
 	will automatically detect ranges, cidrs or ipv4 addresses
 
 HELPTEXT
@@ -234,6 +238,18 @@ HELPTEXT
 def helptext
 	# no <<~ on ruby 2.[012]
 	HELP_TEXT.split(/\n/).map { |line| line.strip }.join("\n")
+end
+
+RE_IPV4=/(?<a1>\d+)\.(?<a2>\d+)\.(?<a3>\d+)\.(?<a4>\d+)/
+def ipv4_to_a(addr)
+	a=[]
+	m=RE_IPV4.match(addr)
+	unless m.nil?
+		[ :a1, :a2, :a3, :a4 ].each { |name|
+			a << m[name].to_i
+		}
+	end
+	a
 end
 
 def match2range(m, ret)
@@ -414,7 +430,59 @@ def shell_cmd(opts)
 	ret
 end
 
+def printBits(a, suffix="")
+	bits=""
+	a.each { |c|
+		bits += BINARY_H[c.to_i]+" "
+	}
+	puts bits.strip+suffix
+end
+
+def getCidrFromRange(lower, upper, echo)
+	puts "" if echo
+	puts "Getting cidr for range #{lower}-#{upper}" if echo
+	la=ipv4_to_a(lower)
+	printBits(la) if echo
+	ua=ipv4_to_a(upper)
+	printBits(ua) if echo
+	xa=[]
+	# xor each chunk lower ^ upper
+	la.each_index { |i|
+		#puts "la[#{i}]=#{la[i]} class=#{la[i].class}"
+		xa << (la[i] ^ ua[i])
+	}
+	printBits(xa, " xor") if echo
+	if echo
+		puts "12345678 90123456 78901234 56789012"
+		puts "          1          2          3"
+	end
+
+	bits=0
+	xxa=[]
+	xa.each_with_index { |xv, i|
+		if xv == 0
+			bits += 8
+			xxa << la[i]
+		elsif xv == 255
+			xxa << 0
+		else
+			xxa << xv
+			xvs = "%08b" % xv
+			xvs.each_char { |bit|
+				break if bit.eql?("1")
+				bits += 1
+			}
+		end
+	}
+	cidr=xxa.join(".")+"/#{bits}"
+	puts "#{cidr} cidr" if echo
+	puts "" if echo
+	cidr
+end
+
 def getMergedCidr(lower, upper, echo=true)
+	getCidrFromRange(lower, upper, echo)
+
 	puts "Getting range for #{lower}-#{upper}" if echo
 	ip_net_range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
 	puts "Getting merged cidr array" if echo
@@ -524,7 +592,7 @@ def has_address(ret, key, opts, echo=true)
 	elsif ret.key?(:cidr)
 		cidrs << ret[:cidr]
 	elsif ret.key?(:addr)
-		data=whois_parser(ret[:addr])	
+		data=whois_parser(ret[:addr])
 		if data[:range].nil? && data[:cidr].nil?
 			puts data[:out] if echo
 		else
@@ -656,4 +724,3 @@ end
 $opts[:cidr].each { |cidr|
 	puts "Dropped cidr=#{cidr}"
 }
-

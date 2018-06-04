@@ -238,6 +238,32 @@ class AbuseIPDB
 		result
 	end
 
+	def self.check_entries(iplist, opts)
+		errors=0
+		results={}
+		iplist.each { |ip|
+
+			# limited to 60 checks per minute
+			result = AbuseIPDB.memoized(ip)
+			if result.nil?
+				result = AbuseIPDB.check(ip)
+				sleep opts[:sleep_secs]
+			end
+
+			next if result.nil? || result.empty?
+
+			unless result[:error].nil?
+				@@log.error result[:error]
+				errors += 1
+				# just give up
+				break if errors >= 10
+				sleep opts[:sleep_secs]
+			end
+
+			results[ip]=result
+
+		} unless $opts[:ipdb_apikey].nil?
+		results
+	end
+
 end
-
-
