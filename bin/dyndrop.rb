@@ -481,7 +481,7 @@ def getCidrFromRange(lower, upper, echo)
 end
 
 def getMergedCidr(lower, upper, echo=true)
-	getCidrFromRange(lower, upper, echo)
+	getCidrFromRange(lower, upper, true)
 
 	puts "Getting range for #{lower}-#{upper}" if echo
 	ip_net_range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
