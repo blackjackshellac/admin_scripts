@@ -54,11 +54,21 @@ $opts={
 	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json")
 }
 
+# delay: two element array as input
+#
+# sdelay: delay[0] is start delay in seconds
+# edelay: delay[1] is end delay in seconds
+#
+# If edelay is unset (nil) sdelay is split in half around zero
+#
+# sdelay=100 and edelay is nil
+# sdelay becomes -50 and edelay becomes 50
+#
 def random_delay_range(delay)
 	return 0 if delay.nil?
 	raise "delay should be nil or Array" unless delay.class == Array
 
-	delay.each_index { |i|
+	[ 0, 1 ].each { |i|
 		next if delay[i].nil?
 		delay[i]=delay[i].to_i
 	}
@@ -67,6 +77,7 @@ def random_delay_range(delay)
 	$log.die "delay array cannot be null" if sdelay.nil?
 	$log.die "Start delay is not an integer: #{sdelay.class}" unless sdelay.is_a?(Integer)
 
+	# edelay is nil, split delay around 0 seconds
 	edelay=delay[1]
 	if edelay.nil?
 		# --sunrise 1800 will be a random delay from -900 to 900 seconds around the time of sunrise
@@ -105,17 +116,26 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:state]=RFOutlet::ON
 	}
 
+	# turn on at sunrise, turn off at sunrise + random duration
 	opts.on('--sunrise [RANDOM]', Array, "Random seconds around time of sunrise") { |delay|
 		$opts[:sunrise]=random_delay_range(delay)
+		$opts[:sunrise_off]=delay[2] unless delay[2].nil?
+		puts "sunrise delay="+delay.inspect
 	}
 
 	opts.on('--sunset [RANDOM]', Array, "Random seconds around time of sunset") { |delay|
 		$opts[:sunset]=random_delay_range(delay)
+		$opts[:sunset_off]=delay[2] unless delay[2].nil?
 	}
 
 	opts.on('--latlong LAT,LONG', Array, "Latitude and Longitude") { |array|
 		$opts[:lat] = array[0].to_f
 		$opts[:long] = array[1].to_f
+	}
+
+	# Array - time,random seconds
+	opts.on('--duration [RANDOM]', Array, "Random duration to toggle after sunrise, sunset") { |duration|
+		$opts[:duration] = random_delay_range(duration)
 	}
 
 	opts.on('-d', '--delay TIMEOUT', Integer, "Random delay in seconds") { |delay|
@@ -171,6 +191,8 @@ end
 $opts[:lat] = rfoc.lat if $opts[:lat].nil?
 $opts[:long] = rfoc.long if $opts[:long].nil?
 
+SchedSun.init($opts)
+
 if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 	#today = Date.today
 	now   = Time.now
@@ -204,22 +226,43 @@ if !$opts[:sunrise].nil? || !$opts[:sunset].nil?
 		secs2sunrise-=$opts[:sunrise]
 		secs2sunrise = 0 if secs2sunrise < 0
 
-		$opts[:sunrise]=secs2sunrise
+		#$opts[:sunrise]=secs2sunrise
 		$opts[:sched][secs2sunrise]=RFOutlet::ON
 
+		duration=$opts[:duration]||7200
+		if $opts.key?(:sunrise_off)
+			$log.debug "Parsing sunrise off time: #{$opts[:sunrise_off]}"
+			toff = Time.parse($opts[:sunrise_off])
+			toff += 86400 if toff < sunrise
+			duration = (toff.to_i-sunrise.to_i) # - $opts[:sunrise]
+			toff = Time.at(sunrise+duration)
+			$log.debug "Sunrise off at #{toff}: #{duration} seconds - delay #{$opts[:sunrise]} secs"
+		end
+
 		#TODO set timeout to turn off - 2 hours in the morning
-		$opts[:sched][secs2sunrise+7200]=RFOutlet::OFF
+		$opts[:sched][secs2sunrise+duration]=RFOutlet::OFF
 	end
 
 	unless $opts[:sunset].nil?
 		$log.debug "Random sunset adjustment #{$opts[:sunset]}"
 		secs2sunset -= $opts[:sunset]
 		secs2sunset = 0 if secs2sunset < 0
-		$opts[:sunset]=secs2sunset
+
+		#$opts[:sunset]=secs2sunset
 		$opts[:sched][secs2sunset]=RFOutlet::ON
 
+		duration = $opts[:duration]||21600
+		if $opts.key?(:sunset_off)
+			$log.debug "Parsing sunset off time: #{$opts[:sunset_off]}"
+			toff = Time.parse($opts[:sunset_off])
+			toff += 86400 if toff < sunset
+			duration = (toff.to_i-sunset.to_i)
+			toff = Time.at(sunset+duration)
+			$log.debug "Sunset off at #{toff}: #{duration} seconds - delay #{$opts[:sunset]} secs"
+		end
+
 		#TODO set timeout to turn off - 6 hours in the evening
-		$opts[:sched][secs2sunset+21600]=RFOutlet::OFF
+		$opts[:sched][secs2sunset+duration]=RFOutlet::OFF
 	end
 
 	#puts $opts[:sched].inspect
@@ -232,17 +275,20 @@ if $opts[:daemonize]
 	Daemons.daemonize
 end
 
+# create a file logger if it has been specified
 $log=Logger.set_logger($opts[:log], Logger::INFO) unless $opts[:log].nil?
+
+# reset log level if debugging
 $log.level = Logger::DEBUG if $opts[:debug]
 $opts[:logger]=$log
-RFOutletConfig.init($opts)
+# update the logger
+RFOutletConfig.init({:logger=>$log})
 
 $opts[:outlets] = rfoc.all if $opts[:all]
 
 unless $opts[:names].empty?
 	$opts[:names].each { |name|
-		regex=/#{name}/i
-		outlets=rfoc.match(regex)
+		outlets=rfoc.match_name(name)
 		next if outlets.empty?
 		$log.debug "Found outlets for regex /#{name}/i : #{outlets.inspect}"
 		$opts[:outlets].concat(outlets)

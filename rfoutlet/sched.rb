@@ -6,6 +6,10 @@ class SchedSun
 	@@lat = 45.4966780
 	@@long = -73.5039060
 
+	def self.init(opts)
+		SchedSun.latlong(opts[:lat], opts[:long]) if opts.key?(:lat) && opts.key?(:long)
+	end
+
 	def self.latlong(lat, long)
 		@@lat = lat
 		@@long = long

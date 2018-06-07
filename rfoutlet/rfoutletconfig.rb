@@ -115,10 +115,19 @@ class RFOutletConfig
 
 	def all
 		labels=[]
+		# list all known outlets in the config as strings
 		@config[:outlets].keys.each { |label|
 			labels << label.to_s
 		}
 		labels
+	end
+
+	RE_NAMES={}
+	def match_name(name)
+		# normalize and memoize the name regex
+		name=name.strip.downcase
+		RE_NAMES[name]=/#{name}/i if RE_NAMES[name].nil?
+		match(RE_NAMES[name])
 	end
 
 	def match(regex)
