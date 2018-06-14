@@ -430,12 +430,20 @@ def shell_cmd(opts)
 	ret
 end
 
-def printBits(a, suffix="")
+def a2bits(a, sep=" ")
 	bits=""
 	a.each { |c|
-		bits += BINARY_H[c.to_i]+" "
+		cbits = BINARY_H[c.to_i]
+		#puts "#{c}: #{cbits}"
+		bits += cbits+sep
 	}
-	puts bits.strip+suffix
+	bits
+end
+
+def printBits(a, suffix="", sep=" ")
+	puts a2bits(a, sep).strip+suffix
+rescue => e
+	print e.to_s
 end
 
 def getCidrFromRange(lower, upper, echo)
@@ -457,36 +465,58 @@ def getCidrFromRange(lower, upper, echo)
 		puts "          1          2          3"
 	end
 
-	bits=0
+	# range 118.193.24.0-118.193.31.255
+	# la 01110110 11000001 00011000 00000000
+	# ua 01110110 11000001 00011111 11111111
+	# xa 00000000 00000000 00000111 11111111 xor
+	#    12345678 90123456 78901234 56789012
+	#              1          2          3
+	# 118.193.7.0/21 cidr
+
+	zero_bits=0
 	xxa=[]
 	xa.each_with_index { |xv, i|
 		if xv == 0
-			bits += 8
+			zero_bits += 8
 			xxa << la[i]
 		elsif xv == 255
 			xxa << 0
 		else
-			xxa << xv
+			xxa << la[i]
 			xvs = "%08b" % xv
 			xvs.each_char { |bit|
 				break if bit.eql?("1")
-				bits += 1
+				zero_bits += 1
 			}
 		end
 	}
-	cidr=xxa.join(".")+"/#{bits}"
-	puts "#{cidr} cidr" if echo
+	# if all bits after the zero_bits are ones, the cidr is correct
+	clean = true
+	abits = a2bits(xa, "")
+	abits.each_char.with_index { |bit, i|
+		next if i < zero_bits
+		next if bit.eql?("1")
+		clean = false
+		break
+	}
+	cidr=xxa.join(".")+"/#{zero_bits}"
+	puts "#{cidr} cidr #{clean}" if echo
 	puts "" if echo
-	cidr
+	clean ? cidr : nil
 end
 
 def getMergedCidr(lower, upper, echo=true)
-	getCidrFromRange(lower, upper, true)
-
-	puts "Getting range for #{lower}-#{upper}" if echo
-	ip_net_range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
-	puts "Getting merged cidr array" if echo
-	cidrs = NetAddr.merge(ip_net_range, :Objectify => true)
+	cidr = getCidrFromRange(lower, upper, true)
+	cidrs = []
+	if cidr.nil?
+		puts "Getting range for #{lower}-#{upper}" if echo
+		ip_net_range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
+		puts "Getting merged cidr array" if echo
+		cidrs = NetAddr.merge(ip_net_range, :Objectify => true)
+		GC.start
+	else
+		cidrs << cidr
+	end
 	cidrs
 rescue Interrupt => e
 	puts "Interrupted "+e.to_s
@@ -494,6 +524,12 @@ rescue Interrupt => e
 end
 
 def blackListCidr(cidr, opts)
+	table = scanDynamic(false)
+	if table.key?(cidr)
+		puts "Cidr #{cidr} is already blacklisted"
+		return
+	end
+
 	ans=$opts[:force]==true ? "y" : Readline.readline("Drop cidr #{cidr}? [y/n] ", false).strip.downcase
 	if ans.eql?("y")
 		puts "Dropping cidr=#{cidr}"
@@ -504,8 +540,9 @@ def blackListCidr(cidr, opts)
 end
 
 def search_table_cidr(table, addr, cs)
-	puts "Searching for #{addr} in cidr #{cs}"
-	table.each_pair { |key,val|
+	puts "Searching blacklist table for #{addr} in #{cs}"
+	table.sort.to_h.each_pair { |key,val|
+		#puts "#{cs} #{key} #{val}"
 		return cs if key.eql?(cs)
 	}
 	nil
