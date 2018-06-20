@@ -30,6 +30,7 @@ require_relative File.join(MD, "format_xlsx")
 require_relative File.join(MD, "abuseipdb")
 require_relative File.join(MD, "emailer")
 require_relative File.join(MD, "fwipset")
+require_relative File.join(MD, "ip2location")
 
 $log=Logger.set_logger(STDERR, Logger::INFO)
 
@@ -141,6 +142,7 @@ FWLog.init($opts)
 AbuseIPDB.init($opts)
 Emailer.init($opts)
 FWipset.init($opts)
+IP2Location.init($opts)
 
 input=[]
 if !$opts[:file].nil?

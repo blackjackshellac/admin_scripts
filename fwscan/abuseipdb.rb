@@ -131,10 +131,19 @@ class AbuseIPDB
 	end
 
 	def self.summarise_result(result, fwla, stream, prefix="")
+		ip = result[:ip]
 		if result[:error].nil?
 			count=result[:raw].count
 			fwlac = (fwla.nil? || fwla.empty?) ? 0 : fwla.count
-			stream.puts "%s%15s (%d) - [%d] %s (%s) [%s]" % [ prefix, result[:ip], fwlac, count, result[:isoCode], result[:country], result[:categories].join(",") ] if count > 0 || fwlac  > 0
+			country = result[:country]
+			isoCode = result[:isoCode]
+			categories = result[:categories]||[]
+			if country.nil? || country.empty? || isoCode.nil? || isoCode.empty?
+				res=IP2Location.lookup(ip)
+				country = IP2Location.long(res)
+				isoCode = IP2Location.short(res)
+			end
+			stream.puts "%s%15s (%d) - [%d] %s (%s) [%s]" % [ prefix, ip, fwlac, count, isoCode, country, categories.join(",") ] if count > 0 || fwlac  > 0
 		else
 			stream.puts "%s%15s Error: #{result[:error]}" % [ prefix, result[:ip] ]
 			stream.puts result.to_json
