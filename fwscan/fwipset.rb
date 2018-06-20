@@ -113,18 +113,42 @@ class FWipset
 
 		vipset = FWipset.load_ipset(opts[:ipset], opts[:ssh])
 		updated=false
-		entries.each_pair { |ip, entry|
+		entries.each_pair { |ip, entrya|
 			result = results[ip]
 			next if result.nil? || result[:raw].nil?
 			reports = result[:raw].count
-			if entry.count > 2 && reports > 2 || reports >= 10
+			if entrya.count > 2 && reports > 0 || reports >= 10
 				if !FWipset.exists?(ip, opts[:ipset], opts[:ssh])
 					stream.puts "Block ip #{ip} in #{opts[:ipset]}"
 					stream.puts FWipset.add(ip, opts[:ipset], opts[:ssh])
 					updated=true
 				end
-			elsif entry.count >= 10 && reports == 0
-				stream.puts "Consider reporting #{ip} at AbuseIPDB"
+			end
+			if entrya.count >= 5 || reports > 10
+				stream.puts "Reporting #{ip} at AbuseIPDB"
+				# TODO summarise ports for array of fwlog entries
+				comment=""
+				entrya.each { |entry|
+					comment += entry.ts_dpt_proto+"\n"
+				}
+				# TODO report to abuseipdb automatically
+				# https://www.abuseipdb.com/report/json?key=[API_KEY]&category=[CATEGORIES]&comment=[COMMENT]&ip=[IP]
+				# category=14
+				# [IP]	Yes	NA	8.8.8.8 ::1	IPv4 or IPv6 Address
+				# [DAYS]	No	30	30	Check for IP Reports in the last 30 days
+				# [API_KEY]	Yes	NA	Tzmp1...quWvaiO	Your API Key (Get an API Key)
+				# [CATEGORIES]	Yes	NA	10,12,15	Comma delineated list of category IDs (See all Categories)
+				# [COMMENT]	No	blank	Brute forcing Wordpress login	Describe the type of malicious activity
+				# [CIDR]	Yes	NA	207.126.144.0/20	IPv4 Address Block in CIDR notation
+				# verbose flag	No	FALSE	/json?key=[API_KEY]&days=[DAYS]&verbose	When set, reports will include the comment (if any) and the reporter's user id number (0 if reported anonymously)
+				result = AbuseIPDB.report(ip, [ AbuseIPDB::CATEGORIES[:PORT_SCAN], AbuseIPDB::CATEGORIES[:HACKING]], comment, {:stream=>stream})
+				if !result[:error].nil?
+					stream.puts "Failed to report #{ip}: "+result[:error]
+				else
+					stream.puts result.to_json
+				end
+				sleep opts[:sleep_secs]||2
+
 			end
 		}
 

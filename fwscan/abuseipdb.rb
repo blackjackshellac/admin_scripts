@@ -6,24 +6,37 @@ require 'tempfile'
 require 'json'
 require 'fileutils'
 
+class String
+  def truncate(max)
+	 length > max ? "#{self[0...max]}..." : self
+  end
+end
+
 class AbuseIPDB
 	ABUSEIPDB_DOM="https://www.abuseipdb.com"
 	ABUSEIPDB_CHECK="/check/%s/json"
+	ABUSEIPDB_REPORT="/report/json"
+	CATEGORIES = {
+		:PORT_SCAN => 14,
+		:HACKING => 15
+	}
 	#ABUSEIPDB_URL="https://www.abuseipdb.com/%s/json?key=%s&days=%s"
 
 	@@api_key=nil
 	@@log = Logger.new(STDOUT)
 
-	@@memoizer_store = nil
-	@@memoizer = {}
+	@@memoizer_check = nil
+	@@memoizer_report = nil
+	@@memoizer_check_data = {}
+	@@memoizer_report_data = {}
 
 	def initialize
 	end
 
 	def self.load_memoizer
-		return if @@memoizer_store.nil? || !File.exists?(@@memoizer_store)
+		return if @@memoizer_check.nil? || !File.exists?(@@memoizer_check)
 
-		json = File.read(@@memoizer_store)
+		json = File.read(@@memoizer_check)
 		memoizer = JSON.parse(json, :symbolize_names => true)
 		now = Time.now.to_i
 		# check them once per day
@@ -38,16 +51,16 @@ class AbuseIPDB
 		}
 		# convert hash key symbols to strings
 		memoizer.each_pair { |ip,result|
-			@@memoizer[ip.to_s]=result
+			@@memoizer_check_data[ip.to_s]=result
 		}
-		puts "after "+@@memoizer.count.to_s
+		puts "after "+@@memoizer_check_data.count.to_s
 	end
 
 	def self.save_memoizer
-		return if @@memoizer_store.nil?
-		puts " >> saving "+@@memoizer_store
-		File.open(@@memoizer_store, "w") { |fd|
-			fd.puts JSON.pretty_generate(@@memoizer)
+		return if @@memoizer_check.nil?
+		puts " >> saving "+@@memoizer_check
+		File.open(@@memoizer_check, "w") { |fd|
+			fd.puts JSON.pretty_generate(@@memoizer_check_data)
 		}
 	end
 
@@ -57,8 +70,10 @@ class AbuseIPDB
 		@@log.info "API KEY=#{@@api_key}"
 
 		username=ENV['LOGNAME']||ENV['USERNAME']||ENV['USER']
-		@@memoizer_store = "%s/abuseipdb_store.json" % (username.nil? ? "/var/tmp" : "/var/tmp/#{username}")
-		FileUtils.mkdir_p File.dirname(@@memoizer_store)
+		@@memoizer_check = "%s/abuseipdb_store.json" % (username.nil? ? "/var/tmp" : "/var/tmp/#{username}")
+		dirname = File.dirname(@@memoizer_check)
+		FileUtils.mkdir_p dirname
+		@@memoizer_report = "#{dirname}/abuseipdb_report.json"
 
 		load_memoizer
 	end
@@ -126,15 +141,15 @@ class AbuseIPDB
 	end
 
 	def self.memoized(ip)
-		@@memoizer[ip]
+		@@memoizer_check_data[ip]
 	end
 
 	def self.check(ip)
 		return { :error=> "API key not set" } if @@api_key.nil?
 
-		if @@memoizer.key?(ip)
+		if @@memoizer_check_data.key?(ip)
 			@@log.info "Address is already scanned: #{ip}"
-			return @@memoizer[ip]
+			return @@memoizer_check_data[ip]
 		end
 
 		puts "AbuseIPDB: checking #{ip}"
@@ -184,7 +199,7 @@ class AbuseIPDB
 				}
 			end
 			begin
-				resp=JSON.parse(json)
+				resp=JSON.parse(json) #, :symbolize_names => true)
 				case resp
 				when Array
 					if resp[0] && (resp[0].key?("status") || resp[0].key?("code"))
@@ -226,7 +241,7 @@ class AbuseIPDB
 			end
 		end
 		if result[:error].nil? && !result[:raw].empty?
-			@@memoizer[ip]=result
+			@@memoizer_check_data[ip]=result
 
 			save_memoizer
 		end
@@ -236,6 +251,103 @@ class AbuseIPDB
 			result[:error]=e.message
 		end
 		result
+	end
+
+	# https://www.abuseipdb.com/report/json?key=[API_KEY]&category=[CATEGORIES]&comment=[COMMENT]&ip=[IP]
+	def self.report(ip, categories, comment, opts)
+		return { :error=> "API key not set" } if @@api_key.nil?
+
+		if @@memoizer_report_data.key?(ip)
+			@@log.info "Address is already scanned: #{ip}"
+			return @@memoizer_report_data[ip]
+		end
+
+		categories = categories.split(/\s*,\s*/) if categories.class == String
+
+		return { :error => "param categories should be an Array or a String" } if categories.class != Array
+
+		stream = opts[:stream]||STDOUT
+
+		stream.puts "AbuseIPDB: reporting #{ip}"
+		params = {
+			:key=>@@api_key,
+			:ip=>ip,
+			:category => categories.join(",")
+		}
+		params[:comment] = comment.truncate(256) unless comment.nil?
+
+		uri_str = "#{ABUSEIPDB_DOM}#{ABUSEIPDB_REPORT}?"+params.map{|k,v| "#{k}=#{CGI::escape(v.to_s)}"}.join('&')
+		uri = URI(uri_str)
+
+		# https://www.abuseipdb.com/report/json?key=xyz&ip=10.11.12.13&category=14%2C15
+		# {"ip":"10.11.12.13","success":true}
+		stream.puts uri_str
+		#stream.puts uri.to_s
+		result = {}
+		#puts uri.inspect
+		begin
+		Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https', :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
+			request = Net::HTTP::Get.new uri.request_uri
+			response = http.request request
+			#puts response.inspect
+			json=response.body
+			if json.empty?
+				result[:error]={
+					"status"=>1,
+					"code"=>1,
+					"title"=>"empty response"
+				}
+			end
+			begin
+				resp=JSON.parse(json) #, :symbolize_names => true)
+				case resp
+				when Array
+					if resp[0] && (resp[0].key?("status") || resp[0].key?("code"))
+						#[
+						#  {
+						#    "id": "Too Many Requests",
+						#    "links": {
+						#      "about": "https://www.abuseipdb.com/api"
+						#    },
+						#    "status": "429",
+						#    "code": "1050",
+						#    "title": "The user has sent too many requests in a given amount of time.",
+						#    "detail": "You have exceeded the rate limit for this service."
+						#  }
+						#]
+						resp = resp[0]
+						resp[:error] = "Received error"
+					end
+				when Hash
+					# make sure response is an Array
+				else
+					resp = {
+						:error => "Unknown resp class: #{resp.class}"
+					}
+					@@log.error resp[:error]
+				end
+
+				resp.each_pair { |key, val|
+					next if val.nil?
+					result[key.to_sym] = val
+				}
+			rescue => e
+				@@log.error "Failed to parse json response: #{json}"
+				@@log.error e.to_s
+			end
+		end
+		if result[:error].nil?
+			@@memoizer_report_data[ip]=result
+
+			#save_memoizer
+		end
+		rescue Net::ReadTimeout => e
+			result[:error]=e.message
+		rescue => e
+			result[:error]=e.message
+		ensure
+			result||{:error => "empty result"}
+		end
 	end
 
 	def self.check_entries(iplist, opts)

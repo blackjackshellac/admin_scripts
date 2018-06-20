@@ -56,7 +56,7 @@ $opts={
 	:ipdb_apikey=>nil,
 	:email=>nil,
 	:ipset=>nil,
-	:sleep_secs => 10
+	:sleep_secs => 4
 }
 
 $opts = OParser.parse($opts, "") { |opts|

@@ -17,7 +17,7 @@ class FWLog
 	FWLOG_KEYS = [ :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len ]
 
 	attr_reader :entry
-	attr_reader :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len
+	attr_reader :line, :ts, :home, :in, :out, :mac, :src, :dst, :proto, :tos, :ttl, :id, :spt, :dpt, :len
 	def initialize(e, opts={})
 		@entry = {}
 		e.keys.each { |key|
@@ -41,8 +41,10 @@ class FWLog
 		@lookup = opts[:lookup]||false
 	end
 
+	#  [match not found: kernel: Shorewall:net-fw:DROP:IN=enp2s0 OUT= MAC=00:17:31:9c:91:6f:00:17:10:8e:27:16:08:00 SRC=134.119.191.175 DST=173.179.124.83 LEN=48 TOS=0x00 PREC=0x00 TTL=54 ID=38006 PROTO=ICMP TYPE=0 CODE=0 ID=0 SEQ=0
+
 	def self.re_matcher(line, re)
-		raise "match not found: #{line} [#{re.to_s}]" if line[re].nil?
+		raise "#{re.to_s}: match not found: #{line}" if line[re].nil?
 		m=$1
 		return m
 	end
@@ -58,6 +60,7 @@ class FWLog
 		#@@log.debug ">> #{datetime} #{host}:\n\t#{klog}"
 
 		e={}
+		e[:line]=line
 		e[:ts]=datetime
 		e[:host]=host
 		e[:in]=re_matcher(klog, /^.*?IN=(#{REGEX_WORD_NUMBER})/)
@@ -74,6 +77,10 @@ class FWLog
 		e[:len]=re_matcher(klog, /^.*?LEN=(#{REGEX_NUMBER})/)
 
 		e
+	end
+
+	def ts_dpt_proto
+		"%s %s/%s" % [ @ts.strftime("%a %d %H:%M:%S"), @dpt, @proto ]
 	end
 
 	def self.filter(line, opts)
