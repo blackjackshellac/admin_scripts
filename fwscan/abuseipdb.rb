@@ -25,52 +25,63 @@ class AbuseIPDB
 	@@api_key=nil
 	@@log = Logger.new(STDOUT)
 
-	@@memoizer_check = nil
-	@@memoizer_report = nil
-	@@memoizer_check_data = {}
-	@@memoizer_report_data = {}
+	@@memoizer_file = {
+		:check => nil,
+		:report => nil
+	}
+	#@@memoizer_check = nil
+	#@@memoizer_report = nil
+	@@memoizer_data = {
+		:check => {},
+		:report => {}
+	}
+	#@@memoizer_check_data = {}
+	#@@memoizer_report_data = {}
 
 	def initialize
 	end
 
-	def self.load_memoizer
-		return if @@memoizer_check.nil? || !File.exists?(@@memoizer_check)
+	def self.load_memoizer(action)
+		return if @@memoizer_file[action].nil? || !File.exists?(@@memoizer_file[action])
 
-		json = File.read(@@memoizer_check)
+		json = File.read(@@memoizer_file[action])
 		memoizer = JSON.parse(json, :symbolize_names => true)
 		now = Time.now.to_i
 		# check them once per day
 		timeout = 86400
 		puts "before "+memoizer.count.to_s
 		memoizer = memoizer.delete_if { |ip, result|
-			age=now-result[:time]
-			delete=(age > timeout)
-			action=delete ? "deleting" : "keeping"
-			puts "#{action} ip=#{ip} time=#{result[:time]} now=#{now} age=#{age}"
+			if result[:time].nil?
+				puts "Warning: age of record not set, deleting: "+result.inspect
+			else
+				age=now-result[:time]
+				delete=(age > timeout)
+				str=delete ? "deleting" : "keeping"
+				puts "#{str} ip=#{ip} time=#{result[:time]} now=#{now} age=#{age}"
+			end
 			delete
 		}
 		# convert hash key symbols to strings
+		raise " fuck " if @@memoizer_data[action].nil? && @@memoizer_data[action].class != Hash
 		memoizer.each_pair { |ip,result|
-			@@memoizer_check_data[ip.to_s]=result
+			@@memoizer_data[action][ip.to_s]=result
 		}
-		puts "after "+@@memoizer_check_data.count.to_s
+		puts "after "+@@memoizer_data[action].count.to_s
 	end
 
-	#def self.save_memoizer
-	#	return if @@memoizer_check.nil?
-	#	puts " >> saving "+@@memoizer_check
-	#	File.open(@@memoizer_check, "w") { |fd|
-	#		fd.puts JSON.pretty_generate(@@memoizer_check_data)
-	#	}
-	#end
-
-	# type is :check or :report
-	def self.save_memoizer(type)
-		file=self.class_variable_get("@@memoizer_#{type}")
-		data=self.class_variable_get("@@memoizer_#{type}_data")
+	# action is :check or :report
+	def self.save_memoizer(action)
+		file=@@memoizer_file[action]
+		data=@@memoizer_data[action]
 		return if file.nil?
+		raise "memoizer_data is nil for action=#{action.inspect}" if data.nil?
 		puts " >> saving "+file
 		File.open(file, "w") { |fd|
+			data.each_pair { |ip, result|
+				next unless result[:time].nil?
+				puts "Missing timestamp in result: #{result.inspect}"
+				result[:time]=Time.now.to_i
+			}
 			fd.puts JSON.pretty_generate(data)
 		}
 	end
@@ -81,12 +92,14 @@ class AbuseIPDB
 		@@log.info "API KEY=#{@@api_key}"
 
 		username=ENV['LOGNAME']||ENV['USERNAME']||ENV['USER']
-		@@memoizer_check = "%s/abuseipdb_store.json" % (username.nil? ? "/var/tmp" : "/var/tmp/#{username}")
-		dirname = File.dirname(@@memoizer_check)
+		dirname=(username.nil? ? "/var/tmp" : "/var/tmp/#{username}")
 		FileUtils.mkdir_p dirname
-		@@memoizer_report = "#{dirname}/abuseipdb_report.json"
 
-		load_memoizer
+		[:check, :report].each { |action|
+			@@memoizer_file[action] = "#{dirname}/abuseipdb_#{action}.json"
+			load_memoizer(action)
+		}
+
 	end
 
 	def self.apikey(key)
@@ -151,16 +164,17 @@ class AbuseIPDB
 
 	end
 
-	def self.memoized(ip)
-		@@memoizer_check_data[ip]
+	def self.memoized(ip, action)
+		@@memoizer_data[action][ip]
 	end
 
 	def self.check(ip)
 		return { :error=> "API key not set" } if @@api_key.nil?
 
-		if @@memoizer_check_data.key?(ip)
+		result = memoized(ip, :check)
+		if !result.nil?
 			@@log.info "Address is already scanned: #{ip}"
-			return @@memoizer_check_data[ip]
+			return result
 		end
 
 		puts "AbuseIPDB: checking #{ip}"
@@ -252,7 +266,8 @@ class AbuseIPDB
 			end
 		end
 		if result[:error].nil? && !result[:raw].empty?
-			@@memoizer_check_data[ip]=result
+			result[:time] = Time.now.to_i
+			@@memoizer_data[:check][ip]=result
 
 			save_memoizer(:check)
 		end
@@ -268,9 +283,10 @@ class AbuseIPDB
 	def self.report(ip, categories, comment, opts)
 		return { :error=> "API key not set" } if @@api_key.nil?
 
-		if @@memoizer_report_data.key?(ip)
+		result = memoized(ip, :report)
+		if !result.nil?
 			@@log.info "Address is already scanned: #{ip}"
-			return @@memoizer_report_data[ip]
+			return @@memoizer_data[:report][ip]
 		end
 
 		categories = categories.split(/\s*,\s*/) if categories.class == String
@@ -348,7 +364,7 @@ class AbuseIPDB
 			end
 		end
 		if result[:error].nil?
-			@@memoizer_report_data[ip]=result
+			@@memoizer_data[:report][ip]=result
 
 			save_memoizer(:report)
 		end
@@ -366,7 +382,7 @@ class AbuseIPDB
 		iplist.each { |ip|
 
 			# limited to 60 checks per minute
-			result = AbuseIPDB.memoized(ip)
+			result = AbuseIPDB.memoized(ip, :check)
 			if result.nil?
 				result = AbuseIPDB.check(ip)
 				sleep opts[:sleep_secs]
