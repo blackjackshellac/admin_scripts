@@ -56,11 +56,22 @@ class AbuseIPDB
 		puts "after "+@@memoizer_check_data.count.to_s
 	end
 
-	def self.save_memoizer
-		return if @@memoizer_check.nil?
-		puts " >> saving "+@@memoizer_check
-		File.open(@@memoizer_check, "w") { |fd|
-			fd.puts JSON.pretty_generate(@@memoizer_check_data)
+	#def self.save_memoizer
+	#	return if @@memoizer_check.nil?
+	#	puts " >> saving "+@@memoizer_check
+	#	File.open(@@memoizer_check, "w") { |fd|
+	#		fd.puts JSON.pretty_generate(@@memoizer_check_data)
+	#	}
+	#end
+
+	# type is :check or :report
+	def self.save_memoizer(type)
+		file=self.class_variable_get("@@memoizer_#{type}")
+		data=self.class_variable_get("@@memoizer_#{type}_data")
+		return if file.nil?
+		puts " >> saving "+file
+		File.open(file, "w") { |fd|
+			fd.puts JSON.pretty_generate(data)
 		}
 	end
 
@@ -243,7 +254,7 @@ class AbuseIPDB
 		if result[:error].nil? && !result[:raw].empty?
 			@@memoizer_check_data[ip]=result
 
-			save_memoizer
+			save_memoizer(:check)
 		end
 		rescue Net::ReadTimeout => e
 			result[:error]=e.message
@@ -339,15 +350,14 @@ class AbuseIPDB
 		if result[:error].nil?
 			@@memoizer_report_data[ip]=result
 
-			#save_memoizer
+			save_memoizer(:report)
 		end
 		rescue Net::ReadTimeout => e
 			result[:error]=e.message
 		rescue => e
 			result[:error]=e.message
-		ensure
-			result||{:error => "empty result"}
 		end
+		result.nil? ? {:error => "empty result"} : result
 	end
 
 	def self.check_entries(iplist, opts)
