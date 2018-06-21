@@ -182,7 +182,7 @@ class AbuseIPDB
 
 		result = memoized(ip, :check)
 		if !result.nil?
-			@@log.info "Address is already scanned: #{ip}"
+			puts "Address is already scanned: #{ip}"
 			return result
 		end
 
@@ -217,7 +217,8 @@ class AbuseIPDB
 			:isoCode=>"",
 			:raw=>[],
 			:error=>nil,
-			:time=>Time.now.to_i
+			:time=>Time.now.to_i,
+			:success=>false
 		}
 		begin
 		Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https', :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
@@ -267,6 +268,7 @@ class AbuseIPDB
 					[:country, :isoCode].each { |key|
 						result[key]=get_resp_value(resp, key)
 					}
+					result[:success]=true
 				end
 
 			rescue => e
@@ -274,7 +276,7 @@ class AbuseIPDB
 				@@log.error e.to_s
 			end
 		end
-		if result[:error].nil? && !result[:raw].empty?
+		if result[:error].nil? && !result[:raw].empty? && result[:success]
 			result[:time] = Time.now.to_i
 			@@memoizer_data[:check][ip]=result
 
@@ -319,7 +321,9 @@ class AbuseIPDB
 		# {"ip":"10.11.12.13","success":true}
 		stream.puts uri_str
 		#stream.puts uri.to_s
-		result = {}
+		result = {
+			:success=>false
+		}
 		#puts uri.inspect
 		begin
 		Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https', :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
@@ -372,7 +376,7 @@ class AbuseIPDB
 				@@log.error e.to_s
 			end
 		end
-		if result[:error].nil?
+		if result[:error].nil? && result[:success]
 			@@memoizer_data[:report][ip]=result
 
 			save_memoizer(:report)
