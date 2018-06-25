@@ -160,7 +160,17 @@ def join_last(lines, line, sep="")
 end
 
 lines=[]
-while line = gets
+while true
+	begin
+		line = gets
+	rescue Interrupt => e
+		# jump out on interrupt
+		line="."
+	rescue => e
+		raise e
+	end
+
+	break unless line
 	line.strip!
 
 	if line.empty?
