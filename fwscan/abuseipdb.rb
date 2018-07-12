@@ -135,13 +135,30 @@ class AbuseIPDB
 		if result[:error].nil?
 			count=result[:raw].count
 			fwlac = (fwla.nil? || fwla.empty?) ? 0 : fwla.count
+
+			res=IP2Location.lookup(ip)
+			ip2loc_country = IP2Location.long(res)
+			ip2loc_isoCode = IP2Location.short(res)
+
 			country = result[:country]
 			isoCode = result[:isoCode]
 			categories = result[:categories]||[]
-			if country.nil? || country.empty? || isoCode.nil? || isoCode.empty?
-				res=IP2Location.lookup(ip)
-				country = IP2Location.long(res)
-				isoCode = IP2Location.short(res)
+
+			if country.nil? || country.empty?
+				country = ip2loc_country
+			else
+				# compare with ip2loc_country but skip the mark character
+				unless country.eql?(ip2loc_country[1..-1])
+					country += ": #{ip2loc_country}" unless ip2loc_country.empty?
+				end
+			end
+			if isoCode.nil? || isoCode.empty?
+				isoCode = ip2loc_isoCode
+			else
+				#stream.puts ".#{isoCode}. .#{ip2loc_isoCode}."
+				unless isoCode.eql?(ip2loc_isoCode)
+					isoCode += ": #{ip2loc_isoCode}" unless ip2loc_isoCode.empty?
+				end
 			end
 			stream.puts "%s%15s (%d) - [%d] %s (%s) [%s]" % [ prefix, ip, fwlac, count, isoCode, country, categories.join(",") ] if count > 0 || fwlac  > 0
 		else
