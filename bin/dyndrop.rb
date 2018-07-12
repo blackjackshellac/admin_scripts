@@ -200,6 +200,16 @@ end
 
 BINARY_H={}
 (0..255).each { |v| BINARY_H[v]="%08b"%v }
+BITSHIFT_TABLE={
+	0=>0b00000001,
+	1=>0b10000000,
+	2=>0b01000000,
+	3=>0b00100000,
+	4=>0b00010000,
+	5=>0b00001000,
+	6=>0b00000100,
+	7=>0b00000010
+}
 
 RE_ADDR=/(addr\s*)?(?<a>\d+\.\d+\.\d+\.\d+)/
 RE_RANGE=/(range\s*)?(?<r1>\d+\.\d+\.\d+\.\d+)\s*-\s*(?<r2>\d+\.\d+\.\d+\.\d+)/
@@ -482,6 +492,15 @@ def getNextCidr(la, ua, echo)
 	#    12345678 90123456 78901234 56789012
 	#              1          2          3
 	# 118.193.7.0/21 cidr
+	#
+	# Example with hole in xor (0 at bit 17) after first 1 (at bit 15)
+	# ip0 00111010 00111000 00000000 00000000 58.56.0.0
+	# ip1 00111010 00111011 01111111 11111111 58.59.127.255
+	# xor 00000000 00000011 01111111 11111111 15th bit differs, 58.56.0.0/15
+	#     12345678 90123456 78901234 56789012
+	#               1          2          3
+	#
+	# For the next ip0, flip the 15th bit of the last ip0, and compare to ip1 again
 
 	# hole is true if a 0 is found in xa after the first one is found
 	hole = false
@@ -490,6 +509,7 @@ def getNextCidr(la, ua, echo)
 	xxa=[]
 	xa.each_with_index { |xv, i|
 		if xv == 0
+			# 8 zero bits in a 0 byte
 			bitc0 += 8
 			xxa << la[i]
 		elsif xv == 255
@@ -503,8 +523,10 @@ def getNextCidr(la, ua, echo)
 				else
 					# a 0 bit after a 1 has been found is a hole
 					if found_one
+						# found a zero bit after a 1, flag it as a hole
 						hole = true
 					else
+						# found a zero bit before a 1, tally it
 						bitc0 += 1
 					end
 				end
@@ -512,27 +534,36 @@ def getNextCidr(la, ua, echo)
 		end
 	}
 
-	puts "hole=#{hole} bitc0=#{bitc0}"
+	clean = !hole
+	puts "Clean=#{clean} hole=#{hole} bitc0=#{bitc0}"
 	if hole
-		# found a zero after a one in xa, flip the nth bit in
+		# found a zero after a one in xa, flip the next bit in la
 		bitc0 += 1
 		# 14 then octet is 1 and bitshift is 2 (1 << 2)
 		# 15 then octet is 1 and bitshift is 1 (1 << 1)
 		# 16 then octet is 1 and bitshift is 0 (1 << 0)
 		# 17 then octet is 2 and bitshift is 7 (1 << 7)
 		bitshift = bitc0 % 8
+		# bitc0 | bitc0 % 8 | bitshift | 1 << bitshift
+		# 8       0           8-0=0      0b00000001
+		# 9       1           8-1=7      0b10000000
+		# 10      2           8-2=6      0b01000000
+		# 11      3           8-3=5      0b00100000
+		# 12      4           8-4=4      0b00010000
+		# 13      5           8-5=3      0b00001000
+		# 14      6           8-6=2      0b00000100
+		# 15      7           8-7=1      0b00000010
+		# 16      0           8-0=0      0b00000001
 		octet = bitc0 / 8 - (bitshift == 0 ? 1 : 0)
-		bitshift = 8 - (bitshift == 0 ? 8 : bitshift)
 
 		puts "Before: octet=#{octet} bitshift=#{bitshift} la[octet]=#{byte_2_bitstring(la[octet])}"
-		bit = 1 << bitshift
+		bit=BITSHIFT_TABLE[bitshift]
 		la[octet] ^= bit
 		puts "After: bit=#{byte_2_bitstring(bit)} la[octet]=#{byte_2_bitstring(la[octet])}"
 	end
 	# if all bits after the zero_bits are ones, the cidr is complete
 	zero_bits = bitc0
 
-	clean = !hole
 	#abits = array_2_bitstring(xa, "")
 	#abits.each_char.with_index { |bit, i|
 	#	next if i < zero_bits
