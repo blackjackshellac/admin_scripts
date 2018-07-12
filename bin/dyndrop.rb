@@ -287,10 +287,10 @@ end
 
 RE_COUNTRY=/country:\s*(?<country>.*)?$/i
 RE_ADDRESS=/address:\s*(?<address>.*)?$/i
-def whois_parser(addr)
+def whois_parser(addr, whois_opts="")
 begin
 	data={}
-	out=%x/whois #{addr}/
+	out=%x/whois #{whois_opts} #{addr}/
 	data[:out]=out
 	m=nil
 	begin
@@ -303,6 +303,7 @@ begin
 	end
 	unless m.nil?
 		r=match2range(m, {})
+		# add :range, :lower and :upper
 		data.merge!(r)
 	end
 	m=RE_CIDR.match(out)
@@ -324,6 +325,11 @@ rescue => e
 		puts line
 	}
 ensure
+	if !data.key?(:range) && whois_opts.empty?
+		# no range found, let's try again using another server
+		puts data[:out]
+		return whois_parser(addr, " -n -h whois.apnic.net ")
+	end
 	return data
 end
 end
@@ -430,37 +436,41 @@ def shell_cmd(opts)
 	ret
 end
 
-def a2bits(a, sep=" ")
+def byte_2_bitstring(b)
+	b = b.to_i
+	raise "Byte out of range: #{b}\n" if b < 0 || b > 255
+	BINARY_H[b]
+end
+
+def array_2_bitstring(a, sep=" ")
 	bits=""
 	a.each { |c|
-		cbits = BINARY_H[c.to_i]
+		cbits = byte_2_bitstring(c)
 		#puts "#{c}: #{cbits}"
-		bits += cbits+sep
+		bits += cbits
+		next if sep.nil? || sep.empty?
+		bits += sep
 	}
 	bits
 end
 
 def printBits(a, suffix="", sep=" ")
-	puts a2bits(a, sep).strip+suffix
+	puts array_2_bitstring(a, sep).strip+suffix
 rescue => e
 	print e.to_s
 end
 
-def getCidrFromRange(lower, upper, echo)
-	puts "" if echo
-	puts "Getting cidr for range #{lower}-#{upper}" if echo
-	la=ipv4_to_a(lower)
-	printBits(la) if echo
-	ua=ipv4_to_a(upper)
-	printBits(ua) if echo
+def getNextCidr(la, ua, echo)
 	xa=[]
 	# xor each chunk lower ^ upper
 	la.each_index { |i|
 		#puts "la[#{i}]=#{la[i]} class=#{la[i].class}"
 		xa << (la[i] ^ ua[i])
 	}
-	printBits(xa, " xor") if echo
 	if echo
+		printBits(la)
+		printBits(ua)
+		printBits(xa, " xor")
 		puts "12345678 90123456 78901234 56789012"
 		puts "          1          2          3"
 	end
@@ -473,11 +483,14 @@ def getCidrFromRange(lower, upper, echo)
 	#              1          2          3
 	# 118.193.7.0/21 cidr
 
-	zero_bits=0
+	# hole is true if a 0 is found in xa after the first one is found
+	hole = false
+	found_one = false
+	bitc0 = 0
 	xxa=[]
 	xa.each_with_index { |xv, i|
 		if xv == 0
-			zero_bits += 8
+			bitc0 += 8
 			xxa << la[i]
 		elsif xv == 255
 			xxa << 0
@@ -485,37 +498,96 @@ def getCidrFromRange(lower, upper, echo)
 			xxa << la[i]
 			xvs = "%08b" % xv
 			xvs.each_char { |bit|
-				break if bit.eql?("1")
-				zero_bits += 1
+				if bit.eql?("1")
+					found_one = true
+				else
+					# a 0 bit after a 1 has been found is a hole
+					if found_one
+						hole = true
+					else
+						bitc0 += 1
+					end
+				end
 			}
 		end
 	}
-	# if all bits after the zero_bits are ones, the cidr is correct
-	clean = true
-	abits = a2bits(xa, "")
-	abits.each_char.with_index { |bit, i|
-		next if i < zero_bits
-		next if bit.eql?("1")
-		clean = false
-		break
-	}
+
+	puts "hole=#{hole} bitc0=#{bitc0}"
+	if hole
+		# found a zero after a one in xa, flip the nth bit in
+		bitc0 += 1
+		# 14 then octet is 1 and bitshift is 2 (1 << 2)
+		# 15 then octet is 1 and bitshift is 1 (1 << 1)
+		# 16 then octet is 1 and bitshift is 0 (1 << 0)
+		# 17 then octet is 2 and bitshift is 7 (1 << 7)
+		bitshift = bitc0 % 8
+		octet = bitc0 / 8 - (bitshift == 0 ? 1 : 0)
+		bitshift = 8 - (bitshift == 0 ? 8 : bitshift)
+
+		puts "Before: octet=#{octet} bitshift=#{bitshift} la[octet]=#{byte_2_bitstring(la[octet])}"
+		bit = 1 << bitshift
+		la[octet] ^= bit
+		puts "After: bit=#{byte_2_bitstring(bit)} la[octet]=#{byte_2_bitstring(la[octet])}"
+	end
+	# if all bits after the zero_bits are ones, the cidr is complete
+	zero_bits = bitc0
+
+	clean = !hole
+	#abits = array_2_bitstring(xa, "")
+	#abits.each_char.with_index { |bit, i|
+	#	next if i < zero_bits
+	#	next if bit.eql?("1")
+	#	clean = false
+	#	break
+	#}
+
 	cidr=xxa.join(".")+"/#{zero_bits}"
 	puts "#{cidr} cidr #{clean}" if echo
 	puts "" if echo
-	clean ? cidr : nil
+	#clean ? cidr : nil
+	bits = clean ? zero_bits : zero_bits
+	{
+		:clean=>clean,
+		:cidr=>cidr,
+		:la=>la
+	}
+rescue => e
+	puts ">>"+e.to_s
+	e.backtrace.each { |x|
+		puts ">>"+x
+	}
+
+end
+
+def getCidrFromRange(lower, upper, cidrs, echo)
+	puts "" if echo
+	puts "Getting cidr for range #{lower}-#{upper}" if echo
+	la=ipv4_to_a(lower)
+	ua=ipv4_to_a(upper)
+
+	maxLoops = 16
+	curLoops = 0
+	loop {
+		res = getNextCidr(la, ua, echo)
+		cidrs << res[:cidr]
+		return cidrs if res[:clean]
+		la = res[:la]
+		curLoops += 1
+		break if curLoops >= maxLoops
+	}
+	puts "Failed to get cidrs for range #{lower}-#{upper}"
+	nil
 end
 
 def getMergedCidr(lower, upper, echo=true)
-	cidr = getCidrFromRange(lower, upper, true)
 	cidrs = []
-	if cidr.nil?
+	cidrs = getCidrFromRange(lower, upper, cidrs, true)
+	if cidrs.nil?
 		puts "Getting range for #{lower}-#{upper}" if echo
 		ip_net_range = NetAddr.range(lower, upper, :Inclusive => true, :Objectify => true)
 		puts "Getting merged cidr array" if echo
 		cidrs = NetAddr.merge(ip_net_range, :Objectify => true)
 		GC.start
-	else
-		cidrs << cidr
 	end
 	cidrs
 rescue Interrupt => e
