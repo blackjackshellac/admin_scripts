@@ -117,15 +117,20 @@ class FWipset
 			result = results[ip]
 			next if result.nil? || result[:raw].nil?
 			reports = result[:raw].count
+
+			loc=IP2Location.lookup(ip)
+			ip2loc_country = IP2Location.long(loc)
+			ip2loc_isoCode = IP2Location.short(loc)
+
 			if entrya.count > 2 && reports > 0 || reports >= 10
 				if !FWipset.exists?(ip, opts[:ipset], opts[:ssh])
-					stream.puts "Block ip #{ip} in #{opts[:ipset]}"
+					stream.puts "Add to ipset #{opts[:ipset]}: #{ip} - #{ip2loc_isoCode} (#{ip2loc_country})"
 					stream.puts FWipset.add(ip, opts[:ipset], opts[:ssh])
 					updated=true
 				end
 			end
 			if entrya.count >= 5 || reports > 10
-				stream.puts "Reporting #{ip} at AbuseIPDB"
+				stream.puts "AbuseIPDB: reporting #{ip} - #{ip2loc_isoCode} (#{ip2loc_country})"
 				# TODO summarise ports for array of fwlog entries
 				comment=""
 				entrya.each { |entry|
