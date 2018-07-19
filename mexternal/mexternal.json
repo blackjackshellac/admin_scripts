@@ -3,7 +3,6 @@
     "default": "backup",
     "backup": {
       "mountpoint": "/mnt/backup",
-      "options": "-o ro",
       "scripts": [
         "~/bin/rsync_audio.sh"
       ],
@@ -18,7 +17,9 @@
         "/dev/disk/by-id/ata-ST3000DM001-1CH166_W1F2YH1D-part1",
         "/dev/disk/by-id/ata-ST3000DM001-1E6166_Z1F63QM1",
         "/dev/disk/by-id/usb-Seagate_Expansion_Desk_NA4K436W-0:0-part1",
-        "/dev/disk/by-id/ata-ST5000DM000-1FK178_W4J1HVGR"
+        "/dev/disk/by-id/ata-ST5000DM000-1FK178_W4J1HVGR",
+        "/dev/disk/by-id/usb-Seagate_Backup+_Desk_NA7DLER9-0:0",
+        "/dev/disk/by-id/usb-Seagate_Backup+_Desk_NA7H1DXB-0:0"
       ]
     }
   },
