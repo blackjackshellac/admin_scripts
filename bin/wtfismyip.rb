@@ -6,7 +6,7 @@ require 'time'
 WTF_EMAIL=ENV['WTF_EMAIL']||""
 WTF_HOST=ENV['WTF_HOST']||""
 
-WTF_MYIP="/tmp/wtf_myip.json"
+WTF_MYIP="/var/tmp/wtf_myip.json"
 WTF_TIME=Time.now
 WTF_NOW=WTF_TIME.to_s
 WTF_TIMEOUT=600
