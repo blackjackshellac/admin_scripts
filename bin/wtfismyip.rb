@@ -58,12 +58,15 @@ def check_myip(url, myip)
 	cmd="curl --silent #{url}"
 	puts cmd
 	my_current_ip=%x/#{cmd}/.strip
-	puts ".%s. .%s." % [ myip[:ip], my_current_ip ]
+	if my_current_ip.empty?
+		puts "Error retrieving current IP"
+		return false
+	end
 	if myip[:ip].eql?(my_current_ip)
 		puts "My IP has not changed: #{my_current_ip}"
 		return false
 	end
-	puts "My IP has changed: #{my_current_ip}"
+	puts "[%s]->[%s]." % [ myip[:ip], my_current_ip ]
 	myip={
 		:ip=>my_current_ip,
 		:time=>WTF_NOW
