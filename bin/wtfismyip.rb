@@ -15,6 +15,8 @@ WTF_DATA={
 	:ip=>""
 }
 
+hostname=ARGV[0]||nil
+
 def parse_time(time)
 	begin
 		Time.parse(time)
@@ -54,7 +56,7 @@ def read_myip
 	myip
 end
 
-def validate_myip(my_current_ip)
+def validate_ip(my_current_ip)
 	if my_current_ip.empty?
 		puts "Error: retrieving current IP"
 		return false
@@ -67,22 +69,21 @@ def validate_myip(my_current_ip)
 	true
 end
 
-def check_myip(url, myip)
+def check_myip(url, myip, hostip)
 	cmd="curl --silent #{url}"
 	puts cmd
 	my_current_ip=%x/#{cmd}/.strip
 
-	return false unless validate_myip(my_current_ip)
+	return false unless validate_ip(my_current_ip)
 
 	if myip[:ip].eql?(my_current_ip)
 		puts "My IP has not changed: #{my_current_ip}"
 		return false
 	end
 	puts "[%s]->[%s]." % [ myip[:ip], my_current_ip ]
-	myip={
-		:ip=>my_current_ip,
-		:time=>WTF_NOW
-	}
+	myip[:ip]=my_current_ip
+	myip[:time]=WTF_NOW
+	myip[:hostip]=hostip if hostip.class == Hash
 	write_myip(myip)
 	notify_email(myip)
 	return true
@@ -91,8 +92,8 @@ end
 def write_myip(myip)
 	puts "Writing to #{WTF_MYIP}"
 	File.open(WTF_MYIP, "w") { |fd|
-		#fd.puts JSON.pretty_generate(myip)
-		fd.puts myip.to_json
+		fd.puts JSON.pretty_generate(myip)
+		#fd.puts myip.to_json
 	}
 rescue => e
 	puts "ERROR: #{e.class}: #{e.message}"
@@ -103,10 +104,34 @@ def notify_email(myip)
 	return if WTF_EMAIL.nil? || WTF_EMAIL.empty?
 	json=JSON.pretty_generate(myip)
 	host=%x/hostname -s/.strip
+	if myip.key?(:hostip)
+		hostip=myip[:hostip]
+		ip=myip[:ip]
+		unless hostip.eql?(ip)
+			msg="dynamic hostip #{hostip} does not match ip #{ip}"
+		end
+	end
 	subj="#{host}: IP address has changed: #{myip[:ip]}"
-	%x/echo "#{json}" | mail -s "#{subj}" #{WTF_EMAIL}/
+	%x/echo -e "#{msg}\n#{json}" | mail -s "#{subj}" #{WTF_EMAIL}/
 rescue => e
 	puts "Error #{$?.exitstatus}: failed to notify #{WTF_EMAIL} [#{e.class}: #{e.to_s}]"
+end
+
+def lookup_host(name)
+	return false if name.nil? || name.empty?
+	begin
+		ip=IPSocket.getaddress(name)
+		return {
+			:host=>name,
+			:ip=>ip
+		} if validate_ip(ip)
+		puts "Error: invalid ip #{ip} for #{name}"
+	rescue SocketError
+		puts "Error: failed to lookup hostname #{name}"
+	rescue => e
+		puts "Error: #{e.class}: #{e.message}"
+	end
+	false
 end
 
 myip = read_myip
@@ -117,5 +142,14 @@ urls=[]
 #urls << "ipv4bot.whatismyipaddress.com"
 url="https://wtfismyip.com/text"
 
-check_myip(url, myip)
+hostip=lookup_host(hostname)
 
+check_myip(url, myip, hostip)
+
+if hostip
+	if myip[:ip].eql?(hostip[:ip])
+		puts "Hostname has not changed"
+	else
+		puts "Hostname ip has changed: #{hostname} #{hostip[:ip]} #{myip[:ip]}"
+	end
+end
