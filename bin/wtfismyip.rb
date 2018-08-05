@@ -105,7 +105,7 @@ def notify_email(myip)
 	json=JSON.pretty_generate(myip)
 	host=%x/hostname -s/.strip
 	if myip.key?(:hostip)
-		hostip=myip[:hostip]
+		hostip=myip[:hostip][:ip]
 		ip=myip[:ip]
 		unless hostip.eql?(ip)
 			msg="dynamic hostip #{hostip} does not match ip #{ip}"
