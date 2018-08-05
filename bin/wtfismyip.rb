@@ -54,14 +54,26 @@ def read_myip
 	myip
 end
 
+def validate_myip(my_current_ip)
+	if my_current_ip.empty?
+		puts "Error: retrieving current IP"
+		return false
+	end
+	if my_current_ip[/\d+\.\d+\.\d+\.\d+/].nil?
+		puts "Error: invalid IPv4 string #{my_current_ip}"
+		return false
+	end
+	#puts "IP address #{my_current_ip} is valid"
+	true
+end
+
 def check_myip(url, myip)
 	cmd="curl --silent #{url}"
 	puts cmd
 	my_current_ip=%x/#{cmd}/.strip
-	if my_current_ip.empty?
-		puts "Error retrieving current IP"
-		return false
-	end
+
+	return false unless validate_myip(my_current_ip)
+
 	if myip[:ip].eql?(my_current_ip)
 		puts "My IP has not changed: #{my_current_ip}"
 		return false
