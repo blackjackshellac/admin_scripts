@@ -1,0 +1,62 @@
+#!/bin/bash
+
+ME=$(basename $0)
+
+user=${PERMS_USR:-$LOGNAME}
+group=${PERMS_GRP:-$(groups | cut -f1 -d' ')}
+fmode=${PERMS_FIL:-644}
+dmode=${PERMS_DIR:-755}
+
+echo $user.$group.$fmode.$dmode
+
+info() {
+	echo -e $*
+}
+
+warn() {
+	info "Warn: $*"
+}
+
+err() {
+	info "Error: $*"
+}
+
+die() {
+	err $*
+	exit 1
+}
+
+# fail run
+frun() {
+	cmd=$1
+	shift
+	args=$1
+	shift
+	file=$*
+	info $cmd $args \"$file\"
+	$cmd $args "$file"
+	[ $? -ne 0 ] && die "Failed to run [$cmd $args $file]"
+}
+
+perms() {
+	f=$*
+	mode=$fmode
+	[ -d "$f" ] && mode=$dmode
+	frun chmod $mode "$f"
+	frun chown $user.$group "$f"
+}
+
+if [ $# -gt 0 ]; then
+	info "Files=$*"
+	info "# Files=$#"
+	for f; do
+		if [ ! -e "$f" ]; then
+			warn "file not found \"$f\""
+			continue
+		fi
+		perms $f
+	done
+else
+	die "Usage is: $ME file ..."
+fi
+
