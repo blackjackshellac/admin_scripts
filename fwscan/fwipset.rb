@@ -122,7 +122,7 @@ class FWipset
 			ip2loc_country = IP2Location.long(loc)
 			ip2loc_isoCode = IP2Location.short(loc)
 
-			if entrya.count > 2 && reports > 0 || reports >= 10
+			if entrya.count > 2 && reports > 0 || reports >= 5
 				if !FWipset.exists?(ip, opts[:ipset], opts[:ssh])
 					stream.puts "Add to ipset #{opts[:ipset]}: #{ip} - #{ip2loc_isoCode} (#{ip2loc_country})"
 					stream.puts FWipset.add(ip, opts[:ipset], opts[:ssh])
