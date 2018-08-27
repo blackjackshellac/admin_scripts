@@ -108,8 +108,8 @@ $opts = OParser.parse($opts, "") { |opts|
 		$opts[:ipset]=name
 	}
 
-	opts.on('-w', '--whitelist', Array, "List of hostnames or IPs to whitelist") { |whitelist|
-		whilelist.each { |entry|
+	opts.on('-w', '--whitelist LIST', Array, "List of hostnames or IPs to whitelist") { |list|
+		list.each { |entry|
 			# TODO validate entry here
 			$opts[:whitelist] << entry
 		}

@@ -415,6 +415,7 @@ class AbuseIPDB
             else
                 wips=wip
             end
+			#puts "%s => %s" % [ wip, wips ]
             if ip.eql?(wips)
                 @@log.info "IP #{ip} [#{wip}] is whitelisted"
                 return true
