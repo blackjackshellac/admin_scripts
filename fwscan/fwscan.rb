@@ -57,7 +57,8 @@ $opts={
 	:ipdb_apikey=>nil,
 	:email=>nil,
 	:ipset=>nil,
-	:sleep_secs => 4
+	:sleep_secs => 4,
+	:whitelist=>[]
 }
 
 $opts = OParser.parse($opts, "") { |opts|
@@ -105,6 +106,13 @@ $opts = OParser.parse($opts, "") { |opts|
 
 	opts.on('-P', '--ipset NAME', String, "ipset name on firewall to block ips dynamically") { |name|
 		$opts[:ipset]=name
+	}
+
+	opts.on('-w', '--whitelist', Array, "List of hostnames or IPs to whitelist") { |whitelist|
+		whilelist.each { |entry|
+			# TODO validate entry here
+			$opts[:whitelist] << entry
+		}
 	}
 
 	opts.on('-f', '--format FORMAT', String, "Output format: #{FORMATS.to_json}") { |type|

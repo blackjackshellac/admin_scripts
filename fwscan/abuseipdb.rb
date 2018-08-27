@@ -5,6 +5,7 @@ require 'net/http'
 require 'tempfile'
 require 'json'
 require 'fileutils'
+require 'resolv'
 
 class String
   def truncate(max)
@@ -406,6 +407,22 @@ class AbuseIPDB
 		result.nil? ? {:error => "empty result"} : result
 	end
 
+    def self.is_whitelisted(ip, whitelist)
+        return false if whitelist.nil?
+        whitelist.each { |wip|
+            if wip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
+                wips=Resolv.getaddress(wip)
+            else
+                wips=wip
+            end
+            if ip.eql?(wips)
+                @@log.info "IP #{ip} [#{wip}] is whitelisted"
+                return true
+            end
+        }
+        return false
+    end
+
 	def self.check_entries(iplist, opts)
 		errors=0
 		results={}
@@ -419,6 +436,8 @@ class AbuseIPDB
 			end
 
 			next if result.nil? || result.empty?
+
+            next if is_whitelisted(ip, opts[:whitelist])
 
 			unless result[:error].nil?
 				@@log.error result[:error]
