@@ -253,9 +253,13 @@ end
 #entries = {}
 #AbuseIPDB.summarise_result(result)
 
-results = AbuseIPDB.check_entries(entries.keys, $opts)
-
 Tempfile.open('fwscan') { |stream|
+
+	# resolve whitelisted hostnames
+	$opts[:wips] = AbuseIPDB.get_whitelisted_ips($opts[:whitelist], stream)
+
+	results = AbuseIPDB.check_entries(entries.keys, stream, $opts)
+
 	# summarise ip and counts
 	FWLog.summarise_entries(entries, results, stream)
 

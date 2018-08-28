@@ -407,27 +407,42 @@ class AbuseIPDB
 		result.nil? ? {:error => "empty result"} : result
 	end
 
-    def self.is_whitelisted(ip, whitelist)
-        return false if whitelist.nil?
-        whitelist.each { |wip|
-            if wip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
-                wips=Resolv.getaddress(wip)
-            else
-                wips=wip
-            end
-			#puts "%s => %s" % [ wip, wips ]
-            if ip.eql?(wips)
-                @@log.info "IP #{ip} [#{wip}] is whitelisted"
-                return true
-            end
-        }
-        return false
-    end
+	def self.get_whitelisted_ips(whitelist, stream)
+		wips={}
+		return wips if whitelist.nil?
 
-	def self.check_entries(iplist, opts)
+		stream.puts "Resolving whitelist: #{whitelist.inspect}"
+		whitelist.each { |ip|
+			hip = ip
+			if ip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
+				begin
+					hip = Resolve.getaddress(ip)
+				rescue
+					# do nothing
+				end
+			end
+			wips[hip] = ip
+		}
+		stream.puts "Resolved whitelist: #{wips.inspect}"
+		return wips
+	end
+
+	def self.is_whitelisted(ip, stream, wips)
+		return false if wips.nil?
+		wips.each_pair { |wip, host|
+			if ip.eql?(wip)
+				stream.puts "IP #{ip} [#{host}] is whitelisted"
+				return true
+			end
+		}
+		return false
+	end
+
+	def self.check_entries(iplist, stream, opts)
 		errors=0
 		results={}
 		iplist.each { |ip|
+			next if is_whitelisted(ip, stream, opts[:wips])
 
 			# limited to 60 checks per minute
 			result = AbuseIPDB.memoized(ip, :check)
@@ -437,8 +452,6 @@ class AbuseIPDB
 			end
 
 			next if result.nil? || result.empty?
-
-            next if is_whitelisted(ip, opts[:whitelist])
 
 			unless result[:error].nil?
 				@@log.error result[:error]
