@@ -416,7 +416,13 @@ class AbuseIPDB
 			hip = ip
 			if ip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
 				begin
-					hip = Resolve.getaddress(ip)
+					hip = Resolv.getaddress(ip)
+				rescue
+					# do nothing
+				end
+			else
+				begin
+					ip = Resolv.getname(ip)
 				rescue
 					# do nothing
 				end
