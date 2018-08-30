@@ -11,6 +11,10 @@ class String
   def truncate(max)
 	 length > max ? "#{self[0...max]}..." : self
   end
+
+  def ipaddress?
+	  self[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil? ? false : true
+  end
 end
 
 class AbuseIPDB
@@ -434,12 +438,12 @@ class AbuseIPDB
 		stream.puts "Resolving whitelist: #{whitelist.inspect}"
 		whitelist.each { |hostname|
 			ip = hostname
-			if ip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
-				# it's a hostname, get its ip address
-				ip = gethostaddress(hostname)
-			else
+			if ip.ipaddress?
 				# it's an ip address, get the host name
 				hostname = gethostname(ip)
+			else
+				# it's a hostname, get its ip address
+				ip = gethostaddress(hostname)
 			end
 			wips[ip] = hostname
 		}
