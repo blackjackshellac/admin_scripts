@@ -407,27 +407,41 @@ class AbuseIPDB
 		result.nil? ? {:error => "empty result"} : result
 	end
 
+	def self.gethostaddress(hostname)
+		ip = hostname
+		begin
+			ip = Resolv.getaddress(hostname)
+		rescue
+			# return the hostname on error
+		end
+		ip
+	end
+
+	def self.gethostname(ip)
+		hostname = ip
+		begin
+			hostname = Resolv.getname(ip)
+		rescue => e
+			# return the ip address on error
+		end
+		hostname
+	end
+
 	def self.get_whitelisted_ips(whitelist, stream)
 		wips={}
 		return wips if whitelist.nil?
 
 		stream.puts "Resolving whitelist: #{whitelist.inspect}"
-		whitelist.each { |ip|
-			hip = ip
+		whitelist.each { |hostname|
+			ip = hostname
 			if ip[/^(?:(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])(\.(?!$)|$)){4}$/].nil?
-				begin
-					hip = Resolv.getaddress(ip)
-				rescue
-					# do nothing
-				end
+				# it's a hostname, get its ip address
+				ip = gethostaddress(hostname)
 			else
-				begin
-					ip = Resolv.getname(ip)
-				rescue
-					# do nothing
-				end
+				# it's an ip address, get the host name
+				hostname = gethostname(ip)
 			end
-			wips[hip] = ip
+			wips[ip] = hostname
 		}
 		stream.puts "Resolved whitelist: #{wips.inspect}"
 		return wips

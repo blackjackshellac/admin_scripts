@@ -108,11 +108,14 @@ class FWipset
 	end
 
 	def self.compare_fwscan_abuseipdb(entries, results, stream, opts)
+		stream.puts " FWipset Summary #{opts[:ipset]} ".center(50, "+")
+
 		# no ipset name specified
 		return if opts[:ipset].nil?
 
 		vipset = FWipset.load_ipset(opts[:ipset], opts[:ssh])
 		updated=false
+
 		entries.each_pair { |ip, entrya|
 			result = results[ip]
 			next if result.nil? || result[:raw].nil?
@@ -123,7 +126,9 @@ class FWipset
 			ip2loc_isoCode = IP2Location.short(loc)
 
 			if entrya.count > 2 && reports > 0 || reports >= 5
-				if !FWipset.exists?(ip, opts[:ipset], opts[:ssh])
+				if FWipset.exists?(ip, opts[:ipset], opts[:ssh])
+					stream.puts "Already in #{opts[:ipset]}: #{ip} - #{ip2loc_isoCode} (#{ip2loc_country})"
+				else
 					stream.puts "Add to ipset #{opts[:ipset]}: #{ip} - #{ip2loc_isoCode} (#{ip2loc_country})"
 					stream.puts FWipset.add(ip, opts[:ipset], opts[:ssh])
 					updated=true
