@@ -350,7 +350,7 @@ def chdir(dir)
 	end
 end
 
-chdir $opts[:wdir]
+chdir File.expand_path($opts[:wdir])
 
 RE_URL=/^(?:url)?\s*(https?.*)/
 RE_EASYTAG=/^easytag/
