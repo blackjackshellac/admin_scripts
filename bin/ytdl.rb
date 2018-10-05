@@ -2,8 +2,9 @@
 #
 #
 
-# dnf install taglib-devel
-# gem install taglib-ruby
+# Fedora sudo dnf install taglib-devel
+# Ubuntu sudo apt install libtag1-dev
+# sudo gem install taglib-ruby
 require 'taglib'
 require 'readline'
 require 'logger'
