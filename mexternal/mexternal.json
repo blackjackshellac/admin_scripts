@@ -3,6 +3,7 @@
     "default": "backup",
     "backup": {
       "mountpoint": "/mnt/backup",
+      "options": "-o ro",
       "scripts": [
         "~/bin/rsync_audio.sh"
       ],
