@@ -49,7 +49,7 @@ optparser.parse!
 class Transaction 
 	NOW_FMT="%Y-%m-%d %H:%M:%S"
 	DAY_FMT="%b %d, %Y"
-	ACCOUNTS="Other [0-9] .*?|Chequing|Savings"
+	ACCOUNTS="Other [0-9] .*?|Chequing|Savings|Personal Line of Credit"
 	RE_BILL=/^\s*(Bill\s)(?<bill>\d+)\s*$/
 	RE_REFN=/^\s*(Ref[#]:)\s*(?<refn>\d+)\s*([|] Cancel This Payment)?\s*$/
 	RE_TRAN=/^\s*[\$](?<amt>[\d+\.,]+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./

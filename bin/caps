@@ -1,0 +1,19 @@
+#!/bin/bash
+
+let state=1
+if [ $# -eq 0 ]; then
+	xmodmap -pke | grep 'keycode\s\+66 = Caps_Lock' > /dev/null
+	[ $? -eq 1 ] && let state=0
+else
+	[ "$1" == "-h" -o "$1" == "--help" -o "$1" == "help" ] && echo -e "Usage is: caps [on|off]\n\tToggle caps lock without options" && exit 0
+	[ "$1" == "on" -o "$1" == "1" ] && let state=0
+fi
+
+if [ $state -eq 1 ]; then
+	echo "Caps lock off"
+	xmodmap -e "keycode 66 = VoidSymbol NoSymbol VoidSymbol"
+else
+	echo "Caps lock on"
+	xmodmap -e "keycode 66 = Caps_Lock NoSymbol Caps_Lock"
+fi
+
