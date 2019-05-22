@@ -2,7 +2,12 @@
 
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
 	PID=$(pgrep -u $LOGNAME gnome-session)
-	export DBUS_SESSION_BUS_ADDRESS=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/$PID/environ|cut -d= -f2-)
+	if [ -z "$PID" ]; then
+		echo "Error: gnome-session not running for user $LOGNAME"
+		exit 1
+	fi
+	# cat /proc/${PID}/environ | grep -z DBUS_SESSION_BUS_ADDRESS | tr '\0' '\n'
+	export DBUS_SESSION_BUS_ADDRESS=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/$PID/environ| tr '\0' '\n'|cut -d= -f2-)
 #else
 #	echo $DBUS_SESSION_BUS_ADDRESS
 fi
