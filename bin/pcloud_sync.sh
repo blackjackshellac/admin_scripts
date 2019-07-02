@@ -12,8 +12,8 @@ mkdir -p $TMP
 [ $? -ne 0 ] && die "Failed to create tmp dir $TMP"
 
 REVERSE=0
-SRC="/data/household/"
-DST="~/pCloudDrive/Crypto\ Folder"
+SRC=/data/household/
+DST=~/pCloudDrive/Crypto\ Folder
 
 usage() {
 	cat - << HELP
