@@ -11,7 +11,9 @@ source $MD/funcs.sh
 mkdir -p $TMP
 [ $? -ne 0 ] && die "Failed to create tmp dir $TMP"
 
-REVERSE=0
+let REVERSE=0
+let FULL=0
+DELETE=""
 SRC=/data/household/
 DST=~/pCloudDrive/Crypto\ Folder
 
@@ -25,14 +27,20 @@ usage() {
    -n     - dry-run
    -r     - reverse (sync dest to src)
    -D     - rsync delete (delete destination that have been deleted in src)
+   -F     - full sync (see below)
    -h     - help
+
+Full sync performs,
+
+  1) rsync --delete SRC -> DST
+  2) rsync DST -> SRC
 
 HELP
 
 	exit $1
 }
 
-while getopts ":hs:d:rnD" opt; do
+while getopts ":hs:d:rnDF" opt; do
 	case ${opt} in
 		s)
 			SRC=$OPTARG
@@ -41,13 +49,17 @@ while getopts ":hs:d:rnD" opt; do
 			DST=$OPTARG
 			;;
 		r)
-			REVERSE=1
+			let REVERSE=1
 			;;
 		n)
 			RSOPTS="-n $RSOPTS"
 			;;
 		D)
-			RSOPTS="$RSOPTS --delete"
+			DELETE=" --delete "
+			;;
+		F)
+			die "This is broken by pcloud since it doesn't support unix filesytem permissions/symlinks/etc"
+			let FULL=1
 			;;
 		h) # process option a
 			usage 0
@@ -58,16 +70,25 @@ while getopts ":hs:d:rnD" opt; do
 	esac
 done
 
+[ $FULL -eq 1 -a $REVERSE -eq 1 ] && die "Full sync shouldn't be done with reverse"
+
+[ $FULL -eq 1 -a -n "$DELETE" ] && die "Full sync shouldn't be used with delete"
+
 BN="$(basename $SRC)"
-if [ $REVERSE -eq 1 ]; then
+
+swap_SRC_DST() {
 	# SRC <-> DST
 	#SRC=/data/household/
 	#DST=~/pCloudDrive/Crypto\ Folder/
-	swp=$SRC
+	local swp=$SRC
 	# SRC=~/pCloudDrive/Crypto\ Folder/household
-	SRC=$DST/$BN
+	SRC=$DST
 	# DST=/data/household
 	DST=$swp
+}
+
+if [ $REVERSE -eq 1 ]; then
+	swap_SRC_DST
 
 	[ ! -d "$SRC" ] && die "Crypto folder not unlocked?"
 	[ ! -d "$DST" ] && die "Dest directory not found: $SRC"
@@ -80,18 +101,36 @@ else
 	[ ! -d "$DST" ] && die "Crypto folder not unlocked?"
 fi
 
-cd "$SRC"
-[ $? -ne 0 ] && die "failed to change to source directory"
-
 LOG="$TMP/$BN.$NOW.log"
 info "Logging to $LOG"
-let ts0=$(date +%s)
-log "$LOG" "Working in $(pwd)"
-log "$LOG" "rsync $RSOPTS . to $DST"
-rsync $RSOPTS . "$DST/" >> "$LOG" 2>&1
-let ts1=$(date +%s)
-let el=$ts1-$ts0
-log "$LOG" "rsync'd $BN in $el seconds"
+
+rsync_func() {
+	let ts0=$(date +%s)
+
+	cd "$SRC"
+	[ $? -ne 0 ] && die "failed to change to source directory"
+
+	local rsopts="$RSOPTS $DELETE"
+
+	log "$LOG" "Working in $(pwd)"
+	log "$LOG" "rsync $rsopts . to $DST"
+	rsync $rsopts . "$DST/" >> "$LOG" 2>&1
+	let ts1=$(date +%s)
+	let el=$ts1-$ts0
+	log "$LOG" "rsync'd $BN in $el seconds"
+}
+
+if [ $FULL -eq 1 ]; then
+	DELETE=" --delete "
+	rsync_func
+	#info "before SRC=$SRC DST=$DST"
+	swap_SRC_DST
+	#info "after SRC=$SRC DST=$DST"
+	DELETE=""
+	rsync_func
+else
+	rsync_func
+fi
 
 #let ts0=$(date +%s)
 #let cnt=0
