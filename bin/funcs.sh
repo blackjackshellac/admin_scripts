@@ -19,6 +19,12 @@ die() {
 	exit 1
 }
 
+log() {
+	L="$1"
+	shift
+	echo -e $* >> "$L"
+}
+
 debug() {
 	[ -z "$DEBUG" ] && return
 	[ "$DEBUG" == "0" ] && return
