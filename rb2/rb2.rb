@@ -44,6 +44,8 @@ DEF_LOG_PATH=File.join(DEF_LOG_DIR, LOG_FILE)
 DEF_SMTP=Rb2Globals.get_default(:smtp)
 DEF_EMAIL=Rb2Globals.get_default(:email)
 
+FileUtils.mkdir_p(DEF_LOG_DIR)
+
 $opts={
 	:config => nil,
 	:global => false,
