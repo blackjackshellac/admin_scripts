@@ -116,12 +116,11 @@ rsync_func() {
 	log "$LOG" "rsync $rsopts . to $DST"
 	rsync $rsopts . "$DST/" >> "$LOG" 2>&1
 	let err=$?
+	[ $err -ne 0 ] && log "$LOG" "rsync returned error code=$err"
 
 	let ts1=$(date +%s)
 	let el=$ts1-$ts0
 	log "$LOG" "rsync'd $BN in $el seconds"
-
-	log "$LOG" "rsync returned errors: $err"
 }
 
 if [ $FULL -eq 1 ]; then
