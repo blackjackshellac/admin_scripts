@@ -115,9 +115,13 @@ rsync_func() {
 	log "$LOG" "Working in $(pwd)"
 	log "$LOG" "rsync $rsopts . to $DST"
 	rsync $rsopts . "$DST/" >> "$LOG" 2>&1
+	let err=$?
+
 	let ts1=$(date +%s)
 	let el=$ts1-$ts0
 	log "$LOG" "rsync'd $BN in $el seconds"
+
+	log "$LOG" "rsync returned errors: $err"
 }
 
 if [ $FULL -eq 1 ]; then
