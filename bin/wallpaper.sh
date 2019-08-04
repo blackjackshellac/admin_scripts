@@ -1,6 +1,7 @@
 #!/bin/bash
 
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+	# grep for gnome-session-binary (pgrep limited to 15 characters)
 	PID=$(pgrep -u $LOGNAME gnome-session)
 	if [ -z "$PID" ]; then
 		echo "Error: gnome-session not running for user $LOGNAME"

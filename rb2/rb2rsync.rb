@@ -12,6 +12,9 @@ class Rb2Maillog
 	def self.init(opts)
 		@@log = opts[:logger] if opts.key?(:logger)
 		@@tmp = opts[:tmp]
+		Mail.defaults do
+			delivery_method :smtp, { address: "localhost", openssl_verify_mode: "none" }
+		end
 	end
 
 	attr_reader :file
