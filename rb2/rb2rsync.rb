@@ -350,8 +350,9 @@ class Rb2Rsync
 		"#{p}#{q}#{str}#{q}#{p}"
 	end
 
-	def get_cmd(opts)
-		cmd =  "rsync -r #{@sshopts} " # #{@sshopts["#{host}"]}"
+	def get_cmd(opts, client_conf)
+                sshopts=client_conf.sshopts.nil? ? @sshopts : client_conf.sshopts
+		cmd =  "rsync -r #{sshopts} " # #{@sshopts["#{host}"]}"
 		cmd << " --dry-run " if opts[:dryrun]
 		cmd << " --delete" if @action == :run
 
@@ -435,7 +436,7 @@ class Rb2Rsync
 			raise Rb2RsyncError, "Unknown action in Rb2Rsync.go: #{@action}"
 		end
 
-		cmd = get_cmd(opts)
+		cmd = get_cmd(opts, conf)
 		opts[:strip]=true
 		opts[:lines]=nil
 		opts[:out]=@verbose ? $stdout : nil
