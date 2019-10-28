@@ -35,7 +35,8 @@
         "/dev/disk/by-id/ata-ST3000DM001-1E6166_Z1F63QM1",
         "/dev/disk/by-id/ata-ST5000DM000-1FK178_W4J1HVGR",
         "/dev/disk/by-id/usb-Seagate_Backup+_Desk_NA7DLER9-0:0",
-        "/dev/disk/by-id/usb-Seagate_Backup+_Desk_NA7H1DXB-0:0"
+        "/dev/disk/by-id/usb-Seagate_Backup+_Desk_NA7H1DXB-0:0",
+        "/dev/disk/by-id/usb-ATA_WDC_WD40EZRZ-00G_0123456789ABCDE-0:0"
       ]
     }
   },
