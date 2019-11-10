@@ -66,7 +66,7 @@ def comp_stat(path, dstat, opts)
 		if u.nil?
 			$log.warn "Path data missing for #{key}: #{path}"
 		elsif !u.eql?(v)
-			$log.warn "#{key} changed [#{u}] != [#{v}] for #{dstat["ftype"]}: #{path}" unless v.eql?(u)
+			$log.warn "#{key} changed [#{u}] -> [#{v}] for #{dstat["ftype"]}: #{path}" unless v.eql?(u)
 		else
 			next
 		end
