@@ -34,6 +34,7 @@ class CheckKernelVersion
 			valid=@@kernels.length > 0
 			@@kernels.each { |kernel|
 				begin
+					next unless kernel[/vmlinuz-0-rescue/].nil?
 					k,time=kernel_time(kernel)
 					#puts "%s: %s,%s" % [kernel, k, time]
 					@@kernels_map[k]=time
