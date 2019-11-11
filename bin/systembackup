@@ -1,0 +1,30 @@
+#!/bin/bash
+
+ME=$(basename $0)
+TMP=/var/tmp
+
+source ~/bin/szm_utils
+[ $? -ne 0 ] && echo "szm_utils not found" && exit 1
+
+set_log autogen # $TMP/$me.$(date +%Y-%m).log
+#set_log_tee
+set_log_ts
+set_mail "steeve.mccauley@gmail.com"
+
+code=$(lsb_release -c -i -r -s | sed 's/ /_/g')
+[ -z "$code" ] && die "lsb_release failed, make sure redhat-lsb-core is installed"
+
+# eg /home/systembackup/Fedora_28_TwentyEight
+dest=/home/$ME/$code
+dirs="/etc /root /usr/local"
+
+mkdir -p $dest
+
+let errs=0
+for d in $dirs; do
+	run rsync --delete -av $d $dest
+	[ $? -ne 0 ] && (( errs++ ))
+done
+
+[ $errs -ne 0 ] && mail_log
+
