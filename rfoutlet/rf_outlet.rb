@@ -62,6 +62,10 @@ class RFOutlet
 		(state.eql?(ON) ? @on : @off)
 	end
 
+	def self.get_state(state)
+		state.eql?(ON) ? RFOutlet::ON : RFOutlet::OFF
+	end
+
 	def sendcode(rfcode)
 		# return output
 		cmd="#{@@codesend} #{rfcode}"

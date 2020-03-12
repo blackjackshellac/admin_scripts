@@ -1,0 +1,7 @@
+Use beanstalkd as message queue
+
+$ sudo apt install beanstalkd
+$ sudo gem install beaneater
+
+https://github.com/beanstalkd/beaneater
+
