@@ -5,3 +5,7 @@ $ sudo gem install beaneater
 
 https://github.com/beanstalkd/beaneater
 
+Installing service
+sudo cp rfoutd.service /etc/systemd/system/
+
+systemctl status rfoutd

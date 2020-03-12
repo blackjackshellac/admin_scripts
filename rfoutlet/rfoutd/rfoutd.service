@@ -1,0 +1,11 @@
+[Unit]
+Description=rfoutlet service
+After=network.target
+
+[Service]
+Type=simple
+User=steeve
+ExecStart=/usr/bin/env ruby /home/steeve/github/admin_scripts/rfoutlet/rfoutd/rfoutd.rb
+
+[Install]
+WantedBy=multi-user.target

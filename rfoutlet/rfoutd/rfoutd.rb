@@ -34,19 +34,19 @@ YM=Time.now.strftime('%Y%m')
 LOG_PATH=File.join(TMP, "#{ME}_#{YM}"+".log")
 
 $opts = {
-	:daemonize => false,
+	:daemonize => true,
 	:debug => true,
 	:log => nil,
 	:logger => $log,
 	:host => "*",
 	:port => 11321,
-	:json=>ENV["RF_OUTLET_JSON"]||File.join(MD, "rfoutlet.json")
+	:json=>ENV["RF_OUTLET_JSON"]||File.join(File.expand_path("~/bin"), "rfoutlet.json")
 }
 	
 if $opts[:daemonize]
 	$opts[:log]=LOG_PATH if $opts[:log].nil?
 	$log.debug "Daemonizing script"
-	Daemons.daemonize
+	#Daemons.daemonize
 end
 
 # create a file logger if it has been specified
