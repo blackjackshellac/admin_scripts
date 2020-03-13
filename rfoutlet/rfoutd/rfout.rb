@@ -13,6 +13,7 @@ RFLIB=File.realpath(File.join(MD, ".."))
 LIB=File.realpath(File.join(MD, "../../lib"))
 
 require_relative File.join(LIB, "logger")
+require_relative File.join(MD, "rfoutcmd")
 
 $log=Logger.set_logger(STDOUT, Logger::INFO)
 
@@ -26,19 +27,19 @@ optparser = OptionParser.new { |opts|
 	opts.on('-n', '--name NAME', String, "Name of outlet to match") { |name|
 		$opts[:name] = name
 	}
-	
+
 	opts.on('-a', '--all', "Use all known switches") {
 		$opts[:name] = "all"
 	}
-	
+
 	opts.on('-1', '--on', "Turn off") {
 		$opts[:state]="on"
 	}
-	
+
 	opts.on('-0', '--off', "Turn on") {
 		$opts[:state]="off"
 	}
-		
+
 	opts.on('-D', '--debug', "Turn on debugging output") {
 		$log.level = Logger::DEBUG
 	}
@@ -55,10 +56,9 @@ $log.error "Must specify at least one switch" if $opts[:name].nil?
 $beanstalk = Beaneater.new('localhost:11300')
 
 $tube = $beanstalk.tubes["rfoutlet"]
-cmd={
-	:name => $opts[:name],
-	:state => $opts[:state]
-}
 
-$log.info "Sending #{JSON.pretty_generate(cmd)}"
-$tube.put cmd.to_json
+cmd=RFOutCmd.new($opts)
+
+json=cmd.to_json
+$log.info "Sending #{json}"
+$tube.put json

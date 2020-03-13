@@ -7,6 +7,7 @@ require 'daemons'
 require 'sun_times'
 # gem install beaneater
 require 'beaneater'
+require 'time'
 
 # if this is a symlink get the actual directory path of the script
 me=File.symlink?($0) ? File.join(__dir__, File.basename($0)) : $0
@@ -42,7 +43,7 @@ $opts = {
 	:port => 11321,
 	:json=>ENV["RF_OUTLET_JSON"]||File.join(File.expand_path("~/bin"), "rfoutlet.json")
 }
-	
+
 if $opts[:daemonize]
 	$opts[:log]=LOG_PATH if $opts[:log].nil?
 	$log.debug "Daemonizing script"
@@ -68,7 +69,14 @@ $log.debug "Beanstalk listening on #{addr}"
 	$log.info "tube=#{tube}"
 }
 
-# cmd={ :name=> "xmas", :state=>"off" }
+# cmd={ :name=> "xmas", :state=>"off", :when=>"sunset", :random=>seconds }
+# :when
+# 	- sunrise/sunset
+#   - time
+# :random
+#   - seconds before sunrise/sunset
+#   - ()+/-) seconds before time
+#
 # @rfotube.put cmd.to_json
 def process(cmds)
 	cmds.each { |jcmd|
@@ -90,9 +98,9 @@ def process(cmds)
 
 			rfcode=outlet.get_rfcode(state)
 			$log.info "Turn #{state} outlet \"#{oname}\" [#{rfcode}]"
-			$log.info outlet.sendcode(rfcode)			
+			$log.info outlet.sendcode(rfcode)
 		}
-			
+
 	}
 end
 
@@ -112,7 +120,7 @@ loop do
 	end
 
 	next if jobs.empty?
-	
+
 	process(jobs.map { |job| job.body })
 
 	jobs.map { |job|
