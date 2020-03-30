@@ -70,7 +70,7 @@ class RFOutlet
 		# return output
 		cmd="#{@@codesend} #{rfcode}"
 		out=""
-		5.times { |i|
+		10.times { |i|
 			out=%x[#{cmd}].strip
 		}
 		out
