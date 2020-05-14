@@ -37,7 +37,7 @@ cd ${update_dir}
 
 let errors=0
 for host in $hosts; do
-	rsync -av packages $host:$(pwd)/
+	rsync -av packages/*.rpm $host:$(pwd)/packages/
 	[ $? -ne 0 ] && err "Failed to rsync packages to ${host}" && let errors=$errors+1 && continue
 	ssh $host dnf -y update
 	[ $? -ne 0 ] && err "Failed to update packages on ${host}" && let errors=$errors+1 && continue
