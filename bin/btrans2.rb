@@ -46,7 +46,7 @@ optparser=OptionParser.new { |opts|
 }
 optparser.parse!
 
-class Transaction 
+class Transaction
 	NOW_FMT="%Y-%m-%d %H:%M:%S"
 	DAY_FMT="%b %d, %Y"
 	ACCOUNTS="Other [0-9] .*?|Chequing|Savings|Personal Line of Credit"
@@ -55,68 +55,122 @@ class Transaction
 	RE_TRAN=/^\s*[\$](?<amt>[\d+\.,]+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*\./
 	RE_DONE=/^\s*[\.]\s*$/
 
+	TRANS_KEYS=[ :bill, :refn, :amt, :name, :alias, :number, :acct, :acctnum, :date ]
+
+	RE_TRANS_FORMAT1=/^\s*Bill\s(?<bill>\d+)\s[$](?<amt>[\d+\.,]+)\s(?<hbpt>has been paid to)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\sfrom\s(?<acct>(#{ACCOUNTS}))\s(?<acctnum>[\d\s\-]+)\s*[.]\sRef#: (?<refn>\d+)\s(?<cancel>[|]\sCancel This Payment)?/
+	# May 20, 2020 Pending 656424 Cancel Payment
+	RE_TRANS_FORMAT2=/^\s*(?<acct>#{ACCOUNTS})\s(?<acctnum>\d+\s[-\d]+)\s(?<name>[\w\s\-]+)?\s([\(](?<alias>[\w\s\-]+)[\)]\s)?(?<number>[\w\-]+)\s[$](?<amt>[\d+\.,]+)\s(?<date>\w+\s\d+[,]\s\d+)\s(?<pending>[[:alpha:]\s]+?)\s(?<refn>\d+)\s(?<cancel>Cancel Payment)\s*/
+
+	FORMATS = {
+		"Immediate" => RE_TRANS_FORMAT1,
+		"Historical" => RE_TRANS_FORMAT2
+	}
+
 	@@log=Logger.new(STDERR)
 	def self.init(opts={})
 		@@log=opts[:logger] if opts.key?(:logger)
 	end
 
-	attr_reader :bill, :trans, :refn
+	attr_reader :trans
 	def initialize
 		@trans={}
-		@bill=nil
-		@refn=nil
+		@trans[:date]=Time.now.strftime(DAY_FMT)
 	end
 
-	def process(line)
-		@@log.debug "Processing>> #{line}"
-
-		m=RE_BILL.match(line)
-		unless m.nil?
-			@@log.debug "Found Bill# match for #{line}: "+m[:bill]
-			@bill=m[:bill]
-			return true
+	def setmatchkey(key, m)
+		val=@trans[key]
+		if m.names.include?(key.to_s)
+			val=m[key]
+		elsif val.nil?
+			@@log.error "match has no result for key=#{key}"
 		end
+		@trans[key]=val
+	end
 
-		m=RE_TRAN.match(line)
-		unless m.nil?
-			raise "transaction is not empty: #{@trans.inspect}" unless @trans.empty?
-			now=Time.now
-			@trans[:date]=now.strftime(DAY_FMT)
-			if @bill.nil?
-				@@log.warn "No bill found for transaction, using #{now}"
-				@bill=now.strftime(NOW_FMT)
-			end
-			[ :amt, :name, :alias, :number, :acct, :acctnum ].each { |key|
-				@trans[key]=m[key]
+	def self.process_transactions(r, s, m)
+		transactions = []
+		while m
+			# puts m.captures
+			# puts m.names
+			transaction = Transaction.new
+			TRANS_KEYS.each { |key|
+				transaction.setmatchkey(key, m)
 			}
-			@@log.debug "Found Transaction match for #{line}: %s/%s/%s/%s/%s/%s" % [ m[:amt], m[:name], m[:alias], m[:number], m[:acct], m[:acctnum] ]
-			return true
-		end
+			transactions << transaction
 
-		m=RE_REFN.match(line)
-		unless m.nil?
-			@refn=m[:refn]
-			@@log.debug "Found Ref# match for #{line}: #{@refn}"
-			raise "No transaction found for ref# #{@refn}" if @trans.empty?
-			raise "No bill found for ref#" if @bill.nil?
-			@trans[:bill]=@bill
-			@trans[:refn]=@refn
-			@@log.debug JSON.pretty_generate(@trans)
-			return true
+			# end of entire match
+			eom=m.end(0)
+			# for some reason that I can grok r.match(s, eom) wasn't working
+			# just skip forward in the string
+			s=s[eom..]
+			m = r.match(s)
 		end
-		false
+		transactions
+	end
+
+	def self.normalize_s(s)
+		s.gsub(/\s+/, " ")
+	end
+
+	def self.grok_format(s)
+		FORMATS.each_pair { |format, r|
+			m = r.match(s)
+			next if m.nil?
+			@@log.info "Found #{format} format"
+			return [ r, m ]
+		}
+		raise "Unsupported format"
+	end
+
+	def self.process_lines(lines)
+		slines = lines.join(" ")
+		slines = normalize_s(slines)
+
+		r, m = grok_format(slines)
+		process_transactions(r, slines, m)
 	end
 
 	def self.end_input(line)
-		m=RE_DONE.match(line)
-		(m.nil? ? false : true)
+		RE_DONE.match(line).nil? ? false : true
 	end
 
-	def done
-		#!@trans.empty? && @trans.key?(:bill) && @trans.key(:refn)
-		return false if @trans.empty? || @bill.nil? || @refn.nil?
-		@@log.debug "Transaction is complete"
-		true
+	def self.read_input()
+		lines=[]
+		while true
+			begin
+				line = gets
+			rescue Interrupt => e
+				# jump out on interrupt
+				line="."
+			rescue => e
+				raise e
+			end
+
+			break unless line
+			line.strip!
+
+			if line.empty?
+				$log.debug "Ignoring empty line"
+				next
+			end
+
+			puts ">> #{line}"
+			if Transaction.end_input(line)
+				$log.debug "Found end of input"
+				break
+			end
+
+			lines << line
+		end
+
+		lines
+	end
+
+	def self.summarize(transactions)
+		@@log.info "Summarizing transactions ...\n" unless transactions.empty?
+		transactions.each { |trans|
+			trans.summary
+		}
 	end
 
 	def summary
@@ -159,66 +213,9 @@ def join_last(lines, line, sep="")
 	line
 end
 
-lines=[]
-while true
-	begin
-		line = gets
-	rescue Interrupt => e
-		# jump out on interrupt
-		line="."
-	rescue => e
-		raise e
-	end
+lines=Transaction.read_input
+$log.die "No lines to process" if lines.empty?
 
-	break unless line
-	line.strip!
+transactions = Transaction.process_lines(lines)
+Transaction.summarize(transactions)
 
-	if line.empty?
-		$log.debug "Ignoring empty line"
-		next
-	end
-
-	puts ">> #{line}"
-	if Transaction.end_input(line)
-		$log.debug "Found end of input"
-		break
-	end
-
-	if !line[/^[0-9]+\s/].nil?
-		$log.info "Appending account# to last line: #{line}"
-
-		line=join_last(lines, line, "")
-	elsif line[/^(Bill|Ref[#]|[\$])/].nil?
-		$log.info "Appending to last line: #{line}"
-
-		line=join_last(lines, line, " ")
-	end
-	lines << line
-end
-
-transactions=[]
-trans=Transaction.new
-
-lines.each { |line|
-	if trans.process(line)
-		if trans.done
-			$log.info "Transaction finished"
-			transactions << trans
-			trans=Transaction.new
-		end
-	else
-		$log.warn "No match for line: #{line}"
-	end
-}
-
-$log.info "Summarizing transactions ...\n" unless transactions.empty?
-transactions.each { |trans|
-	trans.summary
-}
-
-unless trans.empty?
-	$log.info "Incomplete transactions ...\n"
-	unless transactions.include?(trans)
-		trans.summary
-	end
-end
