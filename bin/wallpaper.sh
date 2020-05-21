@@ -21,7 +21,10 @@ if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
 fi
 
 file="file://$(find ${HOME}/Pictures/wallpaper/ -type f | shuf -n1)"
-[ -z "$file" ] && echo "No file selected" && exit 1
-cmd="gsettings set org.gnome.desktop.background picture-uri $file"
-#echo $cmd
-$cmd
+#echo gsettings set org.gnome.desktop.background picture-uri "$file"
+gsettings set org.gnome.desktop.background picture-uri "$(echo -E $file)"
+res=$?
+#if [ $res -ne 0 ]; then
+#	echo "Failed to set $file as background picture-uri"
+#fi
+exit $res

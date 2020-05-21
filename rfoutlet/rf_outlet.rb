@@ -62,11 +62,15 @@ class RFOutlet
 		(state.eql?(ON) ? @on : @off)
 	end
 
+	def self.get_state(state)
+		state.eql?(ON) ? RFOutlet::ON : RFOutlet::OFF
+	end
+
 	def sendcode(rfcode)
 		# return output
 		cmd="#{@@codesend} #{rfcode}"
 		out=""
-		5.times { |i|
+		10.times { |i|
 			out=%x[#{cmd}].strip
 		}
 		out
