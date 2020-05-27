@@ -33,15 +33,28 @@ cd ${update_dir}
 [ $? -ne 0 ] && die "Failed to change to updates directory ${update_dir}"
 
 # [ -z "$(find packages/ -type f)" ] && echo Nothing
-[ ! -d "packages" -o -z "$(find packages/ -type f)" ] && warn "No packages to update" && exit 0
+
+let do_rsync=1
+[ ! -d "packages" -o -z "$(find packages/ -type f)" ] && warn "No cached packages to update" && let do_rsync=0
+
+run_echo() {
+	cmd=$*
+	echo ">>>>> $cmd"
+	$cmd
+	return $?
+}
 
 let errors=0
 for host in $hosts; do
-	rsync -av packages/*.rpm $host:$(pwd)/packages/
-	[ $? -ne 0 ] && err "Failed to rsync packages to ${host}" && let errors=$errors+1 && continue
-	ssh $host dnf -y update
+	if [ $do_rsync -eq 1 ]; then
+		info "Updating cached packages on $host from $(pwd)"
+		run_echo rsync -av "packages/*.rpm" $host:$(pwd)/packages/
+		ret=$?
+		[ $ret -ne 0 ] && err "Failed to rsync packages to ${host}: ${ret}" && let errors=$errors+1 && continue
+	fi
+	run_echo ssh $host dnf -y update
 	[ $? -ne 0 ] && err "Failed to update packages on ${host}" && let errors=$errors+1 && continue
-	ssh $host rm -f ${update_dir}/packages/*
+	run_echo ssh $host rm -f ${update_dir}/packages/*
 	[ $? -ne 0 ] && err "Failed to remove packages on ${host}" && let errors=$errors+1 && continue
 done
 
