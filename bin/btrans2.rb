@@ -173,6 +173,20 @@ class Transaction
 		}
 	end
 
+    # 0123-45678-999991234
+    # (^|\s)[-\d]{4}(?<digits>[-\d]+?)[-\d]*(\s|$)
+    RE_OBF=/^(?<lead>[a-zA-Z\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
+    def obfuscate_digits(val)
+      m=RE_OBF.match(val)
+      unless m.nil?
+        #puts m[:lead]
+        #puts m[:digits]
+        #puts m[:tail]
+        val=m[:lead]+m[:digits].gsub(/\d/, "*")+m[:tail]
+      end
+      val
+    end
+
 	def summary
 		if @trans.empty?
 			$log.debug "Ignoring empty transaction"
@@ -189,7 +203,7 @@ class Transaction
 			if val.nil?
 				puts "WARNING: Trans value not found for \'#{key}\'"
 			else
-				puts val
+				puts obfuscate_digits(val)
 			end
 		}
 		puts
