@@ -230,6 +230,12 @@ end
 lines=Transaction.read_input
 $log.die "No lines to process" if lines.empty?
 
-transactions = Transaction.process_lines(lines)
-Transaction.summarize(transactions)
+begin
+  transactions = Transaction.process_lines(lines)
+  Transaction.summarize(transactions)
+rescue => e
+  puts e.backtrace.join("\n")
+  $log.err e.to_s
+  exit 1
+end
 
