@@ -37,9 +37,10 @@ cd ${update_dir}
 let do_rsync=1
 [ ! -d "packages" -o -z "$(find packages/ -type f)" ] && warn "No cached packages to update" && let do_rsync=0
 
+indent=">>>>>"
 run_echo() {
 	cmd=$*
-	echo ">>>>> $cmd"
+	info "\n$indent\n$indent $cmd"
 	$cmd
 	return $?
 }
