@@ -55,7 +55,7 @@ for host in $hosts; do
 	fi
 	run_echo ssh $host dnf -y update
 	[ $? -ne 0 ] && err "Failed to update packages on ${host}" && let errors=$errors+1 && continue
-	run_echo ssh $host rm -f ${update_dir}/packages/*
+	run_echo ssh $host rm -f "${update_dir}/packages/*.rpm"
 	[ $? -ne 0 ] && err "Failed to remove packages on ${host}" && let errors=$errors+1 && continue
 done
 
