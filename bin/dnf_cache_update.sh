@@ -27,6 +27,16 @@ die() {
 
 [ -z "$hosts" ] && info "Usage is ${ME} host ..." && exit 0
 
+test_hosts() {
+	for host in $hosts; do
+		echo Testing $host
+		ssh $host echo > /dev/null
+		[ $? -ne 0 ] && die "Failed to connect to $host"
+	done
+}
+
+test_hosts $hosts
+
 dnf -y update
 
 cd ${update_dir}
