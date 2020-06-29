@@ -35,9 +35,17 @@ test_hosts() {
 	done
 }
 
+indent=">>>>>"
+run_echo() {
+	cmd=$*
+	info "\n$indent\n$indent $cmd"
+	$cmd
+	return $?
+}
+
 test_hosts $hosts
 
-dnf -y update
+run_echo dnf -y update
 
 cd ${update_dir}
 [ $? -ne 0 ] && die "Failed to change to updates directory ${update_dir}"
@@ -46,14 +54,6 @@ cd ${update_dir}
 
 let do_rsync=1
 [ ! -d "packages" -o -z "$(find packages/ -type f)" ] && warn "No cached packages to update" && let do_rsync=0
-
-indent=">>>>>"
-run_echo() {
-	cmd=$*
-	info "\n$indent\n$indent $cmd"
-	$cmd
-	return $?
-}
 
 let errors=0
 for host in $hosts; do
