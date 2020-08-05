@@ -123,30 +123,41 @@ class Transaction
 		raise "Unsupported format"
 	end
 
+	#
+	# if a number is split on a line break join it together
+	#
+	# account number 12345
+	# 6789 foo
+	#
+	# becomes
+	#
+	# account number 123456789 foo
+	#
 	def self.detect_number_split(lines)
 		nlines=[]
 		lines.each_index { |idx|
 			line=lines[idx]
 			next if line.nil? || line.empty?
-			if line[/\d\s*$/].nil?
+			if line[/\d$/].nil?
+				# line doesn't end in a digit, just add it to the new array
 				nlines << line
 				next
 			end
 			# test next line
-			line1=lines[idx+1]
+			next_line=lines[idx+1]
 			# skip it if it doesn't exist
-			next if line1.nil?
+			next if next_line.nil?
 
-			# if next line1 starts with a digit join it to the current line
-			unless line1[/^\s*\d/].nil?
-			  # join line[idx] and line[idx+1]
-			  line+=line1
+			# if next next_line starts with a digit join it to the current line
+			unless next_line[/^\d+\s/].nil?
+			  # join lines[idx] and lines[idx+1]
+			  line += next_line
 			  # set to nil to flag it as used
 			  lines[idx+1]=nil
 			end
 			nlines << line
 		}
-		puts nlines.inspect
+		puts nlines.inspect if lines.length != nlines.length
 		nlines
 	end
 
@@ -202,19 +213,19 @@ class Transaction
 		}
 	end
 
-    # 0123-45678-999991234
-    # (^|\s)[-\d]{4}(?<digits>[-\d]+?)[-\d]*(\s|$)
-    RE_OBF=/^(?<lead>[a-zA-Z\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
-    def obfuscate_digits(val)
-      m=RE_OBF.match(val)
-      unless m.nil?
-        #puts m[:lead]
-        #puts m[:digits]
-        #puts m[:tail]
-        val=m[:lead]+m[:digits].gsub(/\d/, "*")+m[:tail]
-      end
-      val
-    end
+	# 0123-45678-999991234
+	# (^|\s)[-\d]{4}(?<digits>[-\d]+?)[-\d]*(\s|$)
+	RE_OBF=/^(?<lead>[a-zA-Z\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
+	def obfuscate_digits(val)
+		m=RE_OBF.match(val)
+		unless m.nil?
+			#puts m[:lead]
+			#puts m[:digits]
+			#puts m[:tail]
+			val=m[:lead]+m[:digits].gsub(/\d/, "*")+m[:tail]
+		end
+		val
+	end
 
 	def summary
 		if @trans.empty?
