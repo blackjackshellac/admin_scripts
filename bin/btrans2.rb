@@ -113,6 +113,7 @@ class Transaction
 	end
 
 	def self.grok_format(s)
+	  puts "s=#{s}"
 		FORMATS.each_pair { |format, r|
 			m = r.match(s)
 			next if m.nil?
@@ -122,7 +123,35 @@ class Transaction
 		raise "Unsupported format"
 	end
 
+	def self.detect_number_split(lines)
+		nlines=[]
+		lines.each_index { |idx|
+			line=lines[idx]
+			next if line.nil? || line.empty?
+			if line[/\d\s*$/].nil?
+				nlines << line
+				next
+			end
+			# test next line
+			line1=lines[idx+1]
+			# skip it if it doesn't exist
+			next if line1.nil?
+
+			# if next line1 starts with a digit join it to the current line
+			unless line1[/^\s*\d/].nil?
+			  # join line[idx] and line[idx+1]
+			  line+=line1
+			  # set to nil to flag it as used
+			  lines[idx+1]=nil
+			end
+			nlines << line
+		}
+		puts nlines.inspect
+		nlines
+	end
+
 	def self.process_lines(lines)
+		lines = detect_number_split(lines)
 		slines = lines.join(" ")
 		slines = normalize_s(slines)
 
