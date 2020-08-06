@@ -84,6 +84,7 @@ class Transaction
 		elsif val.nil?
 			@@log.error "match has no result for key=#{key}"
 		end
+		@@log.debug "Trans match key=#{key}: #{val}"
 		@trans[key]=val
 	end
 
@@ -113,7 +114,7 @@ class Transaction
 	end
 
 	def self.grok_format(s)
-	  puts "s=#{s}"
+		@@log.debug "s=#{s}"
 		FORMATS.each_pair { |format, r|
 			m = r.match(s)
 			next if m.nil?
@@ -151,6 +152,7 @@ class Transaction
 			# if next next_line starts with a digit join it to the current line
 			unless next_line[/^\d+\s/].nil?
 			  # join lines[idx] and lines[idx+1]
+			  @@log.debug "Joining lines: [#{line}]+[#{next_line}]"
 			  line += next_line
 			  # set to nil to flag it as used
 			  lines[idx+1]=nil
@@ -161,13 +163,19 @@ class Transaction
 		nlines
 	end
 
+	##
+	# @returns transactions array
 	def self.process_lines(lines)
 		lines = detect_number_split(lines)
 		slines = lines.join(" ")
 		slines = normalize_s(slines)
 
+		@@log.debug "Normalized input #{slines}"
 		r, m = grok_format(slines)
-		process_transactions(r, slines, m)
+		@@log.debug "Process regex=#{r}"
+		trans = process_transactions(r, slines, m)
+		@@log.debug "Found %d transactions" % trans.length
+		trans
 	end
 
 	def self.end_input(line)
@@ -215,8 +223,9 @@ class Transaction
 
 	# 0123-45678-999991234
 	# (^|\s)[-\d]{4}(?<digits>[-\d]+?)[-\d]*(\s|$)
-	RE_OBF=/^(?<lead>[a-zA-Z\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
+	RE_OBF=/^(?<lead>[a-zA-Z()\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
 	def obfuscate_digits(val)
+		@@log.debug "obfuscate val=#{val}"
 		m=RE_OBF.match(val)
 		unless m.nil?
 			#puts m[:lead]
@@ -234,6 +243,7 @@ class Transaction
 		end
 
 		name=@trans[:alias].nil? ? @trans[:name] : ("%s (%s)" % [ @trans[:alias], @trans[:name] ])
+		name="%s %s" % [ name, @trans[:number] ]
 		trans[:name_alias]=name
 
 		@trans[:alias] = @trans[:name] if @trans[:alias].nil?
@@ -242,8 +252,10 @@ class Transaction
 			val=@trans[key]
 			if val.nil?
 				puts "WARNING: Trans value not found for \'#{key}\'"
-			else
+			elsif key == :name_alias
 				puts obfuscate_digits(val)
+			else
+				puts val
 			end
 		}
 		puts
