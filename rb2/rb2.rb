@@ -176,6 +176,10 @@ $opts = OParser.parse($opts, HELP) { |opts|
 		$opts[:action]=:UPDATE
 	}
 
+	opts.on('-t', '--latest', "List of latest known backups") {
+		$opts[:action]=:LATEST
+	}
+
 	opts.on('-n', '--dry-run', "Perform trial run of backup") {
 		$opts[:dryrun]=true
 	}
@@ -298,6 +302,17 @@ when :RUN
 		rsync.run($opts[:clients], $opts)
 	rescue => e
 		$log.error "Run failed: "+e.to_s
+		e.backtrace.each { |line|
+			puts line
+		}
+	end
+when :LATEST
+	Rb2Util.is_initialized(rb2c)
+	rsync=Rb2Rsync.new(rb2c, $opts)
+	begin
+		rsync.latest($opts[:clients], $opts)
+	rescue => e
+		$log.error "Latest failed: "+e.to_s
 		e.backtrace.each { |line|
 			puts line
 		}

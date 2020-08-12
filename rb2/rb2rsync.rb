@@ -264,7 +264,7 @@ class Rb2Rsync
 			# don't use current backup directory "@dirstamp" for latest from list of dirs
 			idx=@dirstamp.eql?(dirs[0]) ? 1 : 0
 			latest=dirs[idx].nil? ? nil : File.join(@bdir, dirs[idx])
-		when :update
+		when :update,:latest
 			# don't use current backup directory "@dirstamp" for latest from list of dirs
 			idx=@dirstamp.eql?(dirs[0]) ? 1 : 0
 
@@ -569,6 +569,17 @@ class Rb2Rsync
 			:email_to   => @email
 		}
 		@@maillog.mail(mopts)
+	end
+
+	def latest(clients, opts=DEF_OPTS)
+		clients = @rb2conf_clients.keys if clients.empty? && opts[:all]
+		clients.each { |client|
+			@@log.debug "Setup #{client}"
+			@action=__method__.to_sym
+			client_config = setup(client, @action)
+			next if client_config.nil?
+			@@log.info "Client #{client}: #{@latest}"
+		}
 	end
 
 	def create_includes_arr
