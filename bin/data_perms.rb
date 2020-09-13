@@ -10,7 +10,7 @@ require 'fileutils'
 require 'etc'
 
 ME=File.basename($0, ".rb")
-MD=File.expand_path(File.dirname(File.realpath($0)))
+MD=File.expand_path(File.dirname($0))
 
 class Logger
 	def err(msg)
@@ -251,7 +251,7 @@ end
 # }
 $opts={
 	:config=>nil,
-	:config_dir=>__dir__,
+	:config_dir=>MD,
 	:fix=>false,
 	:basedir=>nil,
 	:perms=>nil,
