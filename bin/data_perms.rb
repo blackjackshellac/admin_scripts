@@ -46,7 +46,8 @@ class Hash
 		end
 		# try string key
 		key=key.to_s
-		self[key]
+		return self[key] if self.key?(key)
+		raise "hash value not found for key #{key}"
 	end
 end
 
@@ -54,6 +55,7 @@ class PermsConfig
 	attr_reader :basedir, :perms
 	def initialize(h)
 		@basedir=h.hkey(:basedir)
+		raise "basedir is not a directory #{@basedir}" unless File.directory?(@basedir)
 		aperms=h.hkey(:perms)
 		@perms=[]
 		aperms.each { |hperm|
@@ -79,6 +81,20 @@ class PermsConfig
 		}
 	end
 
+	def to_h
+		{
+			:basedir=>@basedir,
+			:perms=>@perms
+		}
+	end
+
+	def to_json(*a)
+		to_h.to_json(*a)
+	end
+
+	def print
+		JSON.pretty_generate(self)
+	end
 end
 
 class Perms
@@ -253,6 +269,7 @@ $opts={
 	:config=>nil,
 	:config_dir=>MD,
 	:fix=>false,
+	:print=>false,
 	:basedir=>nil,
 	:perms=>nil,
 	:stats => {
@@ -274,6 +291,10 @@ optparser=OptionParser.new { |opts|
 		$log.level = Logger::DEBUG
 	}
 
+	opts.on('-p', '--print', "Print config and exit") {
+		$opts[:print]=true
+	}
+
 	opts.on('-h', '--help', "Help") {
 		$stdout.puts "#{ME}"
 		$stdout.puts opts
@@ -284,10 +305,19 @@ optparser.parse!
 
 $log.die "Must specify config file" if $opts[:config].nil?
 
-pconfig=PermsConfig.load($opts[:config_dir], $opts[:config])
-$opts[:basedir]=pconfig.basedir
-$opts[:perms]=pconfig.perms
-$opts[:config]=pconfig
+begin
+	pconfig=PermsConfig.load($opts[:config_dir], $opts[:config])
+	$opts[:basedir]=pconfig.basedir
+	$opts[:perms]=pconfig.perms
+	$opts[:config]=pconfig
+rescue => e
+	$log.die "Failed to load config: #{e}"
+end
+
+if $opts[:print]
+	puts $opts[:config].print
+	exit 0
+end
 
 $log.debug JSON.pretty_generate($opts)
 
