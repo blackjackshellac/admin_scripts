@@ -113,6 +113,10 @@ class InotifyEvent
 		def absolute_name
 			@event.absolute_name
 		end
+
+		def flags
+			@event.flags
+		end
 end
 
 # Cross-platform way of finding an executable in the $PATH.
@@ -154,34 +158,35 @@ def backupDestinationFile(dest)
 	}
 end
 
+if File.exist?($opts[:watch])
+	$log.die "Watch file #{$opts[:watch]} exists - will not delete without force option" unless $opts[:force]
+	FileUtils.rm($opts[:watch])
+end
+
+$zenity = which('zenity')
+$log.die "zenity not found" if $zenity.nil?
+
 if $opts[:bg]
 	pid=%x/pidof #{ME}/.strip
 	$log.die "Already running with pid=#{pid}" unless pid.empty?
-	$log.info "Running in background"
+	$log.info "Running in background, logging to #{$opts[:log]}"
 	Daemons.daemonize({:app_name=>ME})
 	$log = Logger.set_logger($opts[:log], $log.level)
-	$log.info "Background rocess pid=#{Process.pid}"
+	$log.info "Background process pid #{Process.pid}"
 end
 
 notifier = nil
 begin
-	$zenity = which('zenity')
-	raise "zenity not found" if $zenity.nil?
-
-	if File.exist?($opts[:watch])
-		raise "Watch file exists will not delete without force option" unless $opts[:force]
-		FileUtils.rm($opts[:watch])
-	end
 
 	notifier = INotify::Notifier.new
 
-	notifier.watch($opts[:watchdir], :moved_to) { |event|
+	notifier.watch($opts[:watchdir], :moved_to, :create) { |event|
 		iev = InotifyEvent.new(event)
 
 		iev.summarize
 		$log.debug "\n"+iev.event.inspect
 
-		if iev.has_absolute_name($opts[:watch]) && iev.has_flag(:moved_to)
+		if iev.has_absolute_name($opts[:watch]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
 			$log.info "Found watch file: #{$opts[:watch]}"
 
 			file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchfile]}" --title="Firefox print to file"/.chomp
@@ -205,11 +210,12 @@ begin
 			$log.info "Renamed file #{iev.absolute_name} to #{dest}"
 			%x(nautilus #{$opts[:destdir]} &)
 		else
-			$log.debug "Ignoring file: #{iev.absolute_name}"
+			$log.debug "Ignoring file: #{iev.absolute_name} with flags=#{iev.flags.inspect}"
 		end
 	}
 
-	$log.info "Running notifier: #{notifier.inspect}"
+	$log.info "Watching for updates to #{$opts[:watch]}"
+	$log.debug "Running notifier: #{notifier.inspect}"
 	notifier.run
 rescue Interrupt => e
 	$log.info "\nShutting down"
