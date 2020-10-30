@@ -16,6 +16,7 @@ require 'logger'
 require 'optparse'
 require 'daemons'
 
+MERB=File.basename($0)
 ME=File.basename($0, ".rb")
 MD=File.expand_path(File.dirname(File.realpath($0)))
 
@@ -47,13 +48,15 @@ $opts={
 	:force=>false,
 	:watch=>File.expand_path("~/mozilla.pdf"),
 	:destdir=>"/var/tmp/mozilla",
-	:bg=>false
+	:bg=>false,
+	:kill=>false,
+	:autostart=>false
 }
 
 $opts[:log]=File.join($opts[:destdir], ME+".log")
 
 optparser=OptionParser.new { |opts|
-	opts.banner = "#{ME}.rb [options]\n"
+	opts.banner = "#{MERB} [options]\n"
 
 	opts.on('-d', '--dir ', String, "Directory for pdf output files, default #{$opts[:destdir]}") { |dir|
 		$opts[:destdir]=dir
@@ -65,6 +68,14 @@ optparser=OptionParser.new { |opts|
 
 	opts.on('-b', '--bg', "Run as a background daemon") {
 		$opts[:bg]=true
+	}
+
+	opts.on('-k', '--kill', "Kill the running process, if any") {
+		$opts[:kill]=true
+	}
+
+	opts.on('-a', '--autostart', "Add desktop file to ~/.config/autostart and ~/.local/share/applications") {
+		$opts[:autostart]=true
 	}
 
 	opts.on('-D', '--debug', "Enable debugging output") {
@@ -158,19 +169,63 @@ def backupDestinationFile(dest)
 	}
 end
 
+def pidOf(process_name)
+	%x/pidof #{process_name}/.strip
+end
+
 if File.exist?($opts[:watch])
 	$log.die "Watch file #{$opts[:watch]} exists - will not delete without force option" unless $opts[:force]
 	FileUtils.rm($opts[:watch])
+end
+
+if $opts[:autostart]
+	desktop_entry=%Q(
+[Desktop Entry]
+Name=firefox_print2file_watcher
+GenericName=firefox_print2file_watcher
+Comment=Watch mozilla.pdf file for changes
+Exec=#{File.join(MD, MERB)} -b -f -k
+Terminal=false
+Type=Application
+X-GNOME-Autostart-enabled=true
+)
+	desktop_file=ME+".desktop"
+	autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
+	$log.info "Writing autostart #{autostart_desktop}"
+	File.open(autostart_desktop, "w") { |fd|
+		fd.puts desktop_entry
+	}
+	local_app_desktop=File.join(ENV['HOME'], ".local/share/applications/#{desktop_file}")
+	$log.info "Writing "+local_app_desktop
+	File.open(local_app_desktop, "w") { |fd|
+		fd.puts desktop_entry
+	}
+	puts desktop_entry
+
+	exit 0
+end
+
+if $opts[:kill]
+	pid=pidOf(MERB)
+	unless pid.empty?
+		$log.info "Killing pid=#{pid}"
+		out=%x/kill #{pid}/
+		if $?.exitstatus != 0
+			puts out
+			$log.die "Failed to kill process with pid=#{pid}"
+		end
+	end
+	exit 0 unless $opts[:bg]
 end
 
 $zenity = which('zenity')
 $log.die "zenity not found" if $zenity.nil?
 
 if $opts[:bg]
-	pid=%x/pidof #{ME}/.strip
+	pid=pidOf(MERB)
 	$log.die "Already running with pid=#{pid}" unless pid.empty?
 	$log.info "Running in background, logging to #{$opts[:log]}"
-	Daemons.daemonize({:app_name=>ME})
+	Daemons.daemonize({:app_name=>MERB})
 	$log = Logger.set_logger($opts[:log], $log.level)
 	$log.info "Background process pid #{Process.pid}"
 end
@@ -187,7 +242,7 @@ begin
 		$log.debug "\n"+iev.event.inspect
 
 		if iev.has_absolute_name($opts[:watch]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
-			$log.info "Found watch file: #{$opts[:watch]}"
+			$log.info "Found watch file: #{$opts[:watch]} - #{iev.flags.inspect}"
 
 			file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchfile]}" --title="Firefox print to file"/.chomp
 			if file.empty?
