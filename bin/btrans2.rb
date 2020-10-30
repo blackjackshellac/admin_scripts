@@ -223,7 +223,7 @@ class Transaction
 
 	# 0123-45678-999991234
 	# (^|\s)[-\d]{4}(?<digits>[-\d]+?)[-\d]*(\s|$)
-	RE_OBF=/^(?<lead>[a-zA-Z()\s]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
+	RE_OBF=/^(?<lead>[a-zA-Z()\s-]*?[-\d]{4})(?<digits>[-\d]+?)(?<tail>[-\d]{4})(\s|$)/
 	def obfuscate_digits(val)
 		@@log.debug "obfuscate val=#{val}"
 		m=RE_OBF.match(val)
