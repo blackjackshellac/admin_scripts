@@ -46,7 +46,7 @@ $log = Logger.set_logger(STDERR)
 
 $opts={
 	:force=>false,
-	:watch=>File.expand_path("~/mozilla.pdf"),
+	:watchpath=>File.expand_path("~/mozilla.pdf"),
 	:destdir=>"/var/tmp/mozilla",
 	:bg=>false,
 	:kill=>false,
@@ -92,9 +92,10 @@ optparser.parse!
 
 FileUtils.mkdir_p($opts[:destdir])
 
-$opts[:ext]=File.extname($opts[:watch])
-$opts[:watchfile]=File.basename($opts[:watch], $opts[:ext])
-$opts[:watchdir]=File.dirname($opts[:watch])
+$opts[:watchext]=File.extname($opts[:watchpath])
+$opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
+$opts[:watchdir]=File.dirname($opts[:watchpath])
+$opts[:watchfile]=File.basename($opts[:watchpath])
 
 class InotifyEvent
 
@@ -165,6 +166,7 @@ def backupDestinationFile(dest)
 
 		mtime=fstat.mtime
 		bdest=mtime.strftime("#{fbase}_%Y%m%d_%H%M%S#{fext}")
+		$log.info "Backup #{dest} to #{bdest}"
 		FileUtils.mv(dest, bdest)
 	}
 end
@@ -173,9 +175,9 @@ def pidOf(process_name)
 	%x/pidof #{process_name}/.strip
 end
 
-if File.exist?($opts[:watch])
-	$log.die "Watch file #{$opts[:watch]} exists - will not delete without force option" unless $opts[:force]
-	FileUtils.rm($opts[:watch])
+if File.exist?($opts[:watchpath])
+	$log.die "Watch file #{$opts[:watchpath]} exists - will not delete without force option" unless $opts[:force]
+	FileUtils.rm($opts[:watchpath])
 end
 
 if $opts[:autostart]
@@ -241,15 +243,18 @@ begin
 		iev.summarize
 		$log.debug "\n"+iev.event.inspect
 
-		if iev.has_absolute_name($opts[:watch]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
-			$log.info "Found watch file: #{$opts[:watch]} - #{iev.flags.inspect}"
+		if iev.has_absolute_name($opts[:watchpath]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
+			$log.info "Found watch file: #{$opts[:watchpath]} - #{iev.flags.inspect}"
 
-			file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchfile]}" --title="Firefox print to file"/.chomp
-			if file.empty?
-				file=Time.now.strftime("#{$opts[:watchfile]}_%Y%m%d_%H%M%S#{$opts[:ext]}")
-			else
+			file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchbase]}" --title="Firefox print to file"/.chomp
+			if $?.exitstatus == 0 && !file.empty?
 				# add an extension if necessary
-				file+=$opts[:ext] if File.extname(file).empty?
+				file+=$opts[:watchext] if File.extname(file).empty?
+			else
+				file=$opts[:watchfile]
+				warning="Destination file set to #{file}"
+				%x/#{$zenity} --warning --text="#{warning}" --title="Firefox print to file" --no-wrap/
+				$log.warn warning
 			end
 
 			#
@@ -264,12 +269,13 @@ begin
 			#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
 			$log.info "Renamed file #{iev.absolute_name} to #{dest}"
 			%x(nautilus #{$opts[:destdir]} &)
+
 		else
 			$log.debug "Ignoring file: #{iev.absolute_name} with flags=#{iev.flags.inspect}"
 		end
 	}
 
-	$log.info "Watching for updates to #{$opts[:watch]}"
+	$log.info "Watching for updates to #{$opts[:watchpath]}"
 	$log.debug "Running notifier: #{notifier.inspect}"
 	notifier.run
 rescue Interrupt => e
