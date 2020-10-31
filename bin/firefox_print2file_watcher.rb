@@ -90,7 +90,11 @@ optparser=OptionParser.new { |opts|
 }
 optparser.parse!
 
-FileUtils.mkdir_p($opts[:destdir])
+begin
+	FileUtils.mkdir_p($opts[:destdir])
+rescue => e
+	$log.die "Failed to create destination directory: #{$opts[:destdir]}: #{e}"
+end
 
 $opts[:watchext]=File.extname($opts[:watchpath])
 $opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
@@ -131,49 +135,89 @@ class InotifyEvent
 		end
 end
 
-# Cross-platform way of finding an executable in the $PATH.
-#
-#   which('ruby') #=> /usr/bin/ruby
-def which(cmd)
-  exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
-  ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
-    exts.each do |ext|
-      exe = File.join(path, "#{cmd}#{ext}")
-      return exe if File.executable?(exe) && !File.directory?(exe)
-    end
-  end
-  nil
-end
-
-#
-# if the destination exists, rename it with its create time
-#
-def backupDestinationFile(dest)
-	return unless File.exist?(dest)
-
-	ddir=File.dirname(dest)
-	fext=File.extname(dest)
-	fbase=File.basename(dest, fext)
-
-	begin
-		fstat=File.lstat(dest)
-	rescue => e
-		raise "Failed to stat destination file: #{dest} [#{e.to_s}]"
+class ShellUtil
+	# Cross-platform way of finding an executable in the $PATH.
+	#
+	#   ShellUtil.which('ruby') #=> /usr/bin/ruby
+	def self.which(cmd)
+	  exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
+	  ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
+	    exts.each do |ext|
+	      exe = File.join(path, "#{cmd}#{ext}")
+	      return exe if File.executable?(exe) && !File.directory?(exe)
+	    end
+	  end
+	  nil
 	end
 
-	Dir.chdir(ddir) {
-		$log.debug "%s = [%s]" % [ dest, fstat.inspect ]
+	#
+	# if the destination exists, rename it with its create time
+	#
+	def self.backupDestinationFile(dest)
+		return unless File.exist?(dest)
 
-		mtime=fstat.mtime
-		bdest=mtime.strftime("#{fbase}_%Y%m%d_%H%M%S#{fext}")
-		$log.info "Backup #{dest} to #{bdest}"
-		FileUtils.mv(dest, bdest)
-	}
+		ddir=File.dirname(dest)
+		fext=File.extname(dest)
+		fbase=File.basename(dest, fext)
+
+		begin
+			fstat=File.lstat(dest)
+		rescue => e
+			raise "Failed to stat destination file: #{dest} [#{e.to_s}]"
+		end
+
+		Dir.chdir(ddir) {
+			$log.debug "%s = [%s]" % [ dest, fstat.inspect ]
+
+			mtime=fstat.mtime
+			bdest=mtime.strftime("#{fbase}_%Y%m%d_%H%M%S#{fext}")
+			$log.info "Backup #{dest} to #{bdest}"
+			FileUtils.mv(dest, bdest)
+		}
+	end
+
+	def self.pidOf(process_name)
+		%x/pidof #{process_name}/.strip
+	end
+
+	def self.killProcessByName(process_name)
+		pid=ShellUtil.pidOf(MERB)
+		return if pid.empty?
+		$log.info "Killing pid=#{pid}"
+		out=%x/kill #{pid}/
+		return if $?.exitstatus == 0
+		puts out
+		$log.die "Failed to kill process with pid=#{pid}"
+	end
+
+	def self.createAutostart
+		desktop_entry=%Q(
+	[Desktop Entry]
+	Name=firefox_print2file_watcher
+	GenericName=firefox_print2file_watcher
+	Comment=Watch mozilla.pdf file for changes
+	Exec=#{File.join(MD, MERB)} -b -f -k
+	Terminal=false
+	Type=Application
+	X-GNOME-Autostart-enabled=true
+	)
+		desktop_file=ME+".desktop"
+		autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
+		$log.info "Writing autostart #{autostart_desktop}"
+		File.open(autostart_desktop, "w") { |fd|
+			fd.puts desktop_entry
+		}
+		local_app_desktop=File.join(ENV['HOME'], ".local/share/applications/#{desktop_file}")
+		$log.info "Writing "+local_app_desktop
+		File.open(local_app_desktop, "w") { |fd|
+			fd.puts desktop_entry
+		}
+		puts desktop_entry
+	rescue => e
+		$log.die "createAutostart failed: #{e}"
+	end
 end
 
-def pidOf(process_name)
-	%x/pidof #{process_name}/.strip
-end
 
 if File.exist?($opts[:watchpath])
 	$log.die "Watch file #{$opts[:watchpath]} exists - will not delete without force option" unless $opts[:force]
@@ -181,50 +225,20 @@ if File.exist?($opts[:watchpath])
 end
 
 if $opts[:autostart]
-	desktop_entry=%Q(
-[Desktop Entry]
-Name=firefox_print2file_watcher
-GenericName=firefox_print2file_watcher
-Comment=Watch mozilla.pdf file for changes
-Exec=#{File.join(MD, MERB)} -b -f -k
-Terminal=false
-Type=Application
-X-GNOME-Autostart-enabled=true
-)
-	desktop_file=ME+".desktop"
-	autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
-	$log.info "Writing autostart #{autostart_desktop}"
-	File.open(autostart_desktop, "w") { |fd|
-		fd.puts desktop_entry
-	}
-	local_app_desktop=File.join(ENV['HOME'], ".local/share/applications/#{desktop_file}")
-	$log.info "Writing "+local_app_desktop
-	File.open(local_app_desktop, "w") { |fd|
-		fd.puts desktop_entry
-	}
-	puts desktop_entry
-
+	ShellUtil.createAutostart
 	exit 0
 end
 
 if $opts[:kill]
-	pid=pidOf(MERB)
-	unless pid.empty?
-		$log.info "Killing pid=#{pid}"
-		out=%x/kill #{pid}/
-		if $?.exitstatus != 0
-			puts out
-			$log.die "Failed to kill process with pid=#{pid}"
-		end
-	end
+	ShellUtil.killProcessByName(MERB)
 	exit 0 unless $opts[:bg]
 end
 
-$zenity = which('zenity')
+$zenity = ShellUtil.which('zenity')
 $log.die "zenity not found" if $zenity.nil?
 
 if $opts[:bg]
-	pid=pidOf(MERB)
+	pid=ShellUtil.pidOf(MERB)
 	$log.die "Already running with pid=#{pid}" unless pid.empty?
 	$log.info "Running in background, logging to #{$opts[:log]}"
 	Daemons.daemonize({:app_name=>MERB})
@@ -232,9 +246,19 @@ if $opts[:bg]
 	$log.info "Background process pid #{Process.pid}"
 end
 
+class InotifyWatcher
+	attr_reader :notifier
+	def initialize
+		@notifier = INotify::Notifier.new
+	end
+
+	def watch(dir, *flags, &proc)
+		proc.call(dir, flags)
+	end
+end
+
 notifier = nil
 begin
-
 	notifier = INotify::Notifier.new
 
 	notifier.watch($opts[:watchdir], :moved_to, :create) { |event|
@@ -263,7 +287,7 @@ begin
 			dest=File.join($opts[:destdir], file)
 			$log.info "Destination file is #{dest}"
 
-			backupDestinationFile(dest)
+			ShellUtil.backupDestinationFile(dest)
 
 			FileUtils.mv(iev.absolute_name, dest)
 			#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
