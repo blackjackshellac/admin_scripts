@@ -116,6 +116,8 @@ class InotifyEvent
 			$log.debug "flags>>"+@event.flags.inspect
 			$log.debug "notifier>>"+@event.notifier.inspect
 			$log.debug "event.watcher.flags>>"+@event.watcher.flags.inspect
+
+			$log.debug "event=["+@event.inspect+"]"
 		end
 
 		def has_flag(flag)
@@ -172,7 +174,11 @@ class ShellUtil
 			mtime=fstat.mtime
 			bdest=mtime.strftime("#{fbase}_%Y%m%d_%H%M%S#{fext}")
 			$log.info "Backup #{dest} to #{bdest}"
-			FileUtils.mv(dest, bdest)
+			begin
+				FileUtils.mv(dest, bdest)
+			rescue => e
+				$log.error "Failed to backup #{dest}: #{e}"
+			end
 		}
 	end
 
@@ -216,6 +222,26 @@ class ShellUtil
 	rescue => e
 		$log.die "createAutostart failed: #{e}"
 	end
+
+	ZENITY_TITLE="Firefox print to file"
+	def self.zenity_entry(text, text_default, title=ZENITY_TITLE)
+		# file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchbase]}" --title="Firefox print to file"/.chomp
+		# if $?.exitstatus == 0 && !file.empty?
+		entry=%x/#{$zenity} --entry --text="#{text}" --entry-text="#{text_default}" --title="#{title}"/.chomp
+		entry="" unless $?.exitstatus == 0
+		entry
+	end
+
+	def self.zenity_warning(warning, title=ZENITY_TITLE)
+		$log.warn warning
+		%x/#{$zenity} --warning --text="#{warning}" --title="#{title}" --no-wrap/
+	end
+
+	def self.zenity_error(error, title=ZENITY_TITLE)
+		$log.error error
+		%x/#{$zenity} --error --text="#{error}" --title="#{title}" --no-wrap/
+	end
+
 end
 
 
@@ -246,17 +272,6 @@ if $opts[:bg]
 	$log.info "Background process pid #{Process.pid}"
 end
 
-class InotifyWatcher
-	attr_reader :notifier
-	def initialize
-		@notifier = INotify::Notifier.new
-	end
-
-	def watch(dir, *flags, &proc)
-		proc.call(dir, flags)
-	end
-end
-
 notifier = nil
 begin
 	notifier = INotify::Notifier.new
@@ -265,20 +280,17 @@ begin
 		iev = InotifyEvent.new(event)
 
 		iev.summarize
-		$log.debug "\n"+iev.event.inspect
 
 		if iev.has_absolute_name($opts[:watchpath]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
 			$log.info "Found watch file: #{$opts[:watchpath]} - #{iev.flags.inspect}"
 
-			file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchbase]}" --title="Firefox print to file"/.chomp
-			if $?.exitstatus == 0 && !file.empty?
+			file=ShellUtil.zenity_entry("Enter the print to file name", $opts[:watchbase])
+			if file.empty?
+				file=$opts[:watchfile]
+				ShellUtil.zenity_warning("Destination file defaulting to #{file}")
+			else
 				# add an extension if necessary
 				file+=$opts[:watchext] if File.extname(file).empty?
-			else
-				file=$opts[:watchfile]
-				warning="Destination file set to #{file}"
-				%x/#{$zenity} --warning --text="#{warning}" --title="Firefox print to file" --no-wrap/
-				$log.warn warning
 			end
 
 			#
@@ -289,10 +301,14 @@ begin
 
 			ShellUtil.backupDestinationFile(dest)
 
-			FileUtils.mv(iev.absolute_name, dest)
-			#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
-			$log.info "Renamed file #{iev.absolute_name} to #{dest}"
-			%x(nautilus #{$opts[:destdir]} &)
+			begin
+				FileUtils.mv(iev.absolute_name, dest)
+				#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
+				$log.info "Renamed file #{iev.absolute_name} to #{dest}"
+				%x(nautilus #{$opts[:destdir]} &)
+			rescue => e
+				ShellUtil.zenity_error("Failed to move #{iev.absolute_name} to #{dest}")
+			end
 
 		else
 			$log.debug "Ignoring file: #{iev.absolute_name} with flags=#{iev.flags.inspect}"
