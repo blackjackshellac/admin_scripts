@@ -16,24 +16,53 @@ require 'logger'
 require 'optparse'
 require 'daemons'
 
+## Process name with extension
 MERB=File.basename($0)
+## Process name without .rb extension
 ME=File.basename($0, ".rb")
+# Directory where the script lives, resolves symlinks
 MD=File.expand_path(File.dirname(File.realpath($0)))
 
 class Logger
+	DATE_FORMAT="%Y-%m-%d %H:%M:%S"
+
+	##
+	# Send an error message
+	#
+	# @param [String] msg error message
+	#
 	def err(msg)
-		self.error(msg)
+		error(msg)
 	end
 
-	def die(msg)
-		self.error(msg)
-		exit 1
+	##
+	# Print an error message and exit immediately with exit errno 1
+	#
+	# @param [String] msg error message
+	# @param [Integer] errno optional exit errno value, default is 1
+	#
+	def die(msg, errno=1)
+		error(msg)
+		exit errno
 	end
 
+	##
+	# Create a logger with the given stream or file
+	#
+	# @overload set_logger(filename, level)
+	#   Create a file logger
+	#   @param [String] stream filename
+	#   @param [Integer] level log level
+	# @overload set_logger(iostream, level)
+	#   @param [IO] stream STDOUT or STDERR or other io stream
+	#   @param [Integer] level log level
+	#
+	# @return [Logger] the logger object
+	#
 	def self.set_logger(stream, level=Logger::INFO)
 		log = Logger.new(stream)
 		log.level = level
-		log.datetime_format = "%Y-%m-%d %H:%M:%S"
+		log.datetime_format = DATE_FORMAT
 		log.formatter = proc do |severity, datetime, progname, msg|
 			"#{severity} #{datetime}: #{msg}\n"
 		end
@@ -90,24 +119,21 @@ optparser=OptionParser.new { |opts|
 }
 optparser.parse!
 
-begin
-	FileUtils.mkdir_p($opts[:destdir])
-rescue => e
-	$log.die "Failed to create destination directory: #{$opts[:destdir]}: #{e}"
-end
-
-$opts[:watchext]=File.extname($opts[:watchpath])
-$opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
-$opts[:watchdir]=File.dirname($opts[:watchpath])
-$opts[:watchfile]=File.basename($opts[:watchpath])
-
 class InotifyEvent
 
 		attr_reader :event
+		##
+		# Create a new instance of an InotifyEvent
+		#
+		# @param [INotify::Event] event event to set to instance
+		#
 		def initialize(event)
 			@event = event
 		end
 
+		##
+		# summarize current event when debugging
+		#
 		def summarize
 			return unless $log.level == Logger::DEBUG
 			$log.debug "-"*80
@@ -120,18 +146,38 @@ class InotifyEvent
 			$log.debug "event=["+@event.inspect+"]"
 		end
 
+		##
+		# Check that a flag is set for this event
+		#
+		# @param [Integer] flag event flag to test
+		#
 		def has_flag(flag)
-			return @event.flags.include?(flag)
+			@event.flags.include?(flag)
 		end
 
+		##
+		# Check that the event is for the given file path
+		#
+		# @param [String] absolute_name path to check against event
+		#
 		def has_absolute_name(absolute_name)
-			return absolute_name.eql?(@event.absolute_name)
+			absolute_name.eql?(@event.absolute_name)
 		end
 
+		##
+		# Get absolute name of path from event
+		#
+		# @return [String] absolute path name of event
+		#
 		def absolute_name
 			@event.absolute_name
 		end
 
+		##
+		# Return array of matched flag(s)
+		#
+		# @return [Array] flags matched by event
+		#
 		def flags
 			@event.flags
 		end
@@ -140,7 +186,7 @@ end
 class ShellUtil
 	# Cross-platform way of finding an executable in the $PATH.
 	#
-	#   ShellUtil.which('ruby') #=> /usr/bin/ruby
+	# @example ShellUtil.which('ruby') #=> /usr/bin/ruby
 	def self.which(cmd)
 	  exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
 	  ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
@@ -153,7 +199,11 @@ class ShellUtil
 	end
 
 	#
-	# if the destination exists, rename it with its create time
+	# if the destination file exists, rename it with its last modification time
+	#
+	# @example mozilla.pdf -> mozilla_20201030_152222.pdf
+	#
+	# @param [String] dest destination file name
 	#
 	def self.backupDestinationFile(dest)
 		return unless File.exist?(dest)
@@ -174,33 +224,123 @@ class ShellUtil
 			mtime=fstat.mtime
 			bdest=mtime.strftime("#{fbase}_%Y%m%d_%H%M%S#{fext}")
 			$log.info "Backup #{dest} to #{bdest}"
-			begin
-				FileUtils.mv(dest, bdest)
-			rescue => e
-				$log.error "Failed to backup #{dest}: #{e}"
-			end
+			e = FileUtils.mv(dest, bdest)
+			$log.error "Failed to backup #{dest}: #{e}" unless e == true
 		}
 	end
 
-	def self.pidOf(process_name)
-		%x/pidof #{process_name}/.strip
+	##
+	# File stat for the given path
+	#
+	# @param [String] path for stat
+	#
+	# @return [File::Stat] stat data object
+	# @return [NilClass] path not found
+	#
+	def self.lstat(path)
+		File.lstat(path)
+	rescue
+		nil
 	end
 
+	##
+	# Return the user id of the specified user
+	#
+	# @param [String] user username
+	#
+	# @return [Integer] uid of the given user
+	# @return [Null] if user not found
+	def self.get_useruid(user)
+		Etc.getpwnam(user).uid.to_i
+	rescue
+		nil
+	end
+
+	##
+	# Find the proc directory for the given process name and user
+	#
+	# @param [String] process_name process name
+	# @param [String] user user name
+	#
+	# @return [Array] array of process ids matching process name and user
+	#
+	def self.proc_cmdline(process_name, user=nil)
+		uid = get_useruid(user)
+		pids=Dir.glob("/proc/[0-9]*")
+		ipids=[]
+		pids.each { |pid|
+			unless uid.nil?
+				dstat=lstat(pid)
+				next if dstat.nil? || dstat.uid != uid
+			end
+			cmdline=File.read(File.join(pid, "cmdline")).strip
+			next unless process_name.eql?(cmdline)
+			$log.debug "#{uid}.#{pid}>> [#{process_name}=#{cmdline}]"
+			ipids << File.basename(pid).to_i
+		}
+		ipids
+	end
+
+	##
+	# Return the current username
+	#
+	# @return [String] user name of the current user
+	#
+	def self.getUser
+		return Etc.getlogin
+	end
+
+	# Get the process id for the given process and user
+	#
+	# @param [String] process_name process name
+	# @param [String] user current user if not specified
+	#
+	# @return [String] pid of given process or empty string if not found
+	#
+	def self.pidOf(process_name, user=nil)
+		user=getUser if user.nil?
+		pids=proc_cmdline(process_name, user)
+		pids.empty? ? "" : pids[0].to_s
+	end
+
+	##
+	# Kill the given pid
+	#
+	# @param [Integer] pid to kill
+	# @param [String] signal if given, TERM by default
+	#
+	# @return [TrueClass] on success
+	# @return [FalseClass] on failure
+	#
+	def self.killProcessByPid(pid, signal="TERM")
+		$log.info "Killing pid=#{pid} signal=#{signal}"
+		Process.kill(signal, pid.to_i)
+		true
+	rescue => e
+		$log.error "Failed to kill process with pid=#{pid}: #{e}"
+		false
+	end
+
+	##
+	# Kill the process with the given process Name
+	#
+	# @param [String] process_name process name
+	#
 	def self.killProcessByName(process_name)
-		pid=ShellUtil.pidOf(MERB)
+		pid=ShellUtil.pidOf(process_name)
 		return if pid.empty?
-		$log.info "Killing pid=#{pid}"
-		out=%x/kill #{pid}/
-		return if $?.exitstatus == 0
-		puts out
-		$log.die "Failed to kill process with pid=#{pid}"
+		killProcessByPid(pid.to_i)
 	end
 
+	##
+	# Create an autostart desktop file, and place a desktop file in
+	# ~/.local/share/applications
+	#
 	def self.createAutostart
 		desktop_entry=%Q(
 	[Desktop Entry]
-	Name=firefox_print2file_watcher
-	GenericName=firefox_print2file_watcher
+	Name=#{ME}
+	GenericName=#{ME}
 	Comment=Watch mozilla.pdf file for changes
 	Exec=#{File.join(MD, MERB)} -b -f -k
 	Terminal=false
@@ -242,8 +382,45 @@ class ShellUtil
 		%x/#{$zenity} --error --text="#{error}" --title="#{title}" --no-wrap/
 	end
 
+	##
+	# Move file from soure to Destination
+	#
+	# @param src [String] source file path
+	# @param dst [String] destination file path
+	#
+	# @return [TrueClass] on success
+	# @return [Exception] on failure
+	def self.mv(src,dst)
+		begin
+			FileUtils.mv(src, dst)
+		rescue => e
+			return e
+		end
+		true
+	end
+
+	##
+	# Creates a directory and all its parent directories.
+	#
+	# @param [String] dir directory path to create
+	#
+	# @return [TrueClass] on success
+	# @return [FalseClass] on failure
+	#
+	def self.mkdir_p(dir)
+		FileUtils.mkdir_p(dir)
+		true
+	rescue => e
+		false
+	end
 end
 
+$log.die "Failed to create destination directory: #{$opts[:destdir]}" unless ShellUtil.mkdir_p($opts[:destdir])
+
+$opts[:watchext]=File.extname($opts[:watchpath])
+$opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
+$opts[:watchdir]=File.dirname($opts[:watchpath])
+$opts[:watchfile]=File.basename($opts[:watchpath])
 
 if File.exist?($opts[:watchpath])
 	$log.die "Watch file #{$opts[:watchpath]} exists - will not delete without force option" unless $opts[:force]
@@ -301,12 +478,12 @@ begin
 
 			ShellUtil.backupDestinationFile(dest)
 
-			begin
-				FileUtils.mv(iev.absolute_name, dest)
+			res = ShellUtil.mv(iev.absolute_name, dest)
+			if res == true
 				#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
 				$log.info "Renamed file #{iev.absolute_name} to #{dest}"
 				%x(nautilus #{$opts[:destdir]} &)
-			rescue => e
+			else
 				ShellUtil.zenity_error("Failed to move #{iev.absolute_name} to #{dest}")
 			end
 
