@@ -542,7 +542,7 @@ if $opts[:clean]
 			$log.info "Use -f to delete #{file}: #{fstat.mtime}"
 		end
 	}
-	exit 0
+	exit 0 unless $opts[:bg]
 end
 
 $opts[:watchext]=File.extname($opts[:watchpath])
