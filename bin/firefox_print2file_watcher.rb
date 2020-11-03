@@ -79,7 +79,14 @@ $opts={
 	:destdir=>"/var/tmp/mozilla",
 	:bg=>false,
 	:kill=>false,
-	:autostart=>false
+	:autostart=>false,
+	:clean => false,
+	:clean_opts => {
+		:timespec=>"8w",
+		:recurse=>true,
+		:max_mtime=>Time.at(Time.now.to_i-4*24*3600),
+		:min_mtime=>Time.at(0)
+	}
 }
 
 $opts[:log]=File.join($opts[:destdir], ME+".log")
@@ -101,6 +108,12 @@ optparser=OptionParser.new { |opts|
 
 	opts.on('-k', '--kill', "Kill the running process, if any") {
 		$opts[:kill]=true
+	}
+
+	# nn[smhdw] mod is seconds|minutes|hours|days|weeks
+	opts.on('-c', '--clean [TIMESPEC]', String, "Cleanup files older than NNN[smhdwy], eg 30d for 30days, default=#{$opts[:clean_opts][:timespec]}") { |timespec|
+		$opts[:clean_opts][:timespec] = timespec unless timespec.nil?
+		$opts[:clean] = true
 	}
 
 	opts.on('-a', '--autostart', "Add desktop file to ~/.config/autostart and ~/.local/share/applications") {
@@ -400,6 +413,22 @@ class ShellUtil
 	end
 
 	##
+	# Delete the given file
+	#
+	# @param [String] file file to delete
+	#
+	# @return [TrueClass] on success
+	# @return [Exception] on failure
+	def self.rm_f(file)
+		begin
+			FileUtils.rm_f(file)
+		rescue => e
+			return e
+		end
+		true
+	end
+
+	##
 	# Creates a directory and all its parent directories.
 	#
 	# @param [String] dir directory path to create
@@ -413,9 +442,108 @@ class ShellUtil
 	rescue => e
 		false
 	end
+
+	##
+	# default options for ShellUtil.find()
+	#
+	FIND_OPTS={
+		:recurse=>false,
+		:max_mtime=>Time.now,
+		:min_mtime=>Time.at(0)
+	}
+
+	##
+	# search the given directory for files that match the given filespec
+	# @param [String] dir directory path to find in
+	# @param [String] fspec file glob
+	# @param [Hash] opts find options
+	# @option opts [Boolean] :recurse
+	# @option opts [Time] :max_mtime maximum time, defaults to Time.now
+	# @option opts [Time] :min_mtime minimum time, defaults to Time.at(0)
+	#
+	# @yield [String,File::Stat] file path and its stat structure
+	def self.find(dir, fspec, opts=FIND_OPTS)
+		opts=FIND_OPTS.merge(opts)
+		dir=File.expand_path(dir)
+		Dir.chdir(dir) {
+			glob=opts[:recurse] ? File.join("**", fspec) : fspec
+			Dir.glob(glob) { |file|
+				fstat = File.lstat file
+				if fstat.directory?
+					puts "dir=#{dir} file=#{file}"
+					find(File.join(dir, file), fspec, opts)
+					next
+				end
+				next if fstat.mtime >= opts[:max_mtime]
+				next if fstat.mtime <= opts[:min_mtime]
+				yield File.join(dir, file), fstat
+			}
+		}
+	end
 end
 
 $log.die "Failed to create destination directory: #{$opts[:destdir]}" unless ShellUtil.mkdir_p($opts[:destdir])
+
+def mod_val(val, mod)
+	mod=mod.to_s
+	val == 1 ? mod : mod+"s"
+end
+
+##
+# parse a timespec of the form NN[smhdw] where the modifiers represent seconds,
+# minutes, hours, days or weeks
+#
+# @example timespec=86400s or 86400 both represent 24 hours
+#
+# @param [String] timespec timespec of the form NN[smhdw]
+#
+# @return [Time] time object seconds before now
+#
+def parse_timespec(timespec)
+	m=/(?<val>\d+)(?<mod>[smhdw])?/.match(timespec)
+	raise "No regex match" if m.nil?
+	mod_sym=m[:mod].nil? ? :s : m[:mod].to_sym
+	val=m[:val].to_i
+	secs = val
+	case mod_sym
+	when :s
+		secs = val
+		mod = mod_val(val, :second)
+	when :m
+		secs = val*60
+		mod = mod_val(val,:minute)
+	when :h
+		secs = val*60*60
+		mod = mod_val(val, :hour)
+	when :d
+		secs = val*24*60*60
+		mod = mod_val(val, :day)
+	when :w
+		secs = val*7*24*60*60
+		mod = mod_val(val, :week)
+	else
+		raise "Unknown timespec modifier: #{mod_sym}"
+	end
+	ptime=Time.at(Time.now.to_i-secs)
+	$log.info "#{timespec}> delete files older than #{val} #{mod} ago = #{ptime}"
+	ptime
+rescue => e
+	$log.die "Failed to parse time spec: #{timespec} - #{e}"
+end
+
+if $opts[:clean]
+	timespec=$opts[:clean_opts][:timespec]
+	$opts[:clean_opts][:max_mtime] = parse_timespec(timespec)
+	ShellUtil.find($opts[:destdir], "*.pdf", $opts[:clean_opts]) { |file,fstat|
+		if $opts[:force]
+			$log.info "Deleting #{file}: #{fstat.mtime}"
+			ShellUtil.rm_f(file)
+		else
+			$log.info "Use -f to delete #{file}: #{fstat.mtime}"
+		end
+	}
+	exit 0
+end
 
 $opts[:watchext]=File.extname($opts[:watchpath])
 $opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
