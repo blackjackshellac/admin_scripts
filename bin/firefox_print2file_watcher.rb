@@ -355,7 +355,7 @@ class ShellUtil
 	Name=#{ME}
 	GenericName=#{ME}
 	Comment=Watch mozilla.pdf file for changes
-	Exec=#{File.join(MD, MERB)} -b -f -k
+	Exec=#{File.join(MD, MERB)} -b -f -k -c
 	Terminal=false
 	Type=Application
 	X-GNOME-Autostart-enabled=true
