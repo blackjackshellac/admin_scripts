@@ -16,13 +16,6 @@ require 'logger'
 require 'optparse'
 require 'daemons'
 
-## Process name with extension
-MERB=File.basename($0)
-## Process name without .rb extension
-ME=File.basename($0, ".rb")
-# Directory where the script lives, resolves symlinks
-MD=File.expand_path(File.dirname(File.realpath($0)))
-
 class Logger
 	DATE_FORMAT="%Y-%m-%d %H:%M:%S"
 
@@ -72,65 +65,6 @@ class Logger
 end
 
 $log = Logger.set_logger(STDERR)
-
-$opts={
-	:force=>false,
-	:watchpath=>File.expand_path("~/mozilla.pdf"),
-	:destdir=>"/var/tmp/mozilla",
-	:bg=>false,
-	:kill=>false,
-	:autostart=>false,
-	:clean => false,
-	:clean_opts => {
-		:timespec=>"8w",
-		:recurse=>true,
-		:max_mtime=>Time.at(Time.now.to_i-4*24*3600),
-		:min_mtime=>Time.at(0)
-	}
-}
-
-$opts[:log]=File.join($opts[:destdir], ME+".log")
-
-optparser=OptionParser.new { |opts|
-	opts.banner = "#{MERB} [options]\n"
-
-	opts.on('-d', '--dir ', String, "Directory for pdf output files, default #{$opts[:destdir]}") { |dir|
-		$opts[:destdir]=dir
-	}
-
-	opts.on('-f', '--[no-]force', "Remove existing watch file on startup, default #{$opts[:force]}") { |bool|
-		$opts[:force]=bool
-	}
-
-	opts.on('-b', '--bg', "Run as a background daemon") {
-		$opts[:bg]=true
-	}
-
-	opts.on('-k', '--kill', "Kill the running process, if any") {
-		$opts[:kill]=true
-	}
-
-	# nn[smhdw] mod is seconds|minutes|hours|days|weeks
-	opts.on('-c', '--clean [TIMESPEC]', String, "Cleanup files older than NNN[smhdwy], eg 30d for 30days, default=#{$opts[:clean_opts][:timespec]}") { |timespec|
-		$opts[:clean_opts][:timespec] = timespec unless timespec.nil?
-		$opts[:clean] = true
-	}
-
-	opts.on('-a', '--autostart', "Add desktop file to ~/.config/autostart and ~/.local/share/applications") {
-		$opts[:autostart]=true
-	}
-
-	opts.on('-D', '--debug', "Enable debugging output") {
-		$log.level = Logger::DEBUG
-	}
-
-	opts.on('-h', '--help', "Help") {
-		$stdout.puts ""
-		$stdout.puts opts
-		exit 0
-	}
-}
-optparser.parse!
 
 class InotifyEvent
 
@@ -345,41 +279,8 @@ class ShellUtil
 		killProcessByPid(pid.to_i)
 	end
 
-	##
-	# Create an autostart desktop file, and place a desktop file in
-	# ~/.local/share/applications
-	#
-	def self.createAutostart
-		desktop_entry=%Q(
-	[Desktop Entry]
-	Name=#{ME}
-	GenericName=#{ME}
-	Comment=Watch mozilla.pdf file for changes
-	Exec=#{File.join(MD, MERB)} -b -f -k -c
-	Terminal=false
-	Type=Application
-	X-GNOME-Autostart-enabled=true
-	)
-		desktop_file=ME+".desktop"
-		autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
-		$log.info "Writing autostart #{autostart_desktop}"
-		File.open(autostart_desktop, "w") { |fd|
-			fd.puts desktop_entry
-		}
-		local_app_desktop=File.join(ENV['HOME'], ".local/share/applications/#{desktop_file}")
-		$log.info "Writing "+local_app_desktop
-		File.open(local_app_desktop, "w") { |fd|
-			fd.puts desktop_entry
-		}
-		puts desktop_entry
-	rescue => e
-		$log.die "createAutostart failed: #{e}"
-	end
-
 	ZENITY_TITLE="Firefox print to file"
 	def self.zenity_entry(text, text_default, title=ZENITY_TITLE)
-		# file=%x/#{$zenity} --entry --text="Enter the print to file name" --entry-text="#{$opts[:watchbase]}" --title="Firefox print to file"/.chomp
-		# if $?.exitstatus == 0 && !file.empty?
 		entry=%x/#{$zenity} --entry --text="#{text}" --entry-text="#{text_default}" --title="#{title}"/.chomp
 		entry="" unless $?.exitstatus == 0
 		entry
@@ -482,155 +383,279 @@ class ShellUtil
 	end
 end
 
-$log.die "Failed to create destination directory: #{$opts[:destdir]}" unless ShellUtil.mkdir_p($opts[:destdir])
+class FirefoxPrint2FileWatcher
+	## Process name with extension
+	MERB=File.basename($0)
+	## Process name without .rb extension
+	ME=File.basename($0, ".rb")
+	# Directory where the script lives, resolves symlinks
+	MD=File.expand_path(File.dirname(File.realpath($0)))
 
-def mod_val(val, mod)
-	mod=mod.to_s
-	val == 1 ? mod : mod+"s"
-end
-
-##
-# parse a timespec of the form NN[smhdw] where the modifiers represent seconds,
-# minutes, hours, days or weeks
-#
-# @example timespec=86400s or 86400 both represent 24 hours
-#
-# @param [String] timespec timespec of the form NN[smhdw]
-#
-# @return [Time] time object seconds before now
-#
-def parse_timespec(timespec)
-	m=/(?<val>\d+)(?<mod>[smhdw])?/.match(timespec)
-	raise "No regex match" if m.nil?
-	mod_sym=m[:mod].nil? ? :s : m[:mod].to_sym
-	val=m[:val].to_i
-	secs = val
-	case mod_sym
-	when :s
-		secs = val
-		mod = mod_val(val, :second)
-	when :m
-		secs = val*60
-		mod = mod_val(val,:minute)
-	when :h
-		secs = val*60*60
-		mod = mod_val(val, :hour)
-	when :d
-		secs = val*24*60*60
-		mod = mod_val(val, :day)
-	when :w
-		secs = val*7*24*60*60
-		mod = mod_val(val, :week)
-	else
-		raise "Unknown timespec modifier: #{mod_sym}"
-	end
-	ptime=Time.at(Time.now.to_i-secs)
-	$log.info "#{timespec}> delete files older than #{val} #{mod} ago = #{ptime}"
-	ptime
-rescue => e
-	$log.die "Failed to parse time spec: #{timespec} - #{e}"
-end
-
-if $opts[:clean]
-	timespec=$opts[:clean_opts][:timespec]
-	$opts[:clean_opts][:max_mtime] = parse_timespec(timespec)
-	ShellUtil.find($opts[:destdir], "*.pdf", $opts[:clean_opts]) { |file,fstat|
-		if $opts[:force]
-			$log.info "Deleting #{file}: #{fstat.mtime}"
-			ShellUtil.rm_f(file)
-		else
-			$log.info "Use -f to delete #{file}: #{fstat.mtime}"
-		end
+	DEFAULTS={
+		:force=>false,
+		:watchpath=>File.expand_path("~/mozilla.pdf"),
+		:destdir=>ENV['FFP2FW_DESTDIR']||"/var/tmp/mozilla",
+		:bg=>false,
+		:kill=>false,
+		:autostart=>false,
+		:clean => false,
+		:clean_opts => {
+			:timespec=>"8w",
+			:recurse=>true,
+			:max_mtime=>Time.at(Time.now.to_i-4*24*3600),
+			:min_mtime=>Time.at(0)
+		}
 	}
-	exit 0 unless $opts[:bg]
-end
 
-$opts[:watchext]=File.extname($opts[:watchpath])
-$opts[:watchbase]=File.basename($opts[:watchpath], $opts[:watchext])
-$opts[:watchdir]=File.dirname($opts[:watchpath])
-$opts[:watchfile]=File.basename($opts[:watchpath])
+	attr_reader :force, :watchpath, :destdir, :bg, :kill, :autostart, :clean, :clean_opts, :log
+	attr_reader :watchext, :watchbase, :watchdir, :watchfile
+	def initialize
+		DEFAULTS.each_pair { |key,val|
+			instance_variable_set("@#{key}", val)
+		}
+		@watchext=File.extname(@watchpath)
+		@watchbase=File.basename(@watchpath, @watchext)
+		@watchdir=File.dirname(@watchpath)
+		@watchfile=File.basename(@watchpath)
 
-if File.exist?($opts[:watchpath])
-	$log.die "Watch file #{$opts[:watchpath]} exists - will not delete without force option" unless $opts[:force]
-	FileUtils.rm($opts[:watchpath])
-end
+		@log=File.join(@destdir, ME+".log")
+	end
 
-if $opts[:autostart]
-	ShellUtil.createAutostart
-	exit 0
-end
+	def parse_clargs()
+		optparser=OptionParser.new { |opts|
+			opts.banner = "#{MERB} [options]\n"
 
-if $opts[:kill]
-	ShellUtil.killProcessByName(MERB)
-	exit 0 unless $opts[:bg]
+			opts.on('-d', '--dir ', String, "Directory for pdf output files, default #{@destdir}") { |dir|
+				@destdir = dir
+			}
+
+			opts.on('-f', '--[no-]force', "Remove existing watch file on startup, default #{@force}") { |bool|
+				@force = bool
+			}
+
+			opts.on('-b', '--bg', "Run as a background daemon") {
+				@bg = true
+			}
+
+			opts.on('-k', '--kill', "Kill the running process, if any") {
+				@kill = true
+			}
+
+			# nn[smhdw] mod is seconds|minutes|hours|days|weeks
+			opts.on('-c', '--clean [TIMESPEC]', String, "Cleanup files older than NNN[smhdwy], eg 30d for 30days, default=#{@clean_opts[:timespec]}") { |timespec|
+				@clean_opts[:timespec] = timespec unless timespec.nil?
+				@clean_opts[:max_mtime] = FirefoxPrint2FileWatcher.	parse_timespec(@clean_opts[:timespec])
+				@clean = true
+			}
+
+			opts.on('-a', '--autostart', "Add desktop file to ~/.config/autostart and ~/.local/share/applications") {
+				@autostart = true
+			}
+
+			opts.on('-D', '--debug', "Enable debugging output") {
+				$log.level = Logger::DEBUG
+			}
+
+			opts.on('-h', '--help', "Help") {
+				$stdout.puts ""
+				$stdout.puts opts
+				exit 0
+			}
+		}
+		optparser.parse!
+
+		$log.die "Failed to create destination directory: #{@destdir}" unless ShellUtil.mkdir_p(@destdir)
+
+		killRunning
+		checkWatchPath
+
+	end
+
+	##
+	# Create a timespec string with appropriate plural
+	#
+	# @example 5, :second -> "5 seconds"
+	#
+	# @param [Integer] val integer value
+	# @param [Symbol] mod timespec modifier
+	#
+	# @return [String] timespec string
+	#
+	def self.timespec_as_text(val, mod)
+		suffix= val == 1 ? "" : "s"
+		"#{mod}#{suffix}"
+	end
+
+	TIMESPEC_MODIFER_LOOKUP = {
+		:s => { :text=>:second, :mult=>1 },
+		:m => { :text=>:minute, :mult=>60 },
+		:h => { :text=>:hour,   :mult=>3600 },
+		:d => { :text=>:day,		:mult=>86400 },
+		:w => { :text=>:week,	:mult=>604800 }
+	}
+	##
+	# parse a timespec of the form NN[smhdw] where the modifiers represent seconds,
+	# minutes, hours, days or weeks
+	#
+	# @example timespec=86400s or 86400 both represent 24 hours
+	#
+	# @param [String] timespec timespec of the form NN[smhdw]
+	#
+	# @return [Time] time object seconds before now
+	#
+	def self.parse_timespec(timespec)
+		m=/(?<val>\d+)(?<mod>[smhdw]?)/.match(timespec)
+		raise "No regex match" if m.nil?
+		timespec_mod=m[:mod].empty? ? :unknown : m[:mod].to_sym
+		timespec_val=m[:val].to_i
+		lookup = TIMESPEC_MODIFER_LOOKUP[timespec_mod]
+		raise "Unknown timespec modifier: #{timespec_mod}" if lookup.nil?
+		secs = timespec_val*lookup[:mult]
+		mod = timespec_as_text(timespec_val, lookup[:text])
+		ptime=Time.at(Time.now.to_i-secs)
+		$log.info "#{timespec}> delete files older than #{timespec_val} #{mod} ago = #{ptime}"
+		ptime
+	rescue => e
+		$log.die "Failed to parse time spec: #{timespec} - #{e}"
+	end
+
+	def cleanup
+		return unless @clean
+
+		ShellUtil.find(@destdir, "*.pdf", @clean_opts) { |file,fstat|
+			if @force
+				$log.info "Deleting #{file}: #{fstat.mtime}"
+				ShellUtil.rm_f(file)
+			else
+				$log.info "Use -f to delete #{file}: #{fstat.mtime}"
+			end
+		}
+		exit 0 unless @bg
+	end
+
+	##
+	# Create an autostart desktop file, and place a desktop file in
+	# ~/.local/share/applications
+	#
+	def self.createAutostart
+		return unless @autostart
+
+		desktop_entry=%Q(
+	[Desktop Entry]
+	Name=#{ME}
+	GenericName=#{ME}
+	Comment=Watch mozilla.pdf file for changes
+	Exec=#{File.join(MD, MERB)} -b -f -k -c
+	Terminal=false
+	Type=Application
+	X-GNOME-Autostart-enabled=true
+	)
+		desktop_file=ME+".desktop"
+		autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
+		$log.info "Writing autostart #{autostart_desktop}"
+		File.open(autostart_desktop, "w") { |fd|
+			fd.puts desktop_entry
+		}
+		local_app_desktop=File.join(ENV['HOME'], ".local/share/applications/#{desktop_file}")
+		$log.info "Writing "+local_app_desktop
+		File.open(local_app_desktop, "w") { |fd|
+			fd.puts desktop_entry
+		}
+		puts desktop_entry
+	rescue => e
+		$log.die "createAutostart failed: #{e}"
+	end
+
+	def killRunning
+		ShellUtil.killProcessByName(MERB)
+		exit 0 unless @bg
+	end
+
+	def checkWatchPath
+		return unless File.exist?(@watchpath)
+		raise "Watch file #{@watchpath} exists - will not delete without force option" unless @force
+		ShellUtil.rm_f(@watchpath)
+	rescue => e
+		$log.die e.to_s
+	end
+
+	def runNotifyWatch
+		notifier = nil
+		begin
+			notifier = INotify::Notifier.new
+
+			notifier.watch(@watchdir, :moved_to, :create) { |event|
+				iev = InotifyEvent.new(event)
+
+				iev.summarize
+
+				if iev.has_absolute_name(@watchpath) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
+					$log.info "Found watch file: #{@watchpath} - #{iev.flags.inspect}"
+
+					file=ShellUtil.zenity_entry("Enter the print to file name", @watchbase)
+					if file.empty?
+						file=@watchfile
+						ShellUtil.zenity_warning("Destination file defaulting to #{file}")
+					else
+						# add an extension if necessary
+						file+=@watchext if File.extname(file).empty?
+					end
+
+					#
+					# if the destination exists, rename it with its create time
+					#
+					dest=File.join(@destdir, file)
+					$log.info "Destination file is #{dest}"
+
+					ShellUtil.backupDestinationFile(dest)
+
+					res = ShellUtil.mv(iev.absolute_name, dest)
+					if res == true
+						#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
+						$log.info "Renamed file #{iev.absolute_name} to #{dest}"
+						%x(nautilus #{@destdir} &)
+					else
+						ShellUtil.zenity_error("Failed to move #{iev.absolute_name} to #{dest}")
+					end
+
+				else
+					$log.debug "Ignoring file: #{iev.absolute_name} with flags=#{iev.flags.inspect}"
+				end
+			}
+
+			$log.info "Watching for updates to #{@watchpath}"
+			$log.debug "Running notifier: #{notifier.inspect}"
+			notifier.run
+		rescue Interrupt => e
+			$log.info "\nShutting down"
+			exit 0
+		rescue => e
+			$log.error e.to_s
+			puts e.to_s
+		ensure
+			notifier.stop unless notifier.nil?
+		end
+	end
 end
 
 $zenity = ShellUtil.which('zenity')
-$log.die "zenity not found" if $zenity.nil?
+raise "zenity not found" if $zenity.nil?
 
-if $opts[:bg]
-	pid=ShellUtil.pidOf(MERB)
+ffp2fw = FirefoxPrint2FileWatcher.new
+ffp2fw.parse_clargs
+
+ffp2fw.cleanup if ffp2fw.clean
+ffp2fw.createAutostart if ffp2fw.autostart
+
+if ffp2fw.bg
+	pid=ShellUtil.pidOf(FirefoxPrint2FileWatcher::MERB)
 	$log.die "Already running with pid=#{pid}" unless pid.empty?
-	$log.info "Running in background, logging to #{$opts[:log]}"
-	Daemons.daemonize({:app_name=>MERB})
-	$log = Logger.set_logger($opts[:log], $log.level)
+	$log.info "Running in background, logging to #{ffp2fw.log}"
+	Daemons.daemonize({:app_name=>FirefoxPrint2FileWatcher::MERB})
+	$log = Logger.set_logger(ffp2fw.log, $log.level)
 	$log.info "Background process pid #{Process.pid}"
 end
 
-notifier = nil
-begin
-	notifier = INotify::Notifier.new
-
-	notifier.watch($opts[:watchdir], :moved_to, :create) { |event|
-		iev = InotifyEvent.new(event)
-
-		iev.summarize
-
-		if iev.has_absolute_name($opts[:watchpath]) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
-			$log.info "Found watch file: #{$opts[:watchpath]} - #{iev.flags.inspect}"
-
-			file=ShellUtil.zenity_entry("Enter the print to file name", $opts[:watchbase])
-			if file.empty?
-				file=$opts[:watchfile]
-				ShellUtil.zenity_warning("Destination file defaulting to #{file}")
-			else
-				# add an extension if necessary
-				file+=$opts[:watchext] if File.extname(file).empty?
-			end
-
-			#
-			# if the destination exists, rename it with its create time
-			#
-			dest=File.join($opts[:destdir], file)
-			$log.info "Destination file is #{dest}"
-
-			ShellUtil.backupDestinationFile(dest)
-
-			res = ShellUtil.mv(iev.absolute_name, dest)
-			if res == true
-				#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
-				$log.info "Renamed file #{iev.absolute_name} to #{dest}"
-				%x(nautilus #{$opts[:destdir]} &)
-			else
-				ShellUtil.zenity_error("Failed to move #{iev.absolute_name} to #{dest}")
-			end
-
-		else
-			$log.debug "Ignoring file: #{iev.absolute_name} with flags=#{iev.flags.inspect}"
-		end
-	}
-
-	$log.info "Watching for updates to #{$opts[:watchpath]}"
-	$log.debug "Running notifier: #{notifier.inspect}"
-	notifier.run
-rescue Interrupt => e
-	$log.info "\nShutting down"
-	exit 0
-rescue => e
-	$log.error e.to_s
-	puts e.to_s
-ensure
-	notifier.stop unless notifier.nil?
-end
+ffp2fw.runNotifyWatch
 
 exit 1
