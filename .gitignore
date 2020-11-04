@@ -6,3 +6,6 @@
 jquery*.js
 chkkv.notify
 dyndrop.history
+bin/doc
+.yardoc/
+ETrb/emerging-Block-IPs.txt
