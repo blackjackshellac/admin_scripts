@@ -14,7 +14,8 @@ end
 require 'fileutils'
 require 'logger'
 require 'optparse'
-require 'daemons'
+require 'etc'
+require 'tk'
 
 class Logger
 	DATE_FORMAT="%Y-%m-%d %H:%M:%S"
@@ -211,19 +212,34 @@ class ShellUtil
 	#
 	# @return [Array] array of process ids matching process name and user
 	#
-	def self.proc_cmdline(process_name, user=nil)
+	def self.proc_cmdline(process_name, user=nil, oneshot=false)
 		uid = get_useruid(user)
 		pids=Dir.glob("/proc/[0-9]*")
+		$log.debug "Searching for #{process_name} for #{user} #{uid}"
+
+		regexp=/#{Regexp.quote(process_name)}$/
 		ipids=[]
+
 		pids.each { |pid|
 			unless uid.nil?
 				dstat=lstat(pid)
 				next if dstat.nil? || dstat.uid != uid
 			end
-			cmdline=File.read(File.join(pid, "cmdline")).strip
-			next unless process_name.eql?(cmdline)
-			$log.debug "#{uid}.#{pid}>> [#{process_name}=#{cmdline}]"
-			ipids << File.basename(pid).to_i
+			pid_cmdline=File.join(pid, "cmdline")
+			cmdline=File.read(pid_cmdline).strip
+			# cmdline and options are split by EOS character
+			chunks=cmdline.split(/\0/)
+			chunks.each { |chunk|
+				next if chunk[regexp].nil?
+				ipid = File.basename(pid).to_i
+				if ipid == Process.pid
+					$log.debug "Don't kill yourself, ignoring pid=#{ipid}"
+					next
+				end
+				$log.debug "#{uid}.#{pid}>> [#{process_name} in #{chunks.inspect}]"
+				ipids << ipid
+				return ipids if oneshot
+			}
 		}
 		ipids
 	end
@@ -246,7 +262,7 @@ class ShellUtil
 	#
 	def self.pidOf(process_name, user=nil)
 		user=getUser if user.nil?
-		pids=proc_cmdline(process_name, user)
+		pids=proc_cmdline(process_name, user, true)
 		pids.empty? ? "" : pids[0].to_s
 	end
 
@@ -274,29 +290,14 @@ class ShellUtil
 	# @param [String] process_name process name
 	#
 	def self.killProcessByName(process_name)
+		$log.debug "Killing #{process_name}"
 		pid=ShellUtil.pidOf(process_name)
 		return if pid.empty?
+		$log.debug "Process pid=#{pid}"
 		killProcessByPid(pid.to_i)
 	end
 
-	ZENITY_TITLE="Firefox print to file"
-	def self.zenity_entry(text, text_default, title=ZENITY_TITLE)
-		entry=%x/#{$zenity} --entry --text="#{text}" --entry-text="#{text_default}" --title="#{title}"/.chomp
-		entry="" unless $?.exitstatus == 0
-		entry
-	end
-
-	def self.zenity_warning(warning, title=ZENITY_TITLE)
-		$log.warn warning
-		%x/#{$zenity} --warning --text="#{warning}" --title="#{title}" --no-wrap/
-	end
-
-	def self.zenity_error(error, title=ZENITY_TITLE)
-		$log.error error
-		%x/#{$zenity} --error --text="#{error}" --title="#{title}" --no-wrap/
-	end
-
-	##
+		##
 	# Move file from soure to Destination
 	#
 	# @param src [String] source file path
@@ -395,9 +396,10 @@ class FirefoxPrint2FileWatcher
 		:force=>false,
 		:watchpath=>File.expand_path("~/mozilla.pdf"),
 		:destdir=>ENV['FFP2FW_DESTDIR']||"/var/tmp/mozilla",
-		:bg=>false,
+		:run=>false,
 		:kill=>false,
 		:autostart=>false,
+		:logfile=>false,
 		:clean => false,
 		:clean_opts => {
 			:timespec=>"8w",
@@ -407,7 +409,7 @@ class FirefoxPrint2FileWatcher
 		}
 	}
 
-	attr_reader :force, :watchpath, :destdir, :bg, :kill, :autostart, :clean, :clean_opts, :log
+	attr_reader :force, :watchpath, :destdir, :run, :kill, :autostart, :clean, :clean_opts, :log
 	attr_reader :watchext, :watchbase, :watchdir, :watchfile
 	def initialize
 		DEFAULTS.each_pair { |key,val|
@@ -433,8 +435,8 @@ class FirefoxPrint2FileWatcher
 				@force = bool
 			}
 
-			opts.on('-b', '--bg', "Run as a background daemon") {
-				@bg = true
+			opts.on('-r', '--run', "Run the inotify watcher") {
+				@run = true
 			}
 
 			opts.on('-k', '--kill', "Kill the running process, if any") {
@@ -446,6 +448,11 @@ class FirefoxPrint2FileWatcher
 				@clean_opts[:timespec] = timespec unless timespec.nil?
 				@clean_opts[:max_mtime] = FirefoxPrint2FileWatcher.	parse_timespec(@clean_opts[:timespec])
 				@clean = true
+			}
+
+			opts.on('-l', '--log [LOGPATH]', String, "Log to file instead of console, default #{@log}") { |log|
+				@log = File.expand_path(log) unless log.nil?
+				@logfile = true
 			}
 
 			opts.on('-a', '--autostart', "Add desktop file to ~/.config/autostart and ~/.local/share/applications") {
@@ -466,9 +473,13 @@ class FirefoxPrint2FileWatcher
 
 		$log.die "Failed to create destination directory: #{@destdir}" unless ShellUtil.mkdir_p(@destdir)
 
-		killRunning
 		checkWatchPath
+		killRunning if @kill
 
+		if @logfile
+			$log.info "Logging to file #{@log}"
+			$log = Logger.set_logger(@log, $log.level)
+		end
 	end
 
 	##
@@ -530,26 +541,24 @@ class FirefoxPrint2FileWatcher
 				$log.info "Use -f to delete #{file}: #{fstat.mtime}"
 			end
 		}
-		exit 0 unless @bg
 	end
 
 	##
 	# Create an autostart desktop file, and place a desktop file in
 	# ~/.local/share/applications
 	#
-	def self.createAutostart
+	def createAutostart
 		return unless @autostart
 
-		desktop_entry=%Q(
-	[Desktop Entry]
-	Name=#{ME}
-	GenericName=#{ME}
-	Comment=Watch mozilla.pdf file for changes
-	Exec=#{File.join(MD, MERB)} -b -f -k -c
-	Terminal=false
-	Type=Application
-	X-GNOME-Autostart-enabled=true
-	)
+		desktop_entry=%Q([Desktop Entry]
+Name=#{ME}
+GenericName=#{ME}
+Comment=Watch mozilla.pdf file for changes
+Exec=#{File.join(MD, MERB)} -k -f -c -r -l
+Terminal=false
+Type=Application
+X-GNOME-Autostart-enabled=true
+)
 		desktop_file=ME+".desktop"
 		autostart_desktop=File.join(ENV['HOME'], ".config/autostart/#{desktop_file}")
 		$log.info "Writing autostart #{autostart_desktop}"
@@ -567,8 +576,9 @@ class FirefoxPrint2FileWatcher
 	end
 
 	def killRunning
+		$log.info "Killing #{MERB}"
 		ShellUtil.killProcessByName(MERB)
-		exit 0 unless @bg
+		exit 0 unless @run
 	end
 
 	def checkWatchPath
@@ -579,11 +589,13 @@ class FirefoxPrint2FileWatcher
 		$log.die e.to_s
 	end
 
+	TK_DIALOG_TITLE="Firefox print to file"
 	def runNotifyWatch
 		notifier = nil
 		begin
 			notifier = INotify::Notifier.new
 
+			$log.info "Watching #{@watchdir}"
 			notifier.watch(@watchdir, :moved_to, :create) { |event|
 				iev = InotifyEvent.new(event)
 
@@ -592,30 +604,56 @@ class FirefoxPrint2FileWatcher
 				if iev.has_absolute_name(@watchpath) && (iev.has_flag(:moved_to) || iev.has_flag(:create))
 					$log.info "Found watch file: #{@watchpath} - #{iev.flags.inspect}"
 
-					file=ShellUtil.zenity_entry("Enter the print to file name", @watchbase)
+					dest=@destdir
+					$log.info "Tk.getSaveFile in #{@destdir}"
+					file=Tk.getSaveFile(
+						:initialdir=>@destdir,
+						:initialfile=>@watchfile,
+						:title=>TK_DIALOG_TITLE,
+						:confirmoverwrite=>false,
+						:defaultextension=>'.pdf',
+						:filetypes=>[
+							['PDF Files', '.pdf'],
+							['ALL Files', '*']
+						]
+					)
 					if file.empty?
 						file=@watchfile
-						ShellUtil.zenity_warning("Destination file defaulting to #{file}")
+						dest=File.join(@destdir, file)
+						msg="Destination file defaulting to #{dest}"
+						$log.warning msg
+						Tk::messageBox(
+							:type => "ok",
+							:message => msg,
+							:icon => "warning",
+							:title => TK_DIALOG_TITLE
+						)
 					else
 						# add an extension if necessary
 						file+=@watchext if File.extname(file).empty?
+						dest = file
 					end
 
 					#
 					# if the destination exists, rename it with its create time
 					#
-					dest=File.join(@destdir, file)
 					$log.info "Destination file is #{dest}"
 
 					ShellUtil.backupDestinationFile(dest)
 
 					res = ShellUtil.mv(iev.absolute_name, dest)
 					if res == true
-						#%x(zenity --no-wrap --info --text="<b>Renamed file to</b> <tt>#{dest}</tt> --title="Firefox print to file")
 						$log.info "Renamed file #{iev.absolute_name} to #{dest}"
 						%x(nautilus #{@destdir} &)
 					else
-						ShellUtil.zenity_error("Failed to move #{iev.absolute_name} to #{dest}")
+						msg="Failed to move #{iev.absolute_name} to #{dest}"
+						$log.error "#{msg}: #{res.to_s}"
+						Tk::messageBox(
+							:type => "ok",
+							:message => msg,
+							:icon => "error",
+							:title => TK_DIALOG_TITLE
+						)
 					end
 
 				else
@@ -632,30 +670,26 @@ class FirefoxPrint2FileWatcher
 		rescue => e
 			$log.error e.to_s
 			puts e.to_s
+			exit 1
 		ensure
 			notifier.stop unless notifier.nil?
 		end
 	end
 end
 
-$zenity = ShellUtil.which('zenity')
-raise "zenity not found" if $zenity.nil?
-
 ffp2fw = FirefoxPrint2FileWatcher.new
 ffp2fw.parse_clargs
 
+ffp2fw.createAutostart
+
 ffp2fw.cleanup if ffp2fw.clean
-ffp2fw.createAutostart if ffp2fw.autostart
 
-if ffp2fw.bg
-	pid=ShellUtil.pidOf(FirefoxPrint2FileWatcher::MERB)
-	$log.die "Already running with pid=#{pid}" unless pid.empty?
-	$log.info "Running in background, logging to #{ffp2fw.log}"
-	Daemons.daemonize({:app_name=>FirefoxPrint2FileWatcher::MERB})
-	$log = Logger.set_logger(ffp2fw.log, $log.level)
-	$log.info "Background process pid #{Process.pid}"
+if ffp2fw.run
+	$log.info "Running in foreground #{Process.pid}"
+	ffp2fw.runNotifyWatch
+else
+	$log.debug "Not running inotify watcher"
+	exit 0
 end
-
-ffp2fw.runNotifyWatch
 
 exit 1
