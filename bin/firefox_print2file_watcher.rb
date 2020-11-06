@@ -409,7 +409,7 @@ class FirefoxPrint2FileWatcher
 		}
 	}
 
-	attr_reader :force, :watchpath, :destdir, :run, :kill, :autostart, :clean, :clean_opts, :log
+	attr_reader :force, :watchpath, :destdir, :run, :kill, :autostart, :clean, :clean_opts, :log, :logfile
 	attr_reader :watchext, :watchbase, :watchdir, :watchfile
 	def initialize
 		DEFAULTS.each_pair { |key,val|
@@ -473,13 +473,6 @@ class FirefoxPrint2FileWatcher
 
 		$log.die "Failed to create destination directory: #{@destdir}" unless ShellUtil.mkdir_p(@destdir)
 
-		checkWatchPath
-		killRunning if @kill
-
-		if @logfile
-			$log.info "Logging to file #{@log}"
-			$log = Logger.set_logger(@log, $log.level)
-		end
 	end
 
 	##
@@ -530,6 +523,9 @@ class FirefoxPrint2FileWatcher
 		$log.die "Failed to parse time spec: #{timespec} - #{e}"
 	end
 
+	##
+	# Search destdir for *.pdf files and delete those older than @clean_opts
+	#
 	def cleanup
 		return unless @clean
 
@@ -545,16 +541,23 @@ class FirefoxPrint2FileWatcher
 
 	##
 	# Create an autostart desktop file, and place a desktop file in
-	# ~/.local/share/applications
+	# ~/.config/autostart/
+	# ~/.local/share/applications/
 	#
 	def createAutostart
 		return unless @autostart
 
+		# -k - kill existing process owned by user
+		# -f - force operations (clean, kill, etc)
+		# -c - clean files from destdir older than 8 weeks
+		# -r - run the inotify watcher
+		# -l - log to file
+		def_options="-k -f -c -r -l"
 		desktop_entry=%Q([Desktop Entry]
 Name=#{ME}
 GenericName=#{ME}
 Comment=Watch mozilla.pdf file for changes
-Exec=#{File.join(MD, MERB)} -k -f -c -r -l
+Exec=#{File.join(MD, MERB)} #{def_options}
 Terminal=false
 Type=Application
 X-GNOME-Autostart-enabled=true
@@ -575,10 +578,19 @@ X-GNOME-Autostart-enabled=true
 		$log.die "createAutostart failed: #{e}"
 	end
 
+	##
+	# search for another running instance of the MERB process by name
+	# and kill it
+	#
 	def killRunning
 		$log.info "Killing #{MERB}"
 		ShellUtil.killProcessByName(MERB)
-		exit 0 unless @run
+	end
+
+	##
+	# @return [Boolean] true if already running, false otherwise
+	def isRunning
+		ShellUtil.pidOf(MERB).empty? ? false : true
 	end
 
 	def checkWatchPath
@@ -665,7 +677,7 @@ X-GNOME-Autostart-enabled=true
 			$log.debug "Running notifier: #{notifier.inspect}"
 			notifier.run
 		rescue Interrupt => e
-			$log.info "\nShutting down"
+			$log.info "Shutting down"
 			exit 0
 		rescue => e
 			$log.error e.to_s
@@ -678,18 +690,34 @@ X-GNOME-Autostart-enabled=true
 end
 
 ffp2fw = FirefoxPrint2FileWatcher.new
-ffp2fw.parse_clargs
+begin
+	ffp2fw.parse_clargs
+	ffp2fw.checkWatchPath unless ffp2fw.force
+	ffp2fw.killRunning if ffp2fw.kill
 
-ffp2fw.createAutostart
+	if ffp2fw.logfile
+		$log.info "Logging to file #{ffp2fw.log}"
+		$log = Logger.set_logger(ffp2fw.log, $log.level)
+	end
 
-ffp2fw.cleanup if ffp2fw.clean
+	ffp2fw.createAutostart if ffp2fw.autostart
 
-if ffp2fw.run
+	ffp2fw.cleanup if ffp2fw.clean
+
+	unless ffp2fw.run
+		$log.debug "Not running inotify watcher"
+		exit 0
+	end
+
+	raise RuntimeError, "The script is already running, use -k to reload" if ffp2fw.kill == false && ffp2fw.isRunning
+
 	$log.info "Running in foreground #{Process.pid}"
 	ffp2fw.runNotifyWatch
-else
-	$log.debug "Not running inotify watcher"
-	exit 0
+rescue RuntimeError => e
+	$log.warn e.message
+rescue => e
+	$log.error "#{e.class}Caught exception: #{e.message}"
+	puts e.backtrace.join("\n")
 end
 
 exit 1
