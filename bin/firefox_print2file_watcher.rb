@@ -4,7 +4,6 @@
 # to the file ~/mozilla.pdf and prompt the user for a more appropriate name
 #
 
-# gem install rb-inotify
 begin
 	require 'rb-inotify'
 rescue LoadError => e
@@ -43,17 +42,17 @@ class Logger
 	##
 	# Create a logger with the given stream or file
 	#
-	# @overload set_logger(filename, level)
+	# @overload create(filename, level)
 	#   Create a file logger
 	#   @param [String] stream filename
 	#   @param [Integer] level log level
-	# @overload set_logger(iostream, level)
+	# @overload create(iostream, level)
 	#   @param [IO] stream STDOUT or STDERR or other io stream
 	#   @param [Integer] level log level
 	#
 	# @return [Logger] the logger object
 	#
-	def self.set_logger(stream, level=Logger::INFO)
+	def self.create(stream, level=Logger::INFO)
 		log = Logger.new(stream)
 		log.level = level
 		log.datetime_format = DATE_FORMAT
@@ -65,7 +64,7 @@ class Logger
 
 end
 
-$log = Logger.set_logger(STDERR)
+$log = Logger.create(STDERR)
 
 class InotifyEvent
 
@@ -607,7 +606,7 @@ X-GNOME-Autostart-enabled=true
 		begin
 			notifier = INotify::Notifier.new
 
-			$log.info "Watching #{@watchdir}"
+			$log.info "Watching #{@watchdir} for updates to #{@watchfile}"
 			notifier.watch(@watchdir, :moved_to, :create) { |event|
 				iev = InotifyEvent.new(event)
 
@@ -673,7 +672,7 @@ X-GNOME-Autostart-enabled=true
 				end
 			}
 
-			$log.info "Watching for updates to #{@watchpath}"
+			$log.debug "Watching for updates to #{@watchpath}"
 			$log.debug "Running notifier: #{notifier.inspect}"
 			notifier.run
 		rescue Interrupt => e
@@ -692,16 +691,16 @@ end
 ffp2fw = FirefoxPrint2FileWatcher.new
 begin
 	ffp2fw.parse_clargs
+
+	ffp2fw.createAutostart if ffp2fw.autostart
 	ffp2fw.checkWatchPath unless ffp2fw.force
-	ffp2fw.killRunning if ffp2fw.kill
 
 	if ffp2fw.logfile
 		$log.info "Logging to file #{ffp2fw.log}"
-		$log = Logger.set_logger(ffp2fw.log, $log.level)
+		$log = Logger.create(ffp2fw.log, $log.level)
 	end
 
-	ffp2fw.createAutostart if ffp2fw.autostart
-
+	ffp2fw.killRunning if ffp2fw.kill
 	ffp2fw.cleanup if ffp2fw.clean
 
 	unless ffp2fw.run
