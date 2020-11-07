@@ -14,6 +14,9 @@ require 'fileutils'
 require 'logger'
 require 'optparse'
 require 'etc'
+# fedora
+# $ sudo dnf install tk-devel
+# $ gem install tk
 require 'tk'
 
 class Logger
