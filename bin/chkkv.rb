@@ -4,19 +4,83 @@
 
 require 'time'
 require 'tempfile'
-
-ME=File.basename($0, ".rb")
-MD=File.dirname(File.realpath($0))
-
-# notification recipients
-RECIP=File.join(MD, ME+".notify")
-NOTIFY=File.exist?(RECIP) ? File.read(RECIP) : ""
+require 'optparse'
 
 class CheckKernelVersion
+	MERB=File.basename($0)
+	ME=File.basename($0, ".rb")
+	MD=File.dirname(File.realpath($0))
+
+	# notification recipients
+	RECIP=File.join(MD, ME+".notify")
+	NOTIFY=File.exist?(RECIP) ? File.read(RECIP) : ""
+
 	RE_KERNEL_STRING_SPLIT=/\t/
 
 	class << self
 		attr_accessor :kernels, :platform, :latest, :current, :kernels_map
+	end
+
+	attr_reader :verbose, :email
+	def initialize
+		@verbose=false
+		@email = NOTIFY
+		puts "Warning: email recipients file not found: #{RECIP}" if NOTIFY.empty?
+	end
+
+	def parse_clargs()
+		optparser=OptionParser.new { |opts|
+			opts.banner = "#{MERB} [options]\n"
+
+			opts.on('-e', '--email NOTIFY', "Address for email notification: #{NOTIFY}") { |email|
+				@email = email
+			}
+
+			opts.on('-V', '--verbose', "Verbose output") {
+				@verbose = true
+			}
+
+			# opts.on('-D', '--debug', "Enable debugging output") {
+			# 	$log.level = Logger::DEBUG
+			# }
+
+			opts.on('-h', '--help', "Help") {
+				$stdout.puts ""
+				$stdout.puts opts
+				exit 0
+			}
+		}
+		optparser.parse!
+	end
+
+	def notify
+		iscur = CheckKernelVersion.is_current
+
+		CheckKernelVersion.kernel_dump_test(STDOUT, iscur) if @verbose
+
+		return 0 if iscur
+
+		output = Tempfile.new(ME)
+
+		CheckKernelVersion.kernel_dump_test(output, iscur)
+		CheckKernelVersion.summary(output)
+
+		output.flush
+		output.close
+
+		host=%x/hostname -s/.strip
+
+		# mail -s #{host}: #{@@latest}" -a #{output.path}
+		cmd=%/cat #{output.path} | mail -s "#{host}: new kernel #{@@latest[:kernel]}" #{@email}/
+
+		if @verbose
+			puts cmd
+			puts %x/cat #{output.path}/
+		end
+
+		%x/#{cmd}/ unless @email.empty?
+
+		CheckKernelVersion.is_current
 	end
 
 	def self.kernel_time(kernel)
@@ -115,7 +179,7 @@ class CheckKernelVersion
 		latest
 		@@current[:kernel].eql?(@@latest[:kernel]) && @@current[:time].eql?(@@latest[:time])
 	end
-	
+
 	def self.as_string(kernel, time)
 		"#{kernel} [#{time}]"
 	end
@@ -137,35 +201,6 @@ class CheckKernelVersion
 		out.puts
 	end
 
-	def self.notify(email, quiet=true)
-		iscur = is_current
-
-		kernel_dump_test(STDOUT, iscur) unless quiet
-
-		return 0 if iscur
-
-		output = Tempfile.new(ME)
-
-		kernel_dump_test(output, iscur)
-		summary(output)
-
-		output.flush
-		output.close
-
-		host=%x/hostname -s/.strip
-
-		# mail -s #{host}: #{@@latest}" -a #{output.path}
-		cmd=%/cat #{output.path} | mail -s "#{host}: new kernel #{@@latest[:kernel]}" #{email}/
-
-		unless quiet
-			puts cmd
-			puts %x/cat #{output.path}/
-		end
-
-		%x/#{cmd}/ unless email.empty?
-
-		is_current
-	end
 
 	def self.summary(out=STDOUT)
 		out.puts "Running = #{CheckKernelVersion.map_as_string(CheckKernelVersion.current)}"
@@ -174,7 +209,6 @@ class CheckKernelVersion
 
 end
 
-puts "Warning: email recipients file not found: #{RECIP}" if NOTIFY.empty?
-
-exit CheckKernelVersion.notify(NOTIFY, ARGV.length == 0)
-
+ckv = CheckKernelVersion.new
+ckv.parse_clargs
+exit ckv.notify
