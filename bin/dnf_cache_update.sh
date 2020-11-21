@@ -5,8 +5,10 @@
 
 ME=$(basename $0)
 
+DNF_CACHE=/var/cache/dnf
+
 hosts=$*
-update_dir=$(ls -1rtd /var/cache/dnf/updates-[0-9a-f][0-9a-f]* | tail -1)
+update_dir=$(ls -1rtd $DNF_CACHE/updates-[0-9a-f][0-9a-f]* | tail -1)
 
 info() {
 	echo -e "$*"
@@ -69,5 +71,10 @@ for host in $hosts; do
 	[ $? -ne 0 ] && err "Failed to remove packages on ${host}" && let errors=$errors+1 && continue
 done
 
-[ $errors -eq 0 ] && rm -fv packages/*
-
+if [ $errors -eq 0 ]; then
+	rm -fv packages/*
+	cd $DNF_CACHE
+	# deleting older cached files
+	info "Deleting older cached files in $DNF_CACHE"
+	find -type f -name '*.rpm' -mtime +7 -print -delete
+fi
