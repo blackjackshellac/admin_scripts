@@ -119,7 +119,7 @@ cd $kdir
 run make -j4
 run make -j4 modules
 
-run sudo make modules_install
+run sudo make INSTALL_MOD_STRIP=1 modules_install
 run sudo make install
 run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 run sudo grubby --default-kernel
