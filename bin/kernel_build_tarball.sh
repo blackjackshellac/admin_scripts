@@ -8,6 +8,10 @@ KLOG_DIR="/var/tmp/$ME"
 
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
+puts(){
+	echo -e $*
+}
+
 log() {
 	local level=$1
 	shift
@@ -65,10 +69,16 @@ run() {
 # sudo grubby --default-kernel
 
 kernel=$1
-[ ! -f "$kernel" ] && die "Kernel not found $kernel"
+if [ ! -f "$kernel" ]; then
+	puts "Choose a kernel"
+	puts $(ls -1 linux-*.tar.*)
+	read -p "> " kernel
+	[ ! -f "$kernel" ] && die "Kernel not found $kernel"
+	info "Using kernel $kernel"
+fi
 
-kernel=$(basename $1)
-wdir=$(dirname $1)
+kernel=$(basename $kernel)
+wdir=$(dirname $kernel)
 cd $wdir
 [ $? -ne 0 ] && die "Failed to change working directory to kernel working dir $wdir"
 info "Working in $wdir: $(pwd)"
@@ -93,17 +103,24 @@ else
 	[ $? -ne 0 ] && die "Failed to untar $kernel"
 fi
 
+run_make_oldconfig=0
 if [ -f $kdir/.config ]; then
 	warn "Skipping config file copy to $kdir/.config, file already exists"
 else
 	run cp -v config-latest $kdir/.config
 	[ ! -f "$kdir/.config" ] && die "Failed to copy config-latest to $kdir/.config"
+	run_make_oldconfig=1
 fi
 
 cd $kdir
 [ $? -ne 0 ] && die "Failed to change working directory to $kdir"
 
-run make oldconfig
+[ $run_make_oldconfig -ne 0 ] && run make oldconfig
 run make -j4
 run make -j4 modules
+
+run sudo make modules_install
+run sudo make install
+run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+run sudo grubby --default-kernel
 
