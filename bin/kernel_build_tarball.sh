@@ -44,7 +44,7 @@ die() {
 run() {
 	cmd=$*
 	info "run: $cmd"
-	if [ -d "$KLOG_DIR" -a -f "$klog" ]; then
+	if [ -d "$logdir" -a -f "$klog" ]; then
 		$cmd 2>&1 | tee -a "$klog"
 		res=$?
 	else
@@ -54,6 +54,60 @@ run() {
 	[ $res -ne 0 ] && die "Failed execution: $cmd"
 	return $res
 }
+
+# -n dry-run
+# -h help
+# -v verbose?
+# -q quiet
+# -l log
+# -d log dir
+
+
+usage() {
+	cat - << HELP
+
+\$ $MESH [options]
+
+   -t TARBALL - tarball to install
+   -l LOGDIR  - log directory, default is $KLOG_DIR
+   -n         - dry-run
+   -q         - quiet
+   -h         - help
+
+HELP
+
+	exit $1
+}
+
+tarball=""
+logdir=$KLOG_DIR
+dryrun=0
+quiet=0
+
+while getopts ":ht:l:nqh" opt; do
+	case ${opt} in
+		t)
+			tarball=$OPTARG
+			;;
+		l)
+			logdir=$OPTARG
+			;;
+		n)
+			warn "not implemented"
+			dryrun=1
+			;;
+		q)
+			warn "not implemented"
+			quiet=1
+			;;
+		h) # process option a
+			usage 0
+			;;
+		\?)
+			usage 1
+			;;
+	esac
+done
 
 # linux-5.9.11.tar.xz
 
@@ -68,7 +122,7 @@ run() {
 # sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 # sudo grubby --default-kernel
 
-kernel=$1
+kernel=$tarball
 if [ ! -f "$kernel" ]; then
 	puts "Choose a kernel"
 	puts $(ls -1 linux-*.tar.*)
@@ -85,10 +139,10 @@ info "Working in $wdir: $(pwd)"
 
 kdir=$(basename $kernel ".tar.xz")
 
-run mkdir -p $KLOG_DIR
+run mkdir -p $logdir
 
 now=$(date +%Y%m%d_%H%M%S)
-klog=$KLOG_DIR/$ME-$now.log
+klog=$logdir/$ME-$now.log
 
 touch $klog
 info "Logging to $klog"
