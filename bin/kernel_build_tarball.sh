@@ -8,19 +8,27 @@ KLOG_DIR="/var/tmp/$ME"
 
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
-puts(){
+puts() {
 	echo -e $*
 }
 
+log_tee() {
+	msg="$*"
+	if [ "$quiet" == "q" ]; then
+		puts "$msg" >> $klog 2>&1
+	else
+		puts "$msg" 2>&1 | tee -a "$klog"
+	fi
+}
 log() {
 	local level=$1
 	shift
 	local ts="$(date '+%x %X')"
 	local msg="${level} ${ts}> $*"
 	if [ -d "$KLOG_DIR" -a -f "$klog" ]; then
-		echo -e "$msg" 2>&1 | tee -a "$klog"
+		log_tee "$msg"
 	else
-		echo -e "$msg"
+		puts "$msg"
 	fi
 }
 
@@ -44,9 +52,19 @@ die() {
 run() {
 	cmd=$*
 	info "run: $cmd"
+	if [ "$dryrun" == "n" ]; then
+		info "Dry run"
+		return 0
+	fi
+
 	if [ -d "$logdir" -a -f "$klog" ]; then
-		$cmd 2>&1 | tee -a "$klog"
-		res=$?
+		if [ "$quiet" == "q" ]; then
+			$cmd >> ${klog} 2>&1
+			res=$?
+		else
+			$cmd 2>&1 | tee -a "$klog"
+			res=$?
+		fi
 	else
 		$cmd
 		res=$?
@@ -81,8 +99,8 @@ HELP
 
 tarball=""
 logdir=$KLOG_DIR
-dryrun=0
-quiet=0
+dryrun=""
+quiet=""
 
 while getopts ":ht:l:nqh" opt; do
 	case ${opt} in
@@ -93,12 +111,11 @@ while getopts ":ht:l:nqh" opt; do
 			logdir=$OPTARG
 			;;
 		n)
-			warn "not implemented"
-			dryrun=1
+			dryrun="n"
 			;;
 		q)
 			warn "not implemented"
-			quiet=1
+			quiet="q"
 			;;
 		h) # process option a
 			usage 0
