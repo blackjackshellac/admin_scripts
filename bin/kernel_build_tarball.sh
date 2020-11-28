@@ -124,3 +124,7 @@ run sudo make install
 run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 run sudo grubby --default-kernel
 
+run cd -
+run cp -pv ./$kdir/.config config-$kdir
+run ln -sf config-$kdir config-latest
+
