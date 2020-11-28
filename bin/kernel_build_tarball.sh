@@ -132,4 +132,4 @@ run sudo make install
 run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 run sudo grubby --default-kernel
 
-
+run sudo cp -p $new_config /boot
