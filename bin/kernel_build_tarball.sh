@@ -103,12 +103,15 @@ else
 	[ $? -ne 0 ] && die "Failed to untar $kernel"
 fi
 
+dot_config="$(pwd)/${kdir}/.config"
+new_config="$(pwd)/config-${kdir}"
+sym_config="$(pwd)/config-latest"
 run_make_oldconfig=0
-if [ -f $kdir/.config ]; then
-	warn "Skipping config file copy to $kdir/.config, file already exists"
+if [ -f "$dot_config" ]; then
+	warn "Skipping config file copy to $dot_config, file already exists"
 else
-	run cp -v config-latest $kdir/.config
-	[ ! -f "$kdir/.config" ] && die "Failed to copy config-latest to $kdir/.config"
+	run cp -v $sym_config $dot_config
+	[ ! -f "$dot_config" ] && die "Failed to copy config-latest to $kdir/.config"
 	run_make_oldconfig=1
 fi
 
@@ -116,6 +119,11 @@ cd $kdir
 [ $? -ne 0 ] && die "Failed to change working directory to $kdir"
 
 [ $run_make_oldconfig -ne 0 ] && run make oldconfig
+
+cmp -s "$new_config" "$dot_config"
+[ $? -ne 0 ] && run cp -pv $dot_config $new_config
+run ln -sf $new_config $sym_config
+
 run make -j4
 run make -j4 modules
 
@@ -124,7 +132,4 @@ run sudo make install
 run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 run sudo grubby --default-kernel
 
-run cd -
-run cp -pv ./$kdir/.config config-$kdir
-run ln -sf config-$kdir config-latest
 
