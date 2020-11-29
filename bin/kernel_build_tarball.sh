@@ -6,6 +6,10 @@ ME=$(basename $0 ".sh")
 MD=$(dirname $0)
 KLOG_DIR="/var/tmp/$ME"
 
+jay=$(( $(cat /proc/cpuinfo  | grep -E "^processor\s+:" | wc -l) / 2 ))
+JAY=$(( $jay <= 0 ? 1 : $jay ))
+
+let stime=$(date +%s)
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
 puts() {
@@ -20,6 +24,7 @@ log_tee() {
 		puts "$msg" 2>&1 | tee -a "$klog"
 	fi
 }
+
 log() {
 	local level=$1
 	shift
@@ -88,27 +93,46 @@ usage() {
 
    -t TARBALL - tarball to install
    -l LOGDIR  - log directory, default is $KLOG_DIR
+   -j CPUS    - make -j CPUS (default is $JAY)
+   -s STARTAT - see StartAt values below, default is 0
    -n         - dry-run
    -q         - quiet
    -h         - help
+
+  StartAt - Command
+     0    - make
+     1    - make modules
+     2    - make modules_install
+     3    - make install
+     4    - grub2-mkconfig
+     5    - grubby --default-kernel
 
 HELP
 
 	exit $1
 }
 
+
+jay=$JAY
 tarball=""
 logdir=$KLOG_DIR
 dryrun=""
 quiet=""
+let step=0
 
-while getopts ":ht:l:nqh" opt; do
+while getopts ":ht:l:j:s:nqh" opt; do
 	case ${opt} in
 		t)
 			tarball=$OPTARG
 			;;
 		l)
 			logdir=$OPTARG
+			;;
+		j)
+			let jay=$OPTARG
+			;;
+		s)
+			let step=$OPTARG
 			;;
 		n)
 			dryrun="n"
@@ -125,6 +149,8 @@ while getopts ":ht:l:nqh" opt; do
 			;;
 	esac
 done
+
+[ $jay -le 0 ] && warn "Resetting invalid jay=$jay to $JAY" && jay=$JAY
 
 # linux-5.9.11.tar.xz
 
@@ -195,12 +221,16 @@ cmp -s "$new_config" "$dot_config"
 [ $? -ne 0 ] && run cp -pv $dot_config $new_config
 run ln -sf $new_config $sym_config
 
-run make -j4
-run make -j4 modules
+[ $step -le 0 ] && run make -j${jay}
+[ $step -le 1 ] && run make -j${jay} modules
 
-run sudo make INSTALL_MOD_STRIP=1 modules_install
-run sudo make install
-run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
-run sudo grubby --default-kernel
+[ $step -le 2 ] && run sudo make INSTALL_MOD_STRIP=1 modules_install
+[ $step -le 3 ] && run sudo make install
+[ $step -le 4 ] && run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+[ $step -le 5 ] && run sudo grubby --default-kernel
 
-run sudo cp -p $new_config /boot
+[ $step -le 6 ] && run sudo cp -p $new_config /boot
+
+let etime=$(date +%s)
+let dtime=etime-stime
+info "Kernel build time ${dtime} seconds"
