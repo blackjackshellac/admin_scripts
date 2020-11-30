@@ -110,6 +110,7 @@ usage() {
 \$ $MESH [options]
 
    -t TARBALL  - tarball to install
+	-c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
    -l LOGDIR   - log directory, default is $KLOG_DIR
    -j CPUS     - make -j CPUS (default is $JAY)
    -s START_AT - see Step values below, default is 0
@@ -135,6 +136,7 @@ HELP
 
 jay=$JAY
 tarball=""
+new_config=""
 logdir=$KLOG_DIR
 dryrun=""
 quiet=""
@@ -142,10 +144,13 @@ let startat=0
 let endat=10000
 let strip=1
 
-while getopts ":ht:l:j:s:e:dnqh" opt; do
+while getopts ":ht:c:l:j:s:e:dnqh" opt; do
 	case ${opt} in
 		t)
 			tarball=$OPTARG
+			;;
+		c)
+			new_config=$OPTARG
 			;;
 		l)
 			logdir=$OPTARG
@@ -230,14 +235,18 @@ else
 fi
 
 dot_config="$(pwd)/${kdir}/.config"
-new_config="$(pwd)/config-${kdir}"
 sym_config="$(pwd)/config-latest"
+
+[ -z "$new_config" ] && new_config="$(pwd)/config-${kdir}"
+[ ! -f "$new_config" ] && new_config=$sym_config
+[ ! -f "$new_config" ] && die "Config file not found $new_config"
+
 run_make_oldconfig=0
 if [ -f "$dot_config" ]; then
 	warn "Skipping config file copy to $dot_config, file already exists"
 else
-	run cp -v $sym_config $dot_config
-	[ ! -f "$dot_config" ] && die "Failed to copy config-latest to $kdir/.config"
+	cp -pv "$new_config" "$dot_config"
+	[ ! -f $dot_config ] && die "Failed to copy $new_config to $dot_config"
 	run_make_oldconfig=1
 fi
 
