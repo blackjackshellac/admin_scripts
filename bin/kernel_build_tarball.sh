@@ -80,7 +80,11 @@ run() {
 
 runsudo() {
 	local -i t0=$(date +%s)
-	sudo --validate
+	if [ -z "$sudo_pass" ]; then
+		sudo --validate
+	else
+		echo "$sudo_pass" | sudo --validate --stdin
+	fi
 	local -i t1=$(date +%s)
 	declare -gi t_sudo_pause=$(( t_sudo_pause+t1-t0 ))
 	run sudo $*
@@ -115,6 +119,7 @@ usage() {
    -j CPUS     - make -j CPUS (default is $JAY)
    -s START_AT - see Step values below, default is 0
    -e END_AT   - see Step values below
+   -p          - prompt for sudo password
    -d          - don't strip debug symbols in modules_install
    -n          - dry-run
    -q          - quiet
@@ -140,11 +145,12 @@ new_config=""
 logdir=$KLOG_DIR
 dryrun=""
 quiet=""
+sudo_pass=""
 let startat=0
 let endat=10000
 let strip=1
 
-while getopts ":ht:c:l:j:s:e:dnqh" opt; do
+while getopts ":ht:c:l:j:s:e:dpnqh" opt; do
 	case ${opt} in
 		t)
 			tarball=$OPTARG
@@ -167,6 +173,11 @@ while getopts ":ht:c:l:j:s:e:dnqh" opt; do
 			;;
 		d)
 			let strip=0
+			;;
+		p)
+			read -s -e -p "sudo password: " sudo_pass
+			echo "$sudo_pass" | sudo -k --validate --stdin
+			[ $? -ne 0 ] && die "Invalid sudo password"
 			;;
 		n)
 			dryrun="n"
@@ -239,7 +250,8 @@ sym_config="$(pwd)/config-latest"
 
 [ -z "$new_config" ] && new_config="$(pwd)/config-${kdir}"
 [ ! -f "$new_config" ] && new_config=$sym_config
-[ ! -f "$new_config" ] && die "Config file not found $new_config"
+[ ! -f "$new_config" ] && new_config="/boot/config-${kdir}"
+[ ! -f "$new_config" ] && die "Config file not found, use -c option to choose a config file"
 
 run_make_oldconfig=0
 if [ -f "$dot_config" ]; then
