@@ -91,21 +91,23 @@ usage() {
 
 \$ $MESH [options]
 
-   -t TARBALL - tarball to install
-   -l LOGDIR  - log directory, default is $KLOG_DIR
-   -j CPUS    - make -j CPUS (default is $JAY)
-   -s STARTAT - see StartAt values below, default is 0
-   -n         - dry-run
-   -q         - quiet
-   -h         - help
+   -t TARBALL  - tarball to install
+   -l LOGDIR   - log directory, default is $KLOG_DIR
+   -j CPUS     - make -j CPUS (default is $JAY)
+   -s START_AT - see Step values below, default is 0
+   -e END_AT   - see Step values below
+   -d          - don't strip debug symbols in modules_install
+   -n          - dry-run
+   -q          - quiet
+   -h          - help
 
-  StartAt - Command
-     0    - make
-     1    - make modules
-     2    - make modules_install
-     3    - make install
-     4    - grub2-mkconfig
-     5    - grubby --default-kernel
+    Step  Command
+     0    make
+     1    make modules
+     2    make modules_install
+     3    make install
+     4    grub2-mkconfig
+     5    grubby --default-kernel
 
 HELP
 
@@ -118,21 +120,30 @@ tarball=""
 logdir=$KLOG_DIR
 dryrun=""
 quiet=""
-let step=0
+let startat=0
+let endat=10000
+let strip=1
 
-while getopts ":ht:l:j:s:nqh" opt; do
+while getopts ":ht:l:j:s:e:dnqh" opt; do
 	case ${opt} in
 		t)
 			tarball=$OPTARG
 			;;
 		l)
 			logdir=$OPTARG
+			[ -f "$logdir" ] && die "Log directory is a file: $logdir"
 			;;
 		j)
 			let jay=$OPTARG
 			;;
 		s)
-			let step=$OPTARG
+			let startat=$OPTARG
+			;;
+		e)
+			let endat=$OPTARG
+			;;
+		d)
+			let strip=0
 			;;
 		n)
 			dryrun="n"
@@ -145,7 +156,7 @@ while getopts ":ht:l:j:s:nqh" opt; do
 			usage 0
 			;;
 		\?)
-			usage 1
+			die "Unknown option: $opt"
 			;;
 	esac
 done
@@ -221,15 +232,15 @@ cmp -s "$new_config" "$dot_config"
 [ $? -ne 0 ] && run cp -pv $dot_config $new_config
 run ln -sf $new_config $sym_config
 
-[ $step -le 0 ] && run make -j${jay}
-[ $step -le 1 ] && run make -j${jay} modules
+[ $startat -le 0 -a $endat -ge 0 ] && run make -j${jay}
+[ $startat -le 1 -a $endat -ge 1 ] && run make -j${jay} modules
 
-[ $step -le 2 ] && run sudo make INSTALL_MOD_STRIP=1 modules_install
-[ $step -le 3 ] && run sudo make install
-[ $step -le 4 ] && run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
-[ $step -le 5 ] && run sudo grubby --default-kernel
+[ $startat -le 2 -a $endat -ge 2 ] && run sudo make INSTALL_MOD_STRIP=${strip} modules_install
+[ $startat -le 3 -a $endat -ge 3 ] && run sudo make install
+[ $startat -le 4 -a $endat -ge 4 ] && run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+[ $startat -le 5 -a $endat -ge 5 ] && run sudo grubby --default-kernel
 
-[ $step -le 6 ] && run sudo cp -p $new_config /boot
+[ $startat -le 6 -a $endat -ge 6 ] && run sudo cp -p $new_config /boot
 
 let etime=$(date +%s)
 let dtime=etime-stime
