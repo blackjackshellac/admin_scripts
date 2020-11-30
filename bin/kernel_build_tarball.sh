@@ -9,7 +9,7 @@ KLOG_DIR="/var/tmp/$ME"
 jay=$(( $(cat /proc/cpuinfo  | grep -E "^processor\s+:" | wc -l) / 2 ))
 JAY=$(( $jay <= 0 ? 1 : $jay ))
 
-let stime=$(date +%s)
+declare -i stime=$(date +%s)
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
 puts() {
@@ -76,6 +76,24 @@ run() {
 	fi
 	[ $res -ne 0 ] && die "Failed execution: $cmd"
 	return $res
+}
+
+runsudo() {
+	local -i t0=$(date +%s)
+	sudo --validate
+	local -i t1=$(date +%s)
+	declare -gi t_sudo_pause=$(( t_sudo_pause+t1-t0 ))
+	run sudo $*
+	return $?
+}
+
+convertsecs() {
+	((h=${1}/3600))
+	((m=(${1}%3600)/60))
+	((s=${1}%60))
+	[ $h -gt 0 ] && printf "%dh " $h
+	[ $h -gt 0 -o $m -gt 0 ] && printf "%dm " $m
+	printf "%ds\n" $s
 }
 
 # -n dry-run
@@ -235,13 +253,12 @@ run ln -sf $new_config $sym_config
 [ $startat -le 0 -a $endat -ge 0 ] && run make -j${jay}
 [ $startat -le 1 -a $endat -ge 1 ] && run make -j${jay} modules
 
-[ $startat -le 2 -a $endat -ge 2 ] && run sudo make INSTALL_MOD_STRIP=${strip} modules_install
-[ $startat -le 3 -a $endat -ge 3 ] && run sudo make install
-[ $startat -le 4 -a $endat -ge 4 ] && run sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
-[ $startat -le 5 -a $endat -ge 5 ] && run sudo grubby --default-kernel
+[ $startat -le 2 -a $endat -ge 2 ] && runsudo make INSTALL_MOD_STRIP=${strip} modules_install
+[ $startat -le 3 -a $endat -ge 3 ] && runsudo make install
+[ $startat -le 4 -a $endat -ge 4 ] && runsudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+[ $startat -le 5 -a $endat -ge 5 ] && runsudo grubby --default-kernel
+[ $startat -le 6 -a $endat -ge 6 ] && runsudo cp -p $new_config /boot
 
-[ $startat -le 6 -a $endat -ge 6 ] && run sudo cp -p $new_config /boot
-
-let etime=$(date +%s)
-let dtime=etime-stime
-info "Kernel build time ${dtime} seconds"
+declare -i etime=$(date +%s)
+declare -i dtime=$(( etime-stime-t_sudo_pause ))
+info "Kernel build time $(convertsecs $dtime) - sudo wait $(convertsecs $t_sudo_pause)"
