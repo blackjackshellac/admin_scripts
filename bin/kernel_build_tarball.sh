@@ -28,7 +28,7 @@ log_tee() {
 log() {
 	local level=$1
 	shift
-	local ts="$(date '+%x %X')"
+	local ts="$(LC_TIME="fr_CA.UTF-8" date '+%x %X')"
 	local msg="${level} ${ts}> $*"
 	if [ -d "$KLOG_DIR" -a -f "$klog" ]; then
 		log_tee "$msg"
