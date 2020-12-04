@@ -114,7 +114,7 @@ usage() {
 \$ $MESH [options]
 
    -t TARBALL  - tarball to install
-	-c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
+   -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
    -l LOGDIR   - log directory, default is $KLOG_DIR
    -j CPUS     - make -j CPUS (default is $JAY)
    -s START_AT - see Step values below, default is 0
