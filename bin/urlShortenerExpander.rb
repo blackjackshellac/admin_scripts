@@ -32,7 +32,7 @@ class UrlShortenerExpander
 	def initialize(url)
 		@url = url
 		@logger=Logger.create(STDERR)
-		@source=""
+		@url=""
 		@chain=[]
 		@dest=nil
 		@stime=Time.now
@@ -59,6 +59,10 @@ class UrlShortenerExpander
 		}
 		optparser.parse!
 
+		if @url.empty?
+			set_source(ARGV[0]) if ARGV.length > 0
+			@logger.die "Must specify a url with -u #{ARGV[0]}" if @url.empty?
+		end
 	end
 
 	def chain_to_s(indent)
@@ -70,14 +74,14 @@ class UrlShortenerExpander
 	end
 
 	def set_source(url)
-		@source=url
+		@url=url
 		@chain=[ url ]
 		@stime=Time.now
 	end
 
 	def expand(url=nil)
 
-		url=@source if url.nil?
+		url=@url if url.nil?
 
 		stime=Time.now
 		@logger.info "Fetching headers #{url}"
@@ -112,7 +116,7 @@ class UrlShortenerExpander
 		# <<~ strips off leading whitespace before the heredoc
 		<<~SUMMARY
 
-		#{format("%12s: %s", "Url", @source )}
+		#{format("%12s: %s", "Url", @url )}
 		#{format("%12s: %s", "Destination", @dest)}
 		#{format("%12s: %.3f", "RunTime", @dtime)} seconds
 
