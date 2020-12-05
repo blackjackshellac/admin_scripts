@@ -28,7 +28,9 @@ class UrlShortenerExpander
 	# Directory where the script lives, resolves symlinks
 	MD=File.expand_path(File.dirname(File.realpath($0)))
 
-	attr_reader :results, :source, :chain, :dest, :stime, :dtime, :url
+	LAUNCH_BROWSER = ENV['URL_EXPANDER_BROWSER']||'firefox'
+
+	attr_reader :results, :source, :chain, :dest, :stime, :dtime, :url, :launch
 	def initialize(url)
 		@url = url
 		@logger=Logger.create(STDERR)
@@ -37,6 +39,7 @@ class UrlShortenerExpander
 		@dest=nil
 		@stime=Time.now
 		@dtime=0
+		@launch = nil
 	end
 
 	def parse_clargs
@@ -47,6 +50,10 @@ class UrlShortenerExpander
 				set_source(url)
 			}
 
+			opts.on('-l', '--launch [BROWSER]', String, "Launch desintation in browser, def is #{LAUNCH_BROWSER}") {|browser|
+				@launch = browser.nil? ? LAUNCH_BROWSER : browser
+			}
+
 			opts.on('-D', '--debug', "Enable debugging output") {
 				@logger.level = Logger::DEBUG
 			}
@@ -54,6 +61,13 @@ class UrlShortenerExpander
 			opts.on('-h', '--help', "Help") {
 				$stdout.puts ""
 				$stdout.puts opts
+				$stdout.puts <<~HELP
+
+					Environment Variables
+
+					URL_EXPANDER_BROWSER - set the browser to launch the desination url
+
+				HELP
 				exit 0
 			}
 		}
@@ -105,6 +119,10 @@ class UrlShortenerExpander
 		# location: header not found, url is the destination
 		@dtime=Time.now.to_f-@stime.to_f
 		@dest=url
+
+
+		%x/#{@launch} "#{@dest}"/ unless @launch.nil?
+
 		return
 	end
 
