@@ -113,6 +113,7 @@ usage() {
 
 \$ $MESH [options]
 
+   -k KVER     - kernel version (eg 5.9.11)
    -t TARBALL  - tarball to install
    -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
    -l LOGDIR   - log directory, default is $KLOG_DIR
@@ -120,6 +121,7 @@ usage() {
    -s START_AT - see Step values below, default is 0
    -e END_AT   - see Step values below
    -p          - prompt for sudo password
+   -P          - patch the given kernel directory from kernel.org
    -d          - don't strip debug symbols in modules_install
    -n          - dry-run
    -q          - quiet
@@ -138,7 +140,7 @@ HELP
 	exit $1
 }
 
-
+kdir=""
 jay=$JAY
 tarball=""
 new_config=""
@@ -146,12 +148,18 @@ logdir=$KLOG_DIR
 dryrun=""
 quiet=""
 sudo_pass=""
-let startat=0
-let endat=10000
-let strip=1
+declare -i startat=0
+declare -i endat=10000
+declare -i strip=1
 
-while getopts ":ht:c:l:j:s:e:dpnqh" opt; do
+
+while getopts ":hk:t:c:l:j:s:e:dpPnqh" opt; do
 	case ${opt} in
+		k)
+			kver=$OPTARG
+			kdir=linux-${kver}
+			tarball=${kdir}.tar.xz
+			;;
 		t)
 			tarball=$OPTARG
 			;;
@@ -163,21 +171,25 @@ while getopts ":ht:c:l:j:s:e:dpnqh" opt; do
 			[ -f "$logdir" ] && die "Log directory is a file: $logdir"
 			;;
 		j)
-			let jay=$OPTARG
+			jay=$OPTARG
 			;;
 		s)
-			let startat=$OPTARG
+			startat=$OPTARG
 			;;
 		e)
-			let endat=$OPTARG
+			endat=$OPTARG
 			;;
 		d)
-			let strip=0
+			strip=0
 			;;
 		p)
 			read -s -e -p "sudo password: " sudo_pass
 			echo "$sudo_pass" | sudo -k --validate --stdin
 			[ $? -ne 0 ] && die "Invalid sudo password"
+			;;
+		P)
+			# patch
+			patch=1
 			;;
 		n)
 			dryrun="n"
@@ -211,7 +223,7 @@ done
 # sudo grubby --default-kernel
 
 kernel=$tarball
-if [ ! -f "$kernel" ]; then
+if [ ! -f "$kernel" -a -z $kdir ]; then
 	puts "Choose a kernel"
 	puts $(ls -1 linux-*.tar.*)
 	read -p "> " kernel
@@ -221,11 +233,12 @@ fi
 
 kernel=$(basename $kernel)
 wdir=$(dirname $kernel)
+
 cd $wdir
 [ $? -ne 0 ] && die "Failed to change working directory to kernel working dir $wdir"
 info "Working in $wdir: $(pwd)"
 
-kdir=$(basename $kernel ".tar.xz")
+[ -z "${kdir}" ] && kdir=$(basename $kernel ".tar.xz")
 
 run mkdir -p $logdir
 
@@ -237,6 +250,39 @@ info "Logging to $klog"
 
 info kernel=$kernel
 info kdir=$kdir
+
+if [ $patch -eq 1 ]; then
+	knam=$(echo $kdir | cut -d'-' -f1)
+	kver=$(echo $kdir | cut -d'-' -f2-)
+	declare -i kmaj=$(echo $kver | cut -d'.' -f1)
+	declare -i kmin=$(echo $kver | cut -d'.' -f2)
+	declare -i kpat=$(echo $kver | cut -d'.' -f3)
+	declare -i kinc=$(( kpat + 1 ))
+	knew="${knam}-${kmaj}.${kmin}.${kinc}"
+
+	[ -d "${knew}" ] && die "Patched kernel directory already exists: ${knew}"
+
+	# wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/incr/patch-5.9.11-12.xz
+	# cd linux-5.9.11
+	# $ xzcat ../patch-5.9.11-12.xz | patch --dry-run -p1
+	patch="patch-${kver}-${kinc}.xz"
+	url_patch="https://mirrors.edge.kernel.org/pub/linux/kernel/v${kmaj}.x/incr/${patch}"
+	info "Kernel version to patch is $kver (v${kmaj}.x) -> $patch"
+   if [ -f ${patch} ]; then
+		warn "Patch file already exists: ${patch}"
+	else
+		run wget $url_patch
+	fi
+	cd $kdir
+	[ $? -ne 0 ] && die "Original kernel directory not found: $kdir"
+	popts="--quiet --forward -p1"
+	[ "$dryrun" == "n" ] && popts="$popts --dry-run"
+	info "Applying $patch to $kdir"
+	run xzcat ../${patch} | patch ${popts}
+	cd ..
+	run mv --verbose $kdir $knew
+	exit 1
+fi
 
 if [ -d "$kdir" ]; then
 	warn "Kernel directory already exists, skipping tar xf $kernel"
