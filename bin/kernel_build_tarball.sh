@@ -13,7 +13,7 @@ declare -i stime=$(date +%s)
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
 puts() {
-	echo -e $*
+	echo -e "$(basename $(pwd))> $*"
 }
 
 log_tee() {
