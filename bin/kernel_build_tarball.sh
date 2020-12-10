@@ -249,9 +249,20 @@ dot_config="$(pwd)/${kdir}/.config"
 sym_config="$(pwd)/config-latest"
 
 [ -z "$new_config" ] && new_config="$(pwd)/config-${kdir}"
-[ ! -f "$new_config" ] && new_config=$sym_config
-[ ! -f "$new_config" ] && new_config="/boot/config-${kdir}"
-[ ! -f "$new_config" ] && die "Config file not found, use -c option to choose a config file"
+if [ ! -f "$new_config" ]; then
+	if [ -f "${kdir}"/.config ]; then
+		cp -pv "${kdir}"/.config "$new_config"
+	elif [ -f /boot/config-${kdir} ]; then
+		cp -pv /boot/config-${kdir} $new_config
+	elif [ -L $sym_config -a -f $sym_config ]; then
+		cp -pv $sym_config $new_config
+	else
+		die "Config file not found, use -c option to choose a config file"
+	fi
+fi
+# [ ! -f "$new_config" ] && new_config=$sym_config
+# [ ! -f "$new_config" ] && new_config="/boot/config-${kdir}"
+# [ ! -f "$new_config" ] && die "Config file not found, use -c option to choose a config file"
 
 run_make_oldconfig=0
 if [ -f "$dot_config" ]; then
