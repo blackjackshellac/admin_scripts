@@ -151,7 +151,7 @@ sudo_pass=""
 declare -i startat=0
 declare -i endat=10000
 declare -i strip=1
-
+declare -i patch=0
 
 while getopts ":hk:t:c:l:j:s:e:dpPnqh" opt; do
 	case ${opt} in
@@ -223,7 +223,7 @@ done
 # sudo grubby --default-kernel
 
 kernel=$tarball
-if [ ! -f "$kernel" -a -z $kdir ]; then
+if [ ! -f "$kernel" -a -z "$kdir" ]; then
 	puts "Choose a kernel"
 	puts $(ls -1 linux-*.tar.*)
 	read -p "> " kernel
