@@ -68,7 +68,7 @@ run() {
 			res=$?
 		else
 			$cmd 2>&1 | tee -a "$klog"
-			res=$?
+			res=${PIPESTATUS[0]}
 		fi
 	else
 		$cmd
@@ -279,9 +279,10 @@ if [ $patch -eq 1 ]; then
 	[ "$dryrun" == "n" ] && popts="$popts --dry-run"
 	info "Applying $patch to $kdir"
 	run xzcat ../${patch} | patch ${popts}
+	[ $? -ne 0 ] && die "Failed to apply patch ${patch}"
 	cd ..
 	run mv --verbose $kdir $knew
-	exit 1
+	exit 0
 fi
 
 if [ -d "$kdir" ]; then
