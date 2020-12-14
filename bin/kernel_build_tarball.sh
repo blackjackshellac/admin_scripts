@@ -122,6 +122,7 @@ usage() {
    -e END_AT   - see Step values below
    -p          - prompt for sudo password
    -P          - patch the given kernel directory from kernel.org
+   -F          - fetch the given kernel version specified with -k
    -d          - don't strip debug symbols in modules_install
    -n          - dry-run
    -q          - quiet
@@ -152,8 +153,9 @@ declare -i startat=0
 declare -i endat=10000
 declare -i strip=1
 declare -i patch=0
+declare -i fetch=0
 
-while getopts ":hk:t:c:l:j:s:e:dpPnqh" opt; do
+while getopts ":hk:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
 		k)
 			kver=$OPTARG
@@ -190,6 +192,10 @@ while getopts ":hk:t:c:l:j:s:e:dpPnqh" opt; do
 		P)
 			# patch
 			patch=1
+			;;
+		F)
+			# fetch
+			fetch=1
 			;;
 		n)
 			dryrun="n"
@@ -250,6 +256,37 @@ info "Logging to $klog"
 
 info kernel=$kernel
 info kdir=$kdir
+
+if [ $fetch -eq 1 ]; then
+	# https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.9.14.tar.xz
+	knam=$(echo $kdir | cut -d'-' -f1)
+	kver=$(echo $kdir | cut -d'-' -f2-)
+	declare -i kmaj=$(echo $kver | cut -d'.' -f1)
+
+	# xz -cd linux-5.9.14.tar.xz | gpg --trust-model tofu --verify linux-5.9.14.tar.sign -
+	url_fetch="https://mirrors.edge.kernel.org/pub/linux/kernel/v${kmaj}.x/${kdir}.tar.xz"
+	url_sign="https://mirrors.edge.kernel.org/pub/linux/kernel/v${kmaj}.x/${kdir}.tar.sign"
+	if [ -f "${kdir}.tar.xz" ]; then
+		warn "Skipping download ${url_fetch}"
+	else
+		run wget $url_fetch -q --show-progress --progress=bar:force:noscroll
+	fi
+
+	if [ -f "${kdir}.tar.sign" ]; then
+		warn "Skipping download ${url_sign}"
+	else
+		run wget $url_sign
+	fi
+
+	info "gpg signatures: https://www.kernel.org/signature.html"
+	info "You might have to do this: gpg --locate-keys torvalds@kernel.org gregkh@kernel.org"
+	info " and then add trust model: gpg2 --tofu-policy good 38DBBDC86092693E"
+	puts
+	info "xz -cd ${kernel} | gpg --trust-model tofu --verify ${kdir}.tar.sign -"
+	xz -cd ${kernel} | gpg --trust-model tofu --verify ${kdir}.tar.sign -
+
+	exit 0
+fi
 
 if [ $patch -eq 1 ]; then
 	knam=$(echo $kdir | cut -d'-' -f1)
