@@ -290,11 +290,11 @@ fi
 
 if [ $patch -eq 1 ]; then
 	knam=$(echo $kdir | cut -d'-' -f1)
-	kver=$(echo $kdir | cut -d'-' -f2-)
+	kver="$(echo $kdir | cut -d'-' -f2-)"
 	declare -i kmaj=$(echo $kver | cut -d'.' -f1)
 	declare -i kmin=$(echo $kver | cut -d'.' -f2)
 	declare -i kpat=$(echo $kver | cut -d'.' -f3)
-	declare -i kinc=$(( kpat + 1 ))
+	kinc="$(( kpat + 1 ))"
 	knew="${knam}-${kmaj}.${kmin}.${kinc}"
 
 	[ -d "${knew}" ] && die "Patched kernel directory already exists: ${knew}"
@@ -302,8 +302,9 @@ if [ $patch -eq 1 ]; then
 	# wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/incr/patch-5.9.11-12.xz
 	# cd linux-5.9.11
 	# $ xzcat ../patch-5.9.11-12.xz | patch --dry-run -p1
-	patch="patch-${kver}-${kinc}.xz"
-	url_patch="https://mirrors.edge.kernel.org/pub/linux/kernel/v${kmaj}.x/incr/${patch}"
+	info "Fetching patch-$kver-$kinc.xz"
+	patch_file="patch-$kver-$kinc.xz"
+	url_patch="https://mirrors.edge.kernel.org/pub/linux/kernel/v${kmaj}.x/incr/${patch_file}"
 	info "Kernel version to patch is $kver (v${kmaj}.x) -> $patch"
    if [ -f ${patch} ]; then
 		warn "Patch file already exists: ${patch}"
@@ -312,11 +313,11 @@ if [ $patch -eq 1 ]; then
 	fi
 	cd $kdir
 	[ $? -ne 0 ] && die "Original kernel directory not found: $kdir"
-	popts="--quiet --forward -p1"
+	popts="-p1 --quiet"
 	[ "$dryrun" == "n" ] && popts="$popts --dry-run"
-	info "Applying $patch to $kdir"
-	run xzcat ../${patch} | patch ${popts}
-	[ $? -ne 0 ] && die "Failed to apply patch ${patch}"
+	info "Applying $patch_file to $kdir"
+	run xzcat ../${patch_file} | patch ${popts}
+	[ $? -ne 0 ] && die "Failed to apply patch ${patch_file}"
 	cd ..
 	run mv --verbose $kdir $knew
 	exit 0
