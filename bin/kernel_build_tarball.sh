@@ -113,6 +113,7 @@ usage() {
 
 \$ $MESH [options]
 
+   -b          - run in background (should always be first option)
    -k KVER     - kernel version (eg 5.9.11)
    -t TARBALL  - tarball to install
    -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
@@ -155,8 +156,17 @@ declare -i strip=1
 declare -i patch=0
 declare -i fetch=0
 
-while getopts ":hk:t:c:l:j:s:e:dpPFnqh" opt; do
+while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
+		b)
+			shift
+			build="build_$(date +%Y%m%d).out"
+			nohup="nohup $0 $* >> $build 2>&1"
+			nohup_q="${nohup@Q}"
+			info "$ ${nohup_q}"
+			nohup $0 $* >> $build 2>&1 &
+			exit $?
+			;;
 		k)
 			kver=$OPTARG
 			kdir=linux-${kver}
