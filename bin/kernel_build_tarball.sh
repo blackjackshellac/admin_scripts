@@ -156,15 +156,30 @@ declare -i strip=1
 declare -i patch=0
 declare -i fetch=0
 
+read_sudo_pass() {
+	read -s -e -p "sudo password: " sudo_pass
+	echo "$sudo_pass" | sudo -k --validate --stdin
+	[ $? -ne 0 ] && die "Invalid sudo password"
+}
+
+if tty >/dev/null; then
+	echo
+else
+	# else we're reading from a file or pipe
+	info "Reading sudo password from stdin"
+	sudo_pass="$(cat -)"
+fi
+
 while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
 		b)
 			shift
+			read_sudo_pass
 			build="build_$(date +%Y%m%d).out"
 			nohup="nohup $0 $* >> $build 2>&1"
 			nohup_q="${nohup@Q}"
 			info "$ ${nohup_q}"
-			nohup $0 $* >> $build 2>&1 &
+			nohup echo "$sudo_pass" | $0 $* >> $build 2>&1 &
 			exit $?
 			;;
 		k)
@@ -195,9 +210,7 @@ while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
 			strip=0
 			;;
 		p)
-			read -s -e -p "sudo password: " sudo_pass
-			echo "$sudo_pass" | sudo -k --validate --stdin
-			[ $? -ne 0 ] && die "Invalid sudo password"
+			[ -z "$sudo_pass" ] && read_sudo_pass
 			;;
 		P)
 			# patch
