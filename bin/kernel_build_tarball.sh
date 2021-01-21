@@ -12,7 +12,18 @@ JAY=$(( $jay <= 0 ? 1 : $jay ))
 declare -i stime=$(date +%s)
 #echo "$MESH: $ME: $MD: $KLOG_DIR"
 
+declare -i TSS=$(( $(date +%s)-0 ))
+
+runtime_hms() {
+	local -i secs=$(( $(date +%s)-TSS ))
+	local -i h=$(( secs / 3600 ))
+	local -i m=$(( secs % 3600 / 60 ))
+	local -i s=$(( secs % 3600 % 60 ))
+	printf "%02d:%02d:%02d " $h $m $s
+}
+
 puts() {
+	runtime_hms
 	echo -e "$(basename $(pwd))> $*"
 }
 
@@ -23,6 +34,12 @@ log_tee() {
 	else
 		puts "$msg" 2>&1 | tee -a "$klog"
 	fi
+}
+
+log_pipe() {
+	while read line; do
+		log_tee $line
+	done
 }
 
 log() {
@@ -67,7 +84,7 @@ run() {
 			$cmd >> ${klog} 2>&1
 			res=$?
 		else
-			$cmd 2>&1 | tee -a "$klog"
+			$cmd 2>&1 | log_pipe #tee -a "$klog"
 			res=${PIPESTATUS[0]}
 		fi
 	else
@@ -238,6 +255,7 @@ done
 
 [ -z "$(type -p zstd)" ] && die "install zstd to continue"
 [ -z "$(type -p pahole)" ] && die "install pahole, aka dwarves"
+[ ! -f "/usr/include/openssl/opensslv.h" ] && die "openssh devel installed?"
 
 [ $jay -le 0 ] && warn "Resetting invalid jay=$jay to $JAY" && jay=$JAY
 
