@@ -360,7 +360,7 @@ if [ $patch -eq 1 ]; then
 	popts="-p1 --quiet"
 	[ "$dryrun" == "n" ] && popts="$popts --dry-run"
 	info "Applying $patch_file to $kdir"
-	run xzcat ../${patch_file} | patch ${popts}
+	xzcat ../${patch_file} | patch ${popts}
 	[ $? -ne 0 ] && die "Failed to apply patch ${patch_file}"
 	cd ..
 	run mv --verbose $kdir $knew
