@@ -236,6 +236,9 @@ while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
 	esac
 done
 
+[ -z "$(type -p zstd)" ] && die "install zstd to continue"
+[ -z "$(type -p pahole)" ] && die "install pahole, aka dwarves"
+
 [ $jay -le 0 ] && warn "Resetting invalid jay=$jay to $JAY" && jay=$JAY
 
 # linux-5.9.11.tar.xz
