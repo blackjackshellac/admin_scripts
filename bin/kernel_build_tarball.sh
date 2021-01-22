@@ -5,6 +5,7 @@ MESH=$(basename $0)
 ME=$(basename $0 ".sh")
 MD=$(dirname $0)
 KLOG_DIR="/var/tmp/$ME"
+PID=$KLOG_DIR/$ME.pid
 
 jay=$(( $(cat /proc/cpuinfo  | grep -E "^processor\s+:" | wc -l) / 2 ))
 JAY=$(( $jay <= 0 ? 1 : $jay ))
@@ -131,6 +132,7 @@ usage() {
 \$ $MESH [options]
 
    -b          - run in background (should always be first option)
+   -K          - kill the process running in the background
    -k KVER     - kernel version (eg 5.9.11)
    -t TARBALL  - tarball to install
    -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
@@ -187,7 +189,20 @@ else
 	sudo_pass="$(cat -)"
 fi
 
-while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
+pid_running() {
+	# pid file not found, not running
+	[ ! -f $PID ] && return 0
+	local pid=$(cat $PID)
+	echo ps -p $pid -f
+	psout=$(ps -p $pid --no-headers -o %c)
+	if [ ! -z "$psout" ]; then
+		echo $ME | grep $psout
+		[ $? -eq 0 ] && return 1
+	fi
+	return 0
+}
+
+while getopts ":bhKk:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
 		b)
 			shift
@@ -198,6 +213,13 @@ while getopts ":bhk:t:c:l:j:s:e:dpPFnqh" opt; do
 			info "$ ${nohup_q}"
 			nohup echo "$sudo_pass" | $0 $* >> $build 2>&1 &
 			exit $?
+			;;
+		K)
+			pid_running
+			[ $? -eq 0 ] && info "Not currently running" && exit 0
+			info "Kill $(cat $PID)"
+			kill $(cat $PID)
+			exit 0
 			;;
 		k)
 			kver=$OPTARG
@@ -271,6 +293,18 @@ done
 # sudo make install
 # sudo grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
 # sudo grubby --default-kernel
+
+if [ -f "$PID" ]; then
+	declare -i pid=$(cat $PID)
+	echo ps -p $pid -f
+	psout=$(ps -p $pid --no-headers -o %c)
+	if [ ! -z "$psout" ]; then
+		echo $ME | grep $psout
+		[ $? -eq 0 ] && die "Already running: $psout"
+	fi
+fi
+
+echo $$ > $PID
 
 kernel=$tarball
 if [ ! -f "$kernel" -a -z "$kdir" ]; then
@@ -423,3 +457,5 @@ run ln -sf $new_config $sym_config
 declare -i etime=$(date +%s)
 declare -i dtime=$(( etime-stime-t_sudo_pause ))
 info "Kernel build time $(convertsecs $dtime) - sudo wait $(convertsecs $t_sudo_pause)"
+
+rm -f $PID
