@@ -133,6 +133,8 @@ usage() {
 
    -b          - run in background (should always be first option)
    -K          - kill the process running in the background
+   -D          - delete the specified kernel (from /boot and /lib/modules)
+	-L MAJ      - list all major kernel.org kernels for given major version
    -k KVER     - kernel version (eg 5.9.11)
    -t TARBALL  - tarball to install
    -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
@@ -174,6 +176,7 @@ declare -i endat=10000
 declare -i strip=1
 declare -i patch=0
 declare -i fetch=0
+declare -i purge=0
 
 read_sudo_pass() {
 	read -s -e -p "sudo password: " sudo_pass
@@ -202,7 +205,7 @@ pid_running() {
 	return 0
 }
 
-while getopts ":bhKk:t:c:l:j:s:e:dpPFnqh" opt; do
+while getopts ":bhKDL:k:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
 		b)
 			shift
@@ -220,6 +223,14 @@ while getopts ":bhKk:t:c:l:j:s:e:dpPFnqh" opt; do
 			info "Kill $(cat $PID)"
 			kill $(cat $PID)
 			exit 0
+			;;
+		D)
+			purge=1
+			;;
+		L)
+			maj=$OPTARG
+			find /boot -maxdepth 1 -regex "/boot/vmlinuz-${maj}.[.0-9]*" -ls
+			exit $?
 			;;
 		k)
 			kver=$OPTARG
@@ -274,6 +285,33 @@ while getopts ":bhKk:t:c:l:j:s:e:dpPFnqh" opt; do
 			;;
 	esac
 done
+
+if [ $purge -eq 1 ]; then
+	# /boot/config-linux-5.10.16
+	# /boot/initramfs-5.10.16.img
+	# /boot/System.map-5.10.16
+	# /boot/vmlinuz-5.10.16
+
+	cd /boot
+	vmlinuz=/boot/vmlinuz-$kver
+	for f in vmlinuz-$kver System.map-$kver config-linux-$kver initramfs-$kver.img; do
+		if [ -f "$f" ]; then
+			info Deleting $f
+			runsudo rm -vf $f
+		elif [ ! -e "$f" ]; then
+			info "Not found $f"
+		else
+			warn "Can't delete $f"
+		fi
+	done
+
+	if [ -d /lib/modules/$kver ]; then
+		info Deleting dir /lib/modules/$kver
+		runsudo rm -rf /lib/modules/$kver
+	fi
+
+	exit 0
+fi
 
 [ -z "$(type -p zstd)" ] && die "install zstd to continue"
 [ -z "$(type -p pahole)" ] && die "install pahole, aka dwarves"
