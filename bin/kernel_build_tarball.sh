@@ -7,7 +7,7 @@ MD=$(dirname $0)
 KLOG_DIR="/var/tmp/$ME"
 PID=$KLOG_DIR/$ME.pid
 
-jay=$(( $(cat /proc/cpuinfo  | grep -E "^processor\s+:" | wc -l) / 2 ))
+jay=$(( $(cat /proc/cpuinfo  | grep -E "^processor\s+:" | wc -l) ))
 JAY=$(( $jay <= 0 ? 1 : $jay ))
 
 declare -i stime=$(date +%s)
@@ -134,7 +134,7 @@ usage() {
    -b          - run in background (should always be first option)
    -K          - kill the process running in the background
    -D          - delete the specified kernel (from /boot and /lib/modules)
-	-L MAJ      - list all major kernel.org kernels for given major version
+   -L MAJ      - list all major kernel.org kernels for given major version
    -k KVER     - kernel version (eg 5.9.11)
    -t TARBALL  - tarball to install
    -c CONFIG   - config file to use, default is config-linux-KERNEL_VERSION
@@ -205,7 +205,7 @@ pid_running() {
 	return 0
 }
 
-while getopts ":bhKDL:k:t:c:l:j:s:e:dpPFnqh" opt; do
+while getopts "bhKDL:k:t:c:l:j:s:e:dpPFnqh" opt; do
 	case ${opt} in
 		b)
 			shift
@@ -229,6 +229,7 @@ while getopts ":bhKDL:k:t:c:l:j:s:e:dpPFnqh" opt; do
 			;;
 		L)
 			maj=$OPTARG
+			[ -z "$maj" ] && maj=$(uname -r | cut -f1 -d'.')
 			find /boot -maxdepth 1 -regex "/boot/vmlinuz-${maj}.[.0-9]*" -ls
 			exit $?
 			;;
@@ -291,6 +292,8 @@ if [ $purge -eq 1 ]; then
 	# /boot/initramfs-5.10.16.img
 	# /boot/System.map-5.10.16
 	# /boot/vmlinuz-5.10.16
+
+	[ -z "$kver" ] && die "Set kernel version with -k"
 
 	cd /boot
 	vmlinuz=/boot/vmlinuz-$kver
