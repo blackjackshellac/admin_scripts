@@ -394,9 +394,11 @@ class FirefoxPrint2FileWatcher
 	# Directory where the script lives, resolves symlinks
 	MD=File.expand_path(File.dirname(File.realpath($0)))
 
+	# WATCHPATH="~/mozilla.pdf"
+	WATCHPATH="~/Documents/output.pdf"
 	DEFAULTS={
 		:force=>false,
-		:watchpath=>File.expand_path("~/mozilla.pdf"),
+		:watchpath=>File.expand_path(WATCHPATH),
 		:destdir=>ENV['FFP2FW_DESTDIR']||"/var/tmp/mozilla",
 		:run=>false,
 		:kill=>false,

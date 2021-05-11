@@ -230,7 +230,7 @@ while getopts "bhKDL:k:t:c:l:j:s:e:dpPFnqh" opt; do
 		L)
 			maj=$OPTARG
 			[ -z "$maj" ] && maj=$(uname -r | cut -f1 -d'.')
-			find /boot -maxdepth 1 -regex "/boot/vmlinuz-${maj}.[.0-9]*" -ls
+			find /boot -maxdepth 1 -regex "/boot/vmlinuz-${maj}.[.0-9+]*" -ls
 			exit $?
 			;;
 		k)
